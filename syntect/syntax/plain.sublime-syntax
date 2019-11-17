@@ -1,0 +1,6 @@
+%YAML 1.2
+---
+name: Plain
+scope: text.plain
+contexts:
+  main: []
