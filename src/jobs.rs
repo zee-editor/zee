@@ -15,7 +15,7 @@ pub struct JobPool<T> {
     thread_pool: ThreadPool,
     next_job_id: AtomicUsize,
     sender: Sender<JobResult<T>>,
-    receiver: Receiver<JobResult<T>>,
+    pub receiver: Receiver<JobResult<T>>,
 }
 
 impl<T: Send + 'static> JobPool<T> {
@@ -38,9 +38,5 @@ impl<T: Send + 'static> JobPool<T> {
         self.thread_pool
             .spawn(move || sender.send(JobResult { id, payload: job() }).unwrap());
         id
-    }
-
-    pub fn receiver(&self) -> Receiver<JobResult<T>> {
-        self.receiver.clone()
     }
 }

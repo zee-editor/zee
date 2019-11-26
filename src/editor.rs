@@ -1,17 +1,16 @@
-use crossbeam_channel::TryRecvError;
+use crossbeam_channel::select;
 use std::{
     cmp,
     collections::HashMap,
     io, mem,
     path::Path,
-    thread,
     time::{Duration, Instant},
 };
 use syntect::{
     highlighting::ThemeSet as SyntaxThemeSet,
     parsing::{SyntaxSet, SyntaxSetBuilder},
 };
-use termion::{event::Key, input::TermRead};
+use termion::{self, event::Key};
 
 use crate::{
     error::{Error, Result},
@@ -23,6 +22,7 @@ use crate::{
             Flex, LaidComponentId, LaidComponentIds, Layout, LayoutDirection, LayoutNode,
             LayoutNodeFlex, Prompt, Splash,
         },
+        input::Input,
         Position, Rect, Screen, Size,
     },
 };
@@ -65,8 +65,8 @@ impl Editor {
             job_pool,
             themes: [
                 (Theme::gruvbox(), "gruvbox-dark-soft", "gruvbox-dark-soft"),
-                (Theme::gruvbox(), "gruvbox-mocha", "base16-mocha.dark"),
                 (Theme::solarized(), "solarized-dark", "Solarized (dark)"),
+                (Theme::gruvbox(), "gruvbox-mocha", "base16-mocha.dark"),
             ],
             theme_index: 0,
             syntax_set,
@@ -126,83 +126,85 @@ impl Editor {
     }
 
     pub fn ui_loop(&mut self, mut screen: Screen) -> Result<()> {
-        let mut stdin = termion::async_stdin().keys();
-        let mut dirty = true;
+        let input = Input::from_reader(termion::get_tty()?);
         let mut last_drawn = Instant::now() - REDRAW_LATENCY;
-
+        let mut frame = Rect::new(Position::new(0, 0), Size::new(screen.width, screen.height));
+        let mut poll_state = PollState::Dirty;
         loop {
-            loop {
-                match self.job_pool.receiver().try_recv() {
-                    Ok(response) => {
-                        match response.payload {
-                            Ok(payload) => self.notify_task_done(payload)?,
-                            Err(err) => self.prompt.log_error(format!("{}", err)),
-                        }
-                        dirty = true; // notify_task_done should return whether we need to rerender
-                    }
-                    Err(TryRecvError::Empty) => {
-                        break;
-                    }
-                    error => {
-                        error.unwrap();
-                    }
+            match poll_state {
+                PollState::Dirty => {
+                    frame = Rect::new(Position::new(0, 0), Size::new(screen.width, screen.height));
+                    screen.resize_to_terminal()?;
+                    self.draw(&mut screen);
+                    screen.present()?;
+                    last_drawn = Instant::now();
                 }
+                PollState::Exit => {
+                    return Ok(());
+                }
+                _ => {}
             }
 
-            let mut sustained_io: bool = false;
-            let mut first_event_time = None;
-            while let Some(event) = stdin.next() {
-                if first_event_time.is_none() {
-                    first_event_time = Some(Instant::now());
-                }
-                match event {
-                    Ok(Key::Ctrl('c')) => {
-                        return Ok(());
-                    }
-                    Ok(key) => {
-                        self.key_press(
-                            key,
-                            Rect::new(Position::new(0, 0), Size::new(screen.width, screen.height)),
-                        )?;
-                        dirty = true; // key_press should return whether we need to rerender
-                    }
-                    error => {
-                        error?;
-                    }
-                };
-                if dirty && first_event_time.unwrap().elapsed() >= SUSTAINED_IO_REDRAW_LATENCY {
-                    sustained_io = true;
-                    break;
-                }
-            }
+            poll_state = self.poll_events_batch(&input, frame, last_drawn)?;
+        }
+    }
 
-            // See below :-(
-            let mut slept = false;
+    /// Poll as many events as we can respecting REDRAW_LATENCY and REDRAW_LATENCY_SUSTAINED_IO
+    fn poll_events_batch(
+        &mut self,
+        input: &Input,
+        frame: Rect,
+        last_drawn: Instant,
+    ) -> Result<PollState> {
+        let mut force_redraw = false;
+        let mut first_event_time: Option<Instant> = None;
+        let mut dirty = false;
 
-            if dirty && last_drawn.elapsed() >= REDRAW_LATENCY {
-                screen.resize_to_terminal()?;
-                self.draw(&mut screen);
-                screen.present()?;
-                dirty = false;
-                last_drawn = Instant::now()
-            } else if !sustained_io {
+        while !force_redraw {
+            let timeout = {
                 let since_last_drawn = last_drawn.elapsed();
-                if since_last_drawn < REDRAW_LATENCY {
-                    thread::sleep(REDRAW_LATENCY - since_last_drawn);
-                    slept = true;
+                if dirty && since_last_drawn >= REDRAW_LATENCY {
+                    Duration::from_millis(0)
+                } else if dirty {
+                    REDRAW_LATENCY - since_last_drawn
+                } else {
+                    Duration::from_millis(60000)
                 }
-            }
+            };
 
-            if !slept {
-                // `termion::async_stdin().keys()` parses modifier characters only
-                // if enough are available (i.e. Alt('a') is 2 bytes: \x1Ba)
-                // However, it seems sometimes only the first byte will be
-                // available, causing two events to trigger: ESC and Char('a')
-                // instead of Alt('x')
-                // TODO: fix termion or roll my own, a horrible fix meanwhile
-                thread::sleep(Duration::from_millis(1));
+            select! {
+                recv(self.job_pool.receiver) -> response => {
+                    match response.unwrap().payload {
+                        Ok(payload) => self.notify_task_done(payload)?,
+                        Err(err) => self.prompt.log_error(format!("{}", err)),
+                    }
+                    dirty = true; // notify_task_done should return whether we need to rerender
+                }
+                recv(input.receiver) -> event => {
+                    match event.unwrap() {
+                        Key::Ctrl('c') => {
+                            return Ok(PollState::Exit);
+                        }
+                        key => {
+                            self.key_press(key, frame)?;
+                            dirty = true; // key_press should return whether we need to rerender
+                        }
+                    };
+                    force_redraw = dirty
+                        && first_event_time.get_or_insert_with(Instant::now).elapsed()
+                        >= SUSTAINED_IO_REDRAW_LATENCY;
+                }
+                default(timeout) => {
+                    force_redraw = true;
+                }
             }
         }
+
+        Ok(if dirty {
+            PollState::Dirty
+        } else {
+            PollState::Clean
+        })
     }
 
     #[inline]
@@ -265,6 +267,7 @@ impl Editor {
 
     #[inline]
     fn key_press(&mut self, key: Key, frame: Rect) -> Result<()> {
+        // eprintln!("key_press: {:?}", key);
         let time = Instant::now();
         self.prompt.clear_log();
         match key {
@@ -389,6 +392,12 @@ impl Editor {
     }
 }
 
+enum PollState {
+    Clean,
+    Dirty,
+    Exit,
+}
+
 enum CycleFocus {
     Next,
     Previous,
@@ -427,5 +436,5 @@ const PROMPT_ID: ComponentId = 0;
 const PROMPT_HEIGHT: usize = 1;
 const SPLASH_ID: ComponentId = 1;
 
-const REDRAW_LATENCY: Duration = Duration::from_millis(6);
+const REDRAW_LATENCY: Duration = Duration::from_millis(10);
 const SUSTAINED_IO_REDRAW_LATENCY: Duration = Duration::from_millis(100);

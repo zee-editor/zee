@@ -18,7 +18,7 @@ use crate::{editor::Editor, error::Result, jobs::JobPool, ui::Screen};
 pub struct Args {
     #[structopt(name = "file", parse(from_os_str))]
     /// Open file to edit
-    pub file: Option<PathBuf>,
+    pub files: Vec<PathBuf>,
 
     #[structopt(long = "config-file", parse(from_os_str))]
     /// Path to the configuration directory. It's usually ~/.config/zee on Linux.
@@ -30,7 +30,7 @@ fn main() -> Result<()> {
     let settings = settings::find(args.config)?;
 
     let mut editor = Editor::new(settings, JobPool::new());
-    if let Some(file_path) = args.file {
+    for file_path in args.files.iter() {
         editor.open_file(file_path)?;
     }
     editor.ui_loop(Screen::new()?)

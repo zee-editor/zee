@@ -1,6 +1,8 @@
 pub mod components;
+pub mod input;
 pub mod screen;
 
+pub use input::Input;
 pub use screen::{Background, Colour, Foreground, Screen, Style};
 
 pub type Rect = euclid::default::Rect<usize>;

@@ -2,6 +2,7 @@ use euclid::default::SideOffsets2D;
 use ropey::{Rope, RopeSlice};
 use size_format::SizeFormatterBinary;
 use std::{
+    borrow::Cow,
     cmp,
     ffi::OsStr,
     fs::File,
@@ -14,15 +15,15 @@ use syntect::easy::HighlightLines;
 use syntect::highlighting::{
     FontStyle as SyntaxFontStyle, Style as SyntaxStyle, Theme as SyntaxTheme,
 };
-use syntect::parsing::{SyntaxReference, SyntaxSet, SyntaxSetBuilder};
+use syntect::parsing::{SyntaxReference, SyntaxSet};
 
 use super::{theme::Theme as EditorTheme, Component, ComponentTask, Context};
 use crate::{
-    error::{Error, Result},
+    error::Result,
     ui::{Background, Colour, Foreground, Position, Rect, Screen, Size, Style},
     utils::{
-        self, next_grapheme_boundary, prev_grapheme_boundary, rope_as_str,
-        strip_trailing_whitespace, RopeGraphemes, TAB_WIDTH,
+        self, next_grapheme_boundary, prev_grapheme_boundary, strip_trailing_whitespace,
+        RopeGraphemes, TAB_WIDTH,
     },
 };
 use termion::event::Key;
@@ -226,11 +227,10 @@ impl Buffer {
             );
         }
 
-        let mut visual_x = frame.origin.x;
-
-        let line = rope_as_str(&line);
+        let line: Cow<str> = line.slice(..cmp::min(line.len_chars(), 1000)).into();
         let ranges: Vec<(SyntaxStyle, &str)> = highlighter.highlight(&line, &self.syntax_set);
 
+        let mut visual_x = frame.origin.x;
         let mut char_index = self.text.line_to_char(line_index);
 
         for (syntax_style, line) in ranges {
@@ -555,9 +555,10 @@ impl Buffer {
         self.text
             .remove(start..self.text.line_to_char(line_index + 1));
 
-        let grapheme_start = self
-            .text
-            .line_to_char(cmp::min(line_index, self.text.len_lines() - 2));
+        let grapheme_start = self.text.line_to_char(cmp::min(
+            line_index,
+            self.text.len_lines().saturating_sub(2),
+        ));
         let grapheme_end = next_grapheme_boundary(&self.text.slice(..), grapheme_start);
         if grapheme_start != grapheme_end {
             self.cursor.range = grapheme_start..grapheme_end
@@ -673,32 +674,32 @@ impl Component for Buffer {
     #[inline]
     fn key_press(&mut self, key: Key, context: &Context) -> Result<()> {
         match key {
-            Key::Ctrl('p') => {
+            Key::Ctrl('p') | Key::Up => {
                 self.cursor_up();
             }
-            Key::Ctrl('n') => {
+            Key::Ctrl('n') | Key::Down => {
                 self.cursor_down();
             }
-            Key::Ctrl('b') => {
+            Key::Ctrl('b') | Key::Left => {
                 self.cursor_left();
             }
-            Key::Ctrl('f') => {
+            Key::Ctrl('f') | Key::Right => {
                 self.cursor_right();
             }
-            Key::Ctrl('v') => {
+            Key::Ctrl('v') | Key::PageDown => {
                 for _ in 0..(context.frame.size.height - 1) {
                     self.cursor_down();
                 }
             }
-            Key::Alt('v') => {
+            Key::Alt('v') | Key::PageUp => {
                 for _ in 0..(context.frame.size.height - 1) {
                     self.cursor_up();
                 }
             }
-            Key::Ctrl('a') => {
+            Key::Ctrl('a') | Key::Home => {
                 self.cursor_start_of_line();
             }
-            Key::Ctrl('e') => {
+            Key::Ctrl('e') | Key::End => {
                 self.cursor_end_of_line();
             }
             Key::Ctrl('l') => {
@@ -710,7 +711,7 @@ impl Component for Buffer {
             Key::Alt('>') => {
                 self.cursor_end_of_buffer();
             }
-            Key::Ctrl('d') => {
+            Key::Ctrl('d') | Key::Delete => {
                 self.delete();
             }
             Key::Ctrl('k') => {
@@ -720,8 +721,10 @@ impl Component for Buffer {
                 self.yank_line();
             }
             Key::Backspace => {
-                self.cursor_left();
-                self.delete();
+                if self.cursor.range.start > 0 {
+                    self.cursor_left();
+                    self.delete();
+                }
             }
             Key::Null => {
                 self.cursor.select = Some(self.cursor.range.start);
