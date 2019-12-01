@@ -9,18 +9,15 @@ use std::{
 use termion::{self, event::Key};
 
 use crate::{
+    components::{
+        prompt::Command, theme::Theme, Buffer, Component, ComponentId, Context, Flex,
+        LaidComponentId, LaidComponentIds, Layout, LayoutDirection, LayoutNode, LayoutNodeFlex,
+        Prompt, Splash, TaskKind,
+    },
     error::{Error, Result},
     jobs::{JobId, JobPool},
     settings::Paths,
-    ui::{
-        components::{
-            prompt::Command, theme::Theme, Buffer, Component, ComponentId, Context, Flex,
-            LaidComponentId, LaidComponentIds, Layout, LayoutDirection, LayoutNode, LayoutNodeFlex,
-            Prompt, Splash, TaskKind,
-        },
-        input::Input,
-        Position, Rect, Screen, Size,
-    },
+    terminal::{Input, Position, Rect, Screen, Size},
 };
 
 pub(crate) struct Editor {

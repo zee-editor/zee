@@ -14,7 +14,7 @@ use termion::{
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
-use crate::{smallstring::SmallString, ui::Rect, utils::RopeGraphemes};
+use crate::{smallstring::SmallString, terminal::Rect, utils::RopeGraphemes};
 
 #[derive(Default, Clone, PartialEq)]
 pub struct Textel {

@@ -15,7 +15,7 @@ use termion::event::Key;
 use crate::{
     error::Result,
     jobs,
-    ui::{screen::Screen, Position, Rect, Size},
+    terminal::{screen::Screen, Position, Rect, Size},
 };
 
 pub type ComponentId = usize;

@@ -4,7 +4,7 @@ use termion::event::Key;
 use super::{Component, Context, Scheduler};
 use crate::{
     error::{Error, Result},
-    ui::{Screen, Style},
+    terminal::{Screen, Style},
 };
 
 #[derive(Clone, Debug)]

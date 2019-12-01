@@ -1,18 +1,18 @@
+mod components;
 mod editor;
 mod error;
-// mod grammar;
 mod jobs;
 mod mode;
 mod settings;
 mod smallstring;
-mod ui;
+mod terminal;
 mod utils;
 
 use clap;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
-use crate::{editor::Editor, error::Result, jobs::JobPool, ui::Screen};
+use crate::{editor::Editor, error::Result, jobs::JobPool, terminal::Screen};
 
 #[derive(Debug, StructOpt)]
 #[structopt(global_settings(&[clap::AppSettings::ColoredHelp]))]

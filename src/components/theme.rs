@@ -1,7 +1,7 @@
 use super::{
     buffer::Theme as BufferTheme, prompt::Theme as PromptTheme, splash::Theme as SplashTheme,
 };
-use crate::ui::{Background, Colour, Foreground, Style};
+use crate::terminal::{Background, Colour, Foreground, Style};
 
 #[derive(Clone, Debug)]
 pub struct Theme {
@@ -93,7 +93,7 @@ fn underline(background: Colour, foreground: Colour) -> Style {
 
 #[allow(dead_code)]
 pub mod solarized {
-    use crate::ui::Colour;
+    use crate::terminal::Colour;
 
     // Solarized colours
     pub const BASE03: Colour = Colour::rgb(0, 43, 54);
@@ -116,7 +116,7 @@ pub mod solarized {
 
 #[allow(dead_code)]
 pub mod gruvbox {
-    use crate::ui::Colour;
+    use crate::terminal::Colour;
 
     // Gruvbox colours
     pub const DARK0_HARD: Colour = Colour::rgb(29, 32, 33);

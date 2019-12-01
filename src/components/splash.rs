@@ -1,7 +1,7 @@
 use super::{Component, Context, Scheduler};
 use crate::{
     error::Result,
-    ui::{Screen, Style},
+    terminal::{Screen, Style},
 };
 
 #[derive(Clone, Debug)]

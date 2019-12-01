@@ -23,7 +23,7 @@ use crate::{
     error::Result,
     jobs::{JobId as TaskId, Poll},
     mode::{self, Mode},
-    ui::{Background, Colour, Foreground, Position, Rect, Screen, Size, Style},
+    terminal::{Background, Colour, Foreground, Position, Rect, Screen, Size, Style},
     utils::{
         self, next_grapheme_boundary, prev_grapheme_boundary, strip_trailing_whitespace,
         RopeGraphemes, TAB_WIDTH,
