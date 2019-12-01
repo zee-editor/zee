@@ -1,5 +1,8 @@
-use super::{Component, Context};
-use crate::ui::{Screen, Style};
+use super::{Component, Context, Scheduler};
+use crate::{
+    error::Result,
+    ui::{Screen, Style},
+};
 
 #[derive(Clone, Debug)]
 pub struct Theme {
@@ -13,7 +16,7 @@ pub struct Splash;
 
 impl Component for Splash {
     #[inline]
-    fn draw(&mut self, screen: &mut Screen, context: &Context) {
+    fn draw(&mut self, screen: &mut Screen, _: &mut Scheduler, context: &Context) {
         let theme = &context.theme.splash;
 
         screen.clear_region(context.frame, theme.logo);

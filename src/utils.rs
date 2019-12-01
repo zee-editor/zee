@@ -1,5 +1,4 @@
 use ropey::{iter::Chunks, str_utils::byte_to_char_idx, Rope, RopeSlice};
-use std::borrow::Cow;
 use unicode_segmentation::{GraphemeCursor, GraphemeIncomplete};
 use unicode_width::UnicodeWidthStr;
 
@@ -19,14 +18,6 @@ pub fn grapheme_width(slice: &RopeSlice) -> usize {
         }
         text.chars().filter(|character| *character == '\t').count() * TAB_WIDTH
             + UnicodeWidthStr::width(&text[..])
-    }
-}
-
-pub fn rope_as_str<'a>(slice: &'a RopeSlice) -> Cow<'a, str> {
-    if let Some(text) = slice.as_str() {
-        Cow::Borrowed(text)
-    } else {
-        Cow::Owned(SmallString::from_rope_slice(slice).into())
     }
 }
 

@@ -11,15 +11,18 @@ use std::{
     path::PathBuf,
     time::Instant,
 };
-use syntect::easy::HighlightLines;
-use syntect::highlighting::{
-    FontStyle as SyntaxFontStyle, Style as SyntaxStyle, Theme as SyntaxTheme,
+use tree_sitter::{
+    InputEdit as TreeSitterInputEdit, Node, Parser, Point as TreeSitterPoint, Tree, TreeCursor,
 };
-use syntect::parsing::{SyntaxReference, SyntaxSet};
 
-use super::{theme::Theme as EditorTheme, Component, ComponentTask, Context};
+use super::{
+    theme::{gruvbox, Theme as EditorTheme},
+    Component, Context, Scheduler, TaskKind, TaskResult,
+};
 use crate::{
     error::Result,
+    jobs::{JobId as TaskId, Poll},
+    mode::{self, Mode},
     ui::{Background, Colour, Foreground, Position, Rect, Screen, Size, Style},
     utils::{
         self, next_grapheme_boundary, prev_grapheme_boundary, strip_trailing_whitespace,
@@ -73,39 +76,32 @@ enum ModifiedStatus {
 
 #[derive(Debug)]
 pub enum BufferTask {
-    Save { text: Rope },
+    SaveFile { text: Rope },
+    ParseSyntax(ParsedSyntax),
+}
+
+#[derive(Debug)]
+pub struct ParsedSyntax {
+    tree: Tree,
+    text: Rope,
 }
 
 pub struct Buffer {
+    mode: &'static Mode,
     text: Rope,
     yanked_line: Option<Rope>,
     has_unsaved_changes: ModifiedStatus,
     file_path: Option<PathBuf>,
     cursor: Cursor,
     first_line: usize,
-    syntax_set: SyntaxSet,
-    syntax_reference: SyntaxReference,
-    syntax_theme: SyntaxTheme,
+    tree: Option<Tree>,
+    parse_syntax_task_id: Option<TaskId>,
+    parser: Option<Parser>,
 }
 
 impl Buffer {
-    fn highlighter(&self) -> HighlightLines {
-        // Highlighter::new(&self.syntax_theme)
-        HighlightLines::new(&self.syntax_reference, &self.syntax_theme)
-    }
-
-    pub fn from_file(
-        file_path: PathBuf,
-        syntax_set: SyntaxSet,
-        syntax_theme: SyntaxTheme,
-    ) -> Result<Self> {
-        let syntax_reference = file_path
-            .extension()
-            .and_then(OsStr::to_str)
-            .and_then(|extension| syntax_set.find_syntax_by_extension(extension))
-            .unwrap_or_else(|| syntax_set.find_syntax_plain_text())
-            .clone();
-
+    pub fn from_file(file_path: PathBuf) -> Result<Self> {
+        let mode = mode::find_by_filename(&file_path);
         Ok(Buffer {
             text: if file_path.exists() {
                 Rope::from_reader(BufReader::new(File::open(&file_path)?))?
@@ -129,25 +125,92 @@ impl Buffer {
                 select: None,
             },
             first_line: 0,
-            syntax_set,
-            syntax_reference,
-            syntax_theme,
+            tree: None,
+            parse_syntax_task_id: None,
+            parser: mode.language.map(|language| {
+                let mut parser = Parser::new();
+                parser
+                    .set_language(language)
+                    .expect("Compatible tree sitter grammer version");
+                parser
+            }),
+            mode,
         })
     }
 
-    pub fn save(&mut self, context: &Context) -> Result<()> {
+    pub fn spawn_save_file(&mut self, scheduler: &mut Scheduler, context: &Context) -> Result<()> {
         self.has_unsaved_changes = ModifiedStatus::Saving(context.time);
         if let Some(ref file_path) = self.file_path {
             let text = self.text.clone();
             let file_path = file_path.clone();
-            context.job_pool.spawn(move || {
+            scheduler.spawn(move || {
                 let text = strip_trailing_whitespace(text);
                 text.write_to(BufWriter::new(File::create(&file_path)?))?;
-                Ok(ComponentTask::Buffer(BufferTask::Save { text }))
-            });
+                Ok(TaskKind::Buffer(BufferTask::SaveFile { text }))
+            })?;
         }
 
         Ok(())
+    }
+
+    pub fn spawn_parse_syntax(&mut self, scheduler: &mut Scheduler) -> Result<TaskId> {
+        let mode = self.mode;
+        let text = self.text.clone();
+        scheduler.spawn(move || {
+            let mut parser = mode
+                .language
+                .map(|language| {
+                    let mut parser = Parser::new();
+                    parser
+                        .set_language(language)
+                        .expect("Compatible tree sitter grammer version");
+                    parser
+                })
+                .unwrap();
+            // let tree = parser
+            //     .parse_with(
+            //         &mut |byte_index, p| {
+            //             eprintln!("p: {} {}", byte_index, p);
+            //             if byte_index < text.len_bytes() {
+            //                 text.chunk_at_byte(byte_index).0.as_bytes()
+            //             } else {
+            //                 &[]
+            //             }
+            //         },
+            //         None,
+            //     )
+            //     .unwrap();
+
+            let text_str: String = text.slice(..).into();
+            let tree = parser.parse(text_str.as_bytes(), None).unwrap();
+
+            Ok(TaskKind::Buffer(BufferTask::ParseSyntax(ParsedSyntax {
+                tree,
+                text,
+            })))
+        })
+    }
+
+    pub fn handle_parse_syntax_done(&mut self, task_id: TaskId, parsed: ParsedSyntax) {
+        if self
+            .parse_syntax_task_id
+            .map(|expected_task_id| expected_task_id != task_id)
+            .unwrap_or(true)
+        {
+            return;
+        }
+
+        let ParsedSyntax { tree, text } = parsed;
+
+        self.tree = Some(tree.clone());
+        let root = tree.root_node();
+        assert!(root.end_byte() <= text.len_bytes() + 1);
+
+        // eprintln!("SEXP: {:?}", tree.root_node().to_sexp());
+        // let mut cursor = tree.walk();
+        // eprintln!(" ** Recon **");
+        // print_tree(&mut cursor, &text, 0);
+        // eprintln!(" ** ***** **");
     }
 
     #[inline]
@@ -166,7 +229,7 @@ impl Buffer {
         context: &Context,
         char_index: usize,
         line_under_cursor: bool,
-        syntax_style: SyntaxStyle,
+        node: Option<Node>,
     ) -> Style {
         let Context {
             focused,
@@ -182,6 +245,38 @@ impl Buffer {
                 theme.cursor_unfocused
             }
         } else {
+            let is_error = node
+                .map(|node| {
+                    node.is_error()
+                        || ["erroneous_end_tag_name"]
+                            .into_iter()
+                            .find(|error| node.kind() == **error)
+                            .is_some()
+                })
+                .unwrap_or(false);
+
+            let foreground = {
+                if is_error {
+                    Foreground(gruvbox::BRIGHT_RED)
+                } else {
+                    match node.map(|node| node.kind()).unwrap_or("") {
+                        "erroneous_end_tag_name" | "ERROR" | "MISSING" => {
+                            Foreground(gruvbox::BRIGHT_RED)
+                        }
+                        "tag_name" | "identifier" | "field_identifier" => {
+                            Foreground(gruvbox::BRIGHT_BLUE)
+                        }
+                        // "tag_name" => Foreground(gruvbox::NEUTRAL_ORANGE),
+                        "primitive_type" => Foreground(gruvbox::BRIGHT_YELLOW),
+                        "attribute_name" | "=" => Foreground(gruvbox::FADED_YELLOW),
+                        "\"" | "attribute_value" => Foreground(gruvbox::NEUTRAL_AQUA),
+                        "<" | ">" | "/>" | "</" => Foreground(gruvbox::GRAY_245),
+                        "fn" | "struct" | "fenced_code_block" => Foreground(gruvbox::FADED_YELLOW),
+                        _ => theme.text.foreground,
+                    }
+                }
+            };
+
             Style {
                 background: if self.cursor.selection().contains(&char_index) {
                     theme.selection_background
@@ -190,9 +285,16 @@ impl Buffer {
                 } else {
                     theme.text.background
                 },
-                foreground: Foreground(Colour::from(syntax_style.foreground)),
-                bold: syntax_style.font_style.contains(SyntaxFontStyle::BOLD),
-                underline: syntax_style.font_style.contains(SyntaxFontStyle::UNDERLINE),
+                foreground,
+                bold: node
+                    .map(|node| node.kind() == "identifier")
+                    .unwrap_or(false),
+                underline: is_error
+                    || node
+                        .map(|node| node.kind() == "link_destination")
+                        .unwrap_or(false),
+                // bold: syntax_style.font_style.contains(SyntaxFontStyle::BOLD),
+                // underline: syntax_style.font_style.contains(SyntaxFontStyle::UNDERLINE),
             }
         }
     }
@@ -202,7 +304,6 @@ impl Buffer {
         &self,
         screen: &mut Screen,
         context: &Context,
-        highlighter: &mut HighlightLines,
         line_index: usize,
         line: RopeSlice,
     ) -> usize {
@@ -227,40 +328,58 @@ impl Buffer {
             );
         }
 
-        let line: Cow<str> = line.slice(..cmp::min(line.len_chars(), 1000)).into();
-        let ranges: Vec<(SyntaxStyle, &str)> = highlighter.highlight(&line, &self.syntax_set);
+        // let line: Cow<str> = line.slice(..cmp::min(line.len_chars(), 1000)).into();
+        // let ranges: Vec<(SyntaxStyle, &str)> = highlighter.highlight(&line, &self.syntax_set);
 
         let mut visual_x = frame.origin.x;
         let mut char_index = self.text.line_to_char(line_index);
 
-        for (syntax_style, line) in ranges {
-            let line = Rope::from(line);
+        // let line = Rope::from(line);
 
-            for grapheme in RopeGraphemes::new(&line.slice(..)) {
-                if self.cursor.range.contains(&char_index) && focused {
-                    visual_cursor_x = visual_x.saturating_sub(frame.origin.x);
-                }
-
-                let style =
-                    self.text_style_at_char(context, char_index, line_under_cursor, syntax_style);
-                let mut grapheme_width = utils::grapheme_width(&grapheme);
-                let horizontal_bounds_inclusive = frame.min_x()..=frame.max_x();
-                if !horizontal_bounds_inclusive.contains(&(visual_x + grapheme_width)) {
-                    break;
-                }
-
-                if grapheme == "\t" {
-                    grapheme_width = 4;
-                    screen.draw_str(visual_x, frame.origin.y, style, "    ");
-                } else if grapheme_width == 0 {
-                    screen.draw_str(visual_x, frame.origin.y, style, " ");
-                } else {
-                    screen.draw_rope_slice(visual_x, frame.origin.y, style, &grapheme);
-                }
-
-                char_index += grapheme.len_chars();
-                visual_x += grapheme_width;
+        for grapheme in RopeGraphemes::new(&line.slice(..)) {
+            if self.cursor.range.contains(&char_index) && focused {
+                visual_cursor_x = visual_x.saturating_sub(frame.origin.x);
             }
+
+            let maybe_node = match self.tree {
+                Some(ref tree) => {
+                    let byte_index = self.text.char_to_byte(char_index);
+                    tree.root_node()
+                        .descendant_for_byte_range(byte_index, byte_index + 1)
+                        .and_then(|mut x| {
+                            let initial = x;
+                            if !x.is_error() {
+                                while let Some(parent) = x.parent() {
+                                    if parent.is_error() {
+                                        return Some(parent);
+                                    }
+                                    x = parent;
+                                }
+                            }
+                            Some(initial)
+                        })
+                }
+                _ => None,
+            };
+
+            let style = self.text_style_at_char(context, char_index, line_under_cursor, maybe_node);
+            let mut grapheme_width = utils::grapheme_width(&grapheme);
+            let horizontal_bounds_inclusive = frame.min_x()..=frame.max_x();
+            if !horizontal_bounds_inclusive.contains(&(visual_x + grapheme_width)) {
+                break;
+            }
+
+            if grapheme == "\t" {
+                grapheme_width = 4;
+                screen.draw_str(visual_x, frame.origin.y, style, "    ");
+            } else if grapheme_width == 0 {
+                screen.draw_str(visual_x, frame.origin.y, style, " ");
+            } else {
+                screen.draw_rope_slice(visual_x, frame.origin.y, style, &grapheme);
+            }
+
+            char_index += grapheme.len_chars();
+            visual_x += grapheme_width;
         }
 
         if line_index == self.text.len_lines() - 1
@@ -285,7 +404,6 @@ impl Buffer {
     fn draw_text(&mut self, screen: &mut Screen, context: &Context) -> usize {
         self.ensure_cursor_in_view(&context.frame);
 
-        let mut highlighter = self.highlighter();
         let mut visual_cursor_x = 0;
         for (line_index, line) in self
             .text
@@ -302,7 +420,6 @@ impl Buffer {
                             .frame
                             .inner_rect(SideOffsets2D::new(line_index, 0, 0, 0)),
                     ),
-                    &mut highlighter,
                     self.first_line + line_index,
                     line,
                 ),
@@ -405,7 +522,7 @@ impl Buffer {
             offset,
             line_height,
             theme.status_mode,
-            &format!(" {}", self.syntax_reference.name),
+            &format!(" {}", self.mode.name),
         );
 
         // The current position the file right-aligned
@@ -660,7 +777,14 @@ impl Buffer {
 
 impl Component for Buffer {
     #[inline]
-    fn draw(&mut self, screen: &mut Screen, context: &Context) {
+    fn draw(&mut self, screen: &mut Screen, scheduler: &mut Scheduler, context: &Context) {
+        match (&self.tree, &self.parse_syntax_task_id) {
+            (None, None) if self.mode.language.is_some() => {
+                self.parse_syntax_task_id = Some(self.spawn_parse_syntax(scheduler).unwrap());
+            }
+            _ => {}
+        };
+
         screen.clear_region(context.frame, context.theme.buffer.text);
 
         self.draw_line_info(screen, context);
@@ -672,7 +796,13 @@ impl Component for Buffer {
     }
 
     #[inline]
-    fn key_press(&mut self, key: Key, context: &Context) -> Result<()> {
+    fn handle_event(
+        &mut self,
+        key: Key,
+        scheduler: &mut Scheduler,
+        context: &Context,
+    ) -> Result<()> {
+        // Stateless
         match key {
             Key::Ctrl('p') | Key::Up => {
                 self.cursor_up();
@@ -711,6 +841,28 @@ impl Component for Buffer {
             Key::Alt('>') => {
                 self.cursor_end_of_buffer();
             }
+            _ => {}
+        };
+
+        let mut text_changed = true;
+
+        let cursor_end = cmp::min(self.cursor.range.end, self.text.len_chars());
+        let initial_cursor =
+            self.text.char_to_byte(self.cursor.range.start)..self.text.char_to_byte(cursor_end);
+        let initial_point_start = TreeSitterPoint {
+            row: self.text.char_to_line(self.cursor.range.start),
+            column: self.text.char_to_byte(self.cursor.range.start)
+                - self
+                    .text
+                    .line_to_byte(self.text.char_to_line(self.cursor.range.start)),
+        };
+        let initial_point_end = TreeSitterPoint {
+            row: self.text.char_to_line(cursor_end),
+            column: self.text.char_to_byte(cursor_end)
+                - self.text.line_to_byte(self.text.char_to_line(cursor_end)),
+        };
+
+        match key {
             Key::Ctrl('d') | Key::Delete => {
                 self.delete();
             }
@@ -752,17 +904,57 @@ impl Component for Buffer {
                 self.cursor_right();
             }
             Key::Alt('s') => {
-                self.save(context)?;
+                self.spawn_save_file(scheduler, context)?;
             }
-            _ => {}
+            _ => {
+                text_changed = false;
+            }
+        }
+
+        let cursor_end = cmp::min(self.cursor.range.end, self.text.len_chars());
+        let final_cursor =
+            self.text.char_to_byte(self.cursor.range.start)..self.text.char_to_byte(cursor_end);
+        let final_point_start = TreeSitterPoint {
+            row: self.text.char_to_line(self.cursor.range.start),
+            column: self.text.char_to_byte(self.cursor.range.start)
+                - self
+                    .text
+                    .line_to_byte(self.text.char_to_line(self.cursor.range.start)),
+        };
+        let final_point_end = TreeSitterPoint {
+            row: self.text.char_to_line(cursor_end),
+            column: self.text.char_to_byte(cursor_end)
+                - self.text.line_to_byte(self.text.char_to_line(cursor_end)),
+        };
+
+        if text_changed && self.mode.language.is_some() {
+            let changes = TreeSitterInputEdit {
+                start_byte: initial_cursor.start,
+                old_end_byte: initial_cursor.end,
+                new_end_byte: final_cursor.end,
+                start_position: initial_point_start,
+                old_end_position: initial_point_end,
+                new_end_position: final_point_end,
+            };
+            // eprintln!("changes: {:?}", changes);
+
+            match self.tree {
+                Some(ref mut tree) => {
+                    tree.edit(&changes);
+                }
+                _ => {}
+            };
+            self.parse_syntax_task_id = Some(self.spawn_parse_syntax(scheduler)?);
         }
 
         Ok(())
     }
 
-    fn task_done(&mut self, task: &ComponentTask) -> Result<()> {
-        match task {
-            ComponentTask::Buffer(BufferTask::Save { text: new_text }) => {
+    fn task_done(&mut self, task_result: TaskResult) -> Result<()> {
+        let task_id = task_result.id;
+        let payload = task_result.payload?;
+        match payload {
+            TaskKind::Buffer(BufferTask::SaveFile { text: new_text }) => {
                 let current_line = self.text.char_to_line(self.cursor.range.start);
                 let current_line_offset =
                     self.cursor.range.start - self.text.line_to_char(current_line);
@@ -792,10 +984,40 @@ impl Component for Buffer {
                 self.text = new_text.clone();
                 self.has_unsaved_changes = ModifiedStatus::Unchanged;
             }
+            TaskKind::Buffer(BufferTask::ParseSyntax(parsed)) => {
+                self.handle_parse_syntax_done(task_id, parsed)
+            }
         }
 
         Ok(())
     }
+}
+
+fn print_tree(cursor: &mut TreeCursor, text: &Rope, mut line_num: usize) -> usize {
+    if cursor.goto_first_child() {
+        line_num = print_tree(cursor, text, line_num);
+    } else {
+        let new_line_num = text.byte_to_line(cursor.node().start_byte());
+        assert!(new_line_num >= line_num);
+        if new_line_num > line_num {
+            eprintln!("");
+            line_num = new_line_num;
+        }
+
+        let range = text.byte_to_char(cursor.node().start_byte())
+            ..text.byte_to_char(cmp::min(cursor.node().end_byte(), text.len_bytes()));
+        let range_str: Cow<str> = text.slice(range).into();
+        // eprint!("{} ", range_str);
+        eprint!("{}[{}] ", range_str, cursor.node().kind());
+    }
+
+    if cursor.goto_next_sibling() {
+        line_num = print_tree(cursor, text, line_num);
+    } else {
+        cursor.goto_parent();
+    }
+
+    line_num
 }
 
 const DISABLE_TABS: bool = false;

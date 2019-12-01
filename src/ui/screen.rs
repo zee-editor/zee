@@ -265,22 +265,6 @@ impl Default for Style {
     }
 }
 
-use syntect::highlighting::{
-    Color as SyntaxColor, FontStyle as SyntaxFontStyle, Style as SyntaxStyle,
-};
-
-impl From<SyntaxStyle> for Style {
-    #[inline]
-    fn from(syntax_style: SyntaxStyle) -> Self {
-        Self {
-            background: Background(Colour::from(syntax_style.background)),
-            foreground: Foreground(Colour::from(syntax_style.foreground)),
-            bold: syntax_style.font_style.contains(SyntaxFontStyle::BOLD),
-            underline: syntax_style.font_style.contains(SyntaxFontStyle::UNDERLINE),
-        }
-    }
-}
-
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Colour {
     red: u8,
@@ -300,17 +284,6 @@ impl Colour {
             red: 0,
             green: 0,
             blue: 0,
-        }
-    }
-}
-
-impl From<SyntaxColor> for Colour {
-    #[inline]
-    fn from(syntax_color: SyntaxColor) -> Self {
-        Self {
-            red: syntax_color.r,
-            green: syntax_color.g,
-            blue: syntax_color.b,
         }
     }
 }

@@ -14,26 +14,29 @@ use termion::event::Key;
 
 use crate::{
     error::Result,
-    jobs::JobPool,
+    jobs,
     ui::{screen::Screen, Position, Rect, Size},
 };
 
 pub type ComponentId = usize;
+pub type FrameId = usize;
 pub type LaidComponentIds = SmallVec<[LaidComponentId; 16]>;
 
 #[derive(Debug)]
-pub enum ComponentTask {
+pub enum TaskKind {
     Buffer(BufferTask),
 }
+
+pub type Scheduler<'pool> = jobs::Scheduler<'pool, Result<TaskKind>>;
+pub type TaskResult = jobs::JobResult<Result<TaskKind>>;
 
 #[derive(Debug, Clone)]
 pub struct Context<'t> {
     pub frame: Rect,
     pub time: Instant,
     pub focused: bool,
-    pub frame_id: usize,
+    pub frame_id: FrameId,
     pub theme: &'t Theme,
-    pub job_pool: &'t JobPool<Result<ComponentTask>>,
 }
 
 impl<'t> Context<'t> {
@@ -44,7 +47,6 @@ impl<'t> Context<'t> {
             focused: self.focused,
             frame_id: self.frame_id,
             theme: self.theme,
-            job_pool: self.job_pool,
         }
     }
 
@@ -55,19 +57,23 @@ impl<'t> Context<'t> {
             focused,
             frame_id: self.frame_id,
             theme: self.theme,
-            job_pool: self.job_pool,
         }
     }
 }
 
 pub trait Component {
-    fn draw(&mut self, screen: &mut Screen, context: &Context);
+    fn draw(&mut self, _screen: &mut Screen, _scheduler: &mut Scheduler, _context: &Context) {}
 
-    fn key_press(&mut self, _key: Key, _context: &Context) -> Result<()> {
+    fn handle_event(
+        &mut self,
+        _key: Key,
+        _scheduler: &mut Scheduler,
+        _context: &Context,
+    ) -> Result<()> {
         Ok(())
     }
 
-    fn task_done(&mut self, _task: &ComponentTask) -> Result<()> {
+    fn task_done(&mut self, _task: TaskResult) -> Result<()> {
         Ok(())
     }
 
@@ -309,56 +315,3 @@ fn splits_iter<'a>(
             ),
         })
 }
-
-// #[inline]
-// fn vertical_split<'a>(
-//     frame: Rect,
-//     children: &'a [LayoutNodeFlex],
-// ) -> impl Iterator<Item = Rect> + 'a {
-//     let mut budget = frame.size.height;
-//     let mut num_stretched_children = 0;
-//     let mut total_fixed_size = 0;
-//     for child in children.iter() {
-//         match child.flex {
-//             Flex::Stretched => {
-//                 num_stretched_children += 1;
-//             }
-//             Flex::Fixed(size) => {
-//                 budget = budget.saturating_sub(size);
-//                 total_fixed_size += size;
-//             }
-//         }
-//     }
-
-//     let stretched_size = if num_stretched_children > 0 {
-//         budget / num_stretched_children
-//     } else {
-//         0
-//     };
-//     let mut remainder = frame
-//         .size
-//         .height
-//         .saturating_sub(num_stretched_children * stretched_size + total_fixed_size);
-//     budget = frame.size.height;
-//     children.iter().map(move |child| match child.flex {
-//         Flex::Stretched => {
-//             let position =
-//                 Position::new(frame.origin.x, frame.origin.y + frame.size.height - budget);
-//             let height = if remainder > 0 {
-//                 remainder -= 1;
-//                 stretched_size + 1
-//             } else {
-//                 stretched_size
-//             };
-//             budget -= height;
-//             Rect::new(position, Size::new(frame.size.width, stretched_size))
-//         }
-//         Flex::Fixed(size) => {
-//             let position =
-//                 Position::new(frame.origin.x, frame.origin.y + frame.size.height - budget);
-//             let height = cmp::min(budget, size);
-//             budget -= height;
-//             Rect::new(position, Size::new(frame.size.width, height))
-//         }
-//     })
-// }

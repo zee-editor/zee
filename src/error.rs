@@ -11,8 +11,8 @@ pub type Result<T> = StdResult<T, Error>;
 pub enum Error {
     Config(String),
     Editor(io::Error),
-    MissingSyntectTheme(String),
     Io(io::Error),
+    TaskPool(Box<dyn StdError + Send>),
 }
 
 impl Display for Error {

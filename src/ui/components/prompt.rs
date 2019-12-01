@@ -1,7 +1,7 @@
 use std::{env, io, mem, path::PathBuf};
 use termion::event::Key;
 
-use super::{Component, Context};
+use super::{Component, Context, Scheduler};
 use crate::{
     error::{Error, Result},
     ui::{Screen, Style},
@@ -54,7 +54,7 @@ impl Prompt {
 
 impl Component for Prompt {
     #[inline]
-    fn draw(&mut self, screen: &mut Screen, context: &Context) {
+    fn draw(&mut self, screen: &mut Screen, _: &mut Scheduler, context: &Context) {
         let theme = &context.theme.prompt;
         screen.clear_region(context.frame, theme.base);
         let prefix = (if self.active { "open " } else { "" }).to_string();
@@ -73,7 +73,7 @@ impl Component for Prompt {
     }
 
     #[inline]
-    fn key_press(&mut self, key: Key, _context: &Context) -> Result<()> {
+    fn handle_event(&mut self, key: Key, _: &mut Scheduler, _: &Context) -> Result<()> {
         match key {
             Key::Ctrl('g') => {
                 self.active = false;

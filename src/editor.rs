@@ -6,21 +6,17 @@ use std::{
     path::Path,
     time::{Duration, Instant},
 };
-use syntect::{
-    highlighting::ThemeSet as SyntaxThemeSet,
-    parsing::{SyntaxSet, SyntaxSetBuilder},
-};
 use termion::{self, event::Key};
 
 use crate::{
     error::{Error, Result},
-    jobs::JobPool,
+    jobs::{JobId, JobPool},
     settings::Paths,
     ui::{
         components::{
-            prompt::Command, theme::Theme, Buffer, Component, ComponentId, ComponentTask, Context,
-            Flex, LaidComponentId, LaidComponentIds, Layout, LayoutDirection, LayoutNode,
-            LayoutNodeFlex, Prompt, Splash,
+            prompt::Command, theme::Theme, Buffer, Component, ComponentId, Context, Flex,
+            LaidComponentId, LaidComponentIds, Layout, LayoutDirection, LayoutNode, LayoutNodeFlex,
+            Prompt, Splash, TaskKind,
         },
         input::Input,
         Position, Rect, Screen, Size,
@@ -29,34 +25,22 @@ use crate::{
 
 pub(crate) struct Editor {
     components: HashMap<ComponentId, Box<dyn Component>>,
+    task_owners: HashMap<JobId, ComponentId>,
     layout: Layout,
     laid_components: LaidComponentIds,
     next_component_id: ComponentId,
     focus: Option<usize>,
     prompt: Prompt,
-    job_pool: JobPool<Result<ComponentTask>>,
+    job_pool: JobPool<Result<TaskKind>>,
     themes: [(Theme, &'static str, &'static str); 3],
     theme_index: usize,
-    syntax_set: SyntaxSet,
-    syntax_theme_set: SyntaxThemeSet,
 }
 
 impl Editor {
-    pub fn new(settings: Paths, job_pool: JobPool<Result<ComponentTask>>) -> Self {
-        let mut builder = SyntaxSetBuilder::new();
-        builder
-            .add_from_folder(settings.syntax_definitions, true)
-            .unwrap();
-        builder.add_plain_text_syntax();
-        let syntax_set = builder.build();
-
-        let mut syntax_theme_set = SyntaxThemeSet::load_defaults();
-        syntax_theme_set
-            .add_from_folder(settings.syntax_themes)
-            .unwrap();
-
+    pub fn new(settings: Paths, job_pool: JobPool<Result<TaskKind>>) -> Self {
         Self {
             components: HashMap::with_capacity(8),
+            task_owners: HashMap::with_capacity(8),
             layout: wrap_layout_with_prompt(None),
             laid_components: LaidComponentIds::new(),
             next_component_id: cmp::max(PROMPT_ID, SPLASH_ID) + 1,
@@ -69,8 +53,6 @@ impl Editor {
                 (Theme::gruvbox(), "gruvbox-mocha", "base16-mocha.dark"),
             ],
             theme_index: 0,
-            syntax_set,
-            syntax_theme_set,
         }
     }
 
@@ -99,16 +81,8 @@ impl Editor {
         if !path.exists() {
             self.prompt.log_error("[New file]".into());
         }
-        let syntax_theme = self
-            .syntax_theme_set
-            .themes
-            .get(self.themes[self.theme_index].2)
-            .ok_or::<Error>(Error::MissingSyntectTheme(
-                self.themes[self.theme_index].2.into(),
-            ))?
-            .clone();
 
-        match Buffer::from_file(path.to_owned(), self.syntax_set.clone(), syntax_theme) {
+        match Buffer::from_file(path.to_owned()) {
             Ok(buffer) => {
                 self.focus = Some(self.add_component(buffer));
             }
@@ -173,10 +147,14 @@ impl Editor {
             };
 
             select! {
-                recv(self.job_pool.receiver) -> response => {
-                    match response.unwrap().payload {
-                        Ok(payload) => self.notify_task_done(payload)?,
-                        Err(err) => self.prompt.log_error(format!("{}", err)),
+                recv(self.job_pool.receiver) -> task_result => {
+                    let task_result = task_result.unwrap();
+                    let component_id = self.task_owners.remove(&task_result.id);
+                    if let Err(err) = task_result.payload.as_ref() {
+                        self.prompt.log_error(format!("{}", err));
+                    }
+                    if let Some(component) = component_id.and_then(|component_id| self.components.get_mut(&component_id)) {
+                        component.task_done(task_result)?;
                     }
                     dirty = true; // notify_task_done should return whether we need to rerender
                 }
@@ -186,8 +164,8 @@ impl Editor {
                             return Ok(PollState::Exit);
                         }
                         key => {
-                            self.key_press(key, frame)?;
-                            dirty = true; // key_press should return whether we need to rerender
+                            self.handle_event(key, frame)?;
+                            dirty = true; // handle_event should return whether we need to rerender
                         }
                     };
                     force_redraw = dirty
@@ -210,20 +188,22 @@ impl Editor {
     #[inline]
     fn draw(&mut self, screen: &mut Screen) {
         let Self {
-            ref layout,
             ref mut components,
-            ref focus,
+            ref mut task_owners,
             ref mut prompt,
+            ref mut laid_components,
+            ref focus,
+            ref layout,
             ref themes,
-            theme_index,
             ref job_pool,
+            theme_index,
             ..
         } = *self;
         let frame = Rect::new(Position::new(0, 0), Size::new(screen.width, screen.height));
         let time = Instant::now();
 
-        self.laid_components.clear();
-        layout.compute(frame, &mut 1, &mut self.laid_components);
+        laid_components.clear();
+        layout.compute(frame, &mut 1, laid_components);
         self.laid_components.iter().for_each(
             |&LaidComponentId {
                  id,
@@ -236,16 +216,17 @@ impl Editor {
                     frame,
                     frame_id,
                     theme: &themes[theme_index].0,
-                    job_pool,
                 };
+                let mut scheduler = job_pool.scheduler();
 
                 if id == PROMPT_ID {
-                    prompt.draw(screen, &context)
+                    prompt.draw(screen, &mut scheduler, &context)
                 } else if id == SPLASH_ID {
-                    Splash::default().draw(screen, &context)
+                    Splash::default().draw(screen, &mut scheduler, &context)
                 } else {
                     components.get_mut(&id).unwrap().draw(
                         screen,
+                        &mut scheduler,
                         &context.set_focused(
                             focus
                                 .as_ref()
@@ -253,21 +234,16 @@ impl Editor {
                                 .unwrap_or(false),
                         ),
                     );
+                    for job_id in scheduler.scheduled() {
+                        task_owners.insert(job_id, id);
+                    }
                 }
             },
         );
     }
 
     #[inline]
-    fn notify_task_done(&mut self, response: ComponentTask) -> Result<()> {
-        self.components
-            .values_mut()
-            .try_for_each(|component| component.task_done(&response))
-    }
-
-    #[inline]
-    fn key_press(&mut self, key: Key, frame: Rect) -> Result<()> {
-        // eprintln!("key_press: {:?}", key);
+    fn handle_event(&mut self, key: Key, frame: Rect) -> Result<()> {
         let time = Instant::now();
         self.prompt.clear_log();
         match key {
@@ -304,6 +280,7 @@ impl Editor {
 
             let Self {
                 ref mut components,
+                ref mut task_owners,
                 ref mut prompt,
                 ref laid_components,
                 ref themes,
@@ -318,35 +295,44 @@ impl Editor {
                      frame_id,
                  }| {
                     if id_with_focus == id {
-                        if let Err(error) = components.get_mut(&id).unwrap().key_press(
+                        let mut scheduler = job_pool.scheduler();
+                        if let Err(error) = components.get_mut(&id).unwrap().handle_event(
                             key,
+                            &mut scheduler,
                             &Context {
                                 time,
                                 focused: true,
                                 frame,
                                 frame_id,
                                 theme: &themes[theme_index].0,
-                                job_pool,
                             },
                         ) {
                             prompt.log_error(format!("{}", error));
+                        }
+                        for job_id in scheduler.scheduled() {
+                            task_owners.insert(job_id, id);
                         }
                     }
                 },
             )
         }
 
-        self.prompt.key_press(
+        // Update prompt
+        let mut scheduler = self.job_pool.scheduler();
+        self.prompt.handle_event(
             key,
+            &mut scheduler,
             &Context {
                 time,
                 focused: false,
                 frame,
                 frame_id: 0,
                 theme: &self.themes[self.theme_index].0,
-                job_pool: &self.job_pool,
             },
         )?;
+        for job_id in scheduler.scheduled() {
+            self.task_owners.insert(job_id, PROMPT_ID);
+        }
         if let Some(Command::OpenFile(path)) = self.prompt.poll_and_clear() {
             self.open_file(path)?;
         }

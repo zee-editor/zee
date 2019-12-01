@@ -12,7 +12,7 @@ pub struct Input {
 
 impl Input {
     pub fn from_reader(reader: impl Read + Send + 'static) -> Self {
-        let (sender, receiver) = crossbeam_channel::bounded(1 << 16);
+        let (sender, receiver) = crossbeam_channel::bounded(2048);
         let handle = thread::spawn(move || {
             let mut keys = reader.keys();
             while let Some(event) = keys.next() {

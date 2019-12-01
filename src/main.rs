@@ -1,5 +1,6 @@
 mod editor;
 mod error;
+// mod grammar;
 mod jobs;
 mod mode;
 mod settings;
@@ -29,7 +30,7 @@ fn main() -> Result<()> {
     let args = Args::from_args();
     let settings = settings::find(args.config)?;
 
-    let mut editor = Editor::new(settings, JobPool::new());
+    let mut editor = Editor::new(settings, JobPool::new()?);
     for file_path in args.files.iter() {
         editor.open_file(file_path)?;
     }

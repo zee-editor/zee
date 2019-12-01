@@ -4,22 +4,23 @@ version = "0.1.0"
 authors = ["Marius Cobzarenco <marius@reinfer.io>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 clap = "2.33.0"
-structopt = "0.3.4"
-termion = "1.5.3"
-ropey = "1.1.0"
-unicode-width = "0.1.6"
-smallvec = "1.0.0"
-unicode-segmentation = "1.6.0"
-size_format = "1.0.2"
-euclid = "0.20.4"
-syntect = {version = "3.3.0", features= ["dump-create"]}
-rayon = "1.2.1"
 crossbeam-channel = "0.4.0"
 dirs = "2.0.2"
+euclid = "0.20.4"
+lazy_static = "1.4.0"
+rayon = "1.2.1"
+ropey = "1.1.0"
+size_format = "1.0.2"
+smallvec = "1.0.0"
+structopt = "0.3.4"
+termion = "1.5.3"
+tree-sitter = "0.5.0"
+unicode-segmentation = "1.6.0"
+unicode-width = "0.1.6"
+zee-grammar = { path = "grammar" }
+num_cpus = "1.11.1"
 
 [profile.dev]
 opt-level = 2
