@@ -104,11 +104,13 @@ impl Editor {
         loop {
             match poll_state {
                 PollState::Dirty => {
+                    let now = Instant::now();
                     frame = Rect::new(Position::new(0, 0), Size::new(screen.width, screen.height));
                     screen.resize_to_terminal()?;
                     self.draw(&mut screen);
                     screen.present()?;
                     last_drawn = Instant::now();
+                    // eprintln!("Drawn in {:?}", now.elapsed());
                 }
                 PollState::Exit => {
                     return Ok(());

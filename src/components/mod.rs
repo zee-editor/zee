@@ -1,6 +1,7 @@
 pub mod buffer;
 pub mod prompt;
 pub mod splash;
+pub mod syntax;
 pub mod theme;
 
 pub use buffer::{Buffer, BufferTask};

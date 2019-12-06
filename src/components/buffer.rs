@@ -14,13 +14,15 @@ use std::{
 use tree_sitter::{
     InputEdit as TreeSitterInputEdit, Node, Parser, Point as TreeSitterPoint, Tree, TreeCursor,
 };
+use zee_highlight::{Scope, ScopePattern};
 
 use super::{
+    syntax::{text_style_at_char, Theme as SyntaxTheme},
     theme::{gruvbox, Theme as EditorTheme},
     Component, Context, Scheduler, TaskKind, TaskResult,
 };
 use crate::{
-    error::Result,
+    error::{Error, Result},
     jobs::{JobId as TaskId, Poll},
     mode::{self, Mode},
     terminal::{Background, Colour, Foreground, Position, Rect, Screen, Size, Style},
@@ -33,13 +35,13 @@ use termion::event::Key;
 
 #[derive(Debug)]
 pub struct Cursor {
-    range: Range<usize>, // char range under cursor
+    pub range: Range<usize>, // char range under cursor
     visual_horizontal_offset: Option<usize>,
     select: Option<usize>,
 }
 
 impl Cursor {
-    fn selection(&self) -> Range<usize> {
+    pub fn selection(&self) -> Range<usize> {
         match self.select {
             Some(select) if select > self.range.start => self.range.start..select,
             Some(select) if select < self.range.start => select..self.range.start,
@@ -50,12 +52,8 @@ impl Cursor {
 
 #[derive(Clone, Debug)]
 pub struct Theme {
-    pub text: Style,
-    pub text_current_line: Style,
+    pub syntax: SyntaxTheme,
     pub border: Style,
-    pub cursor_focused: Style,
-    pub cursor_unfocused: Style,
-    pub selection_background: Background,
     pub status_base: Style,
     pub status_frame_id_focused: Style,
     pub status_frame_id_unfocused: Style,
@@ -127,10 +125,10 @@ impl Buffer {
             first_line: 0,
             tree: None,
             parse_syntax_task_id: None,
-            parser: mode.language.map(|language| {
+            parser: mode.language().map(|language| {
                 let mut parser = Parser::new();
                 parser
-                    .set_language(language)
+                    .set_language(*language)
                     .expect("Compatible tree sitter grammer version");
                 parser
             }),
@@ -157,37 +155,28 @@ impl Buffer {
         let mode = self.mode;
         let text = self.text.clone();
         scheduler.spawn(move || {
-            let mut parser = mode
-                .language
-                .map(|language| {
+            mode.language()
+                .ok_or_else(|| Error::MissingLanguageParser(mode.name.clone().into()))
+                .and_then(|language| {
                     let mut parser = Parser::new();
                     parser
-                        .set_language(language)
-                        .expect("Compatible tree sitter grammer version");
-                    parser
+                        .set_language(*language)
+                        .map_err(|error| Error::IncompatibleLanguageGrammar(error))?;
+                    Ok(parser)
                 })
-                .unwrap();
-            // let tree = parser
-            //     .parse_with(
-            //         &mut |byte_index, p| {
-            //             eprintln!("p: {} {}", byte_index, p);
-            //             if byte_index < text.len_bytes() {
-            //                 text.chunk_at_byte(byte_index).0.as_bytes()
-            //             } else {
-            //                 &[]
-            //             }
-            //         },
-            //         None,
-            //     )
-            //     .unwrap();
-
-            let text_str: String = text.slice(..).into();
-            let tree = parser.parse(text_str.as_bytes(), None).unwrap();
-
-            Ok(TaskKind::Buffer(BufferTask::ParseSyntax(ParsedSyntax {
-                tree,
-                text,
-            })))
+                .and_then(|mut parser| {
+                    parser
+                        .parse_with(
+                            &mut |byte_index, _| {
+                                let (chunk, chunk_byte_idx, _, _) = text.chunk_at_byte(byte_index);
+                                assert!(byte_index >= chunk_byte_idx);
+                                &chunk.as_bytes()[byte_index - chunk_byte_idx..]
+                            },
+                            None,
+                        )
+                        .ok_or_else(|| Error::CancelledLanguageParser)
+                })
+                .map(|tree| TaskKind::Buffer(BufferTask::ParseSyntax(ParsedSyntax { tree, text })))
         })
     }
 
@@ -224,82 +213,6 @@ impl Buffer {
     }
 
     #[inline]
-    fn text_style_at_char(
-        &self,
-        context: &Context,
-        char_index: usize,
-        line_under_cursor: bool,
-        node: Option<Node>,
-    ) -> Style {
-        let Context {
-            focused,
-            theme: EditorTheme {
-                buffer: ref theme, ..
-            },
-            ..
-        } = *context;
-        if self.cursor.range.contains(&char_index) {
-            if focused {
-                theme.cursor_focused
-            } else {
-                theme.cursor_unfocused
-            }
-        } else {
-            let is_error = node
-                .map(|node| {
-                    node.is_error()
-                        || ["erroneous_end_tag_name"]
-                            .into_iter()
-                            .find(|error| node.kind() == **error)
-                            .is_some()
-                })
-                .unwrap_or(false);
-
-            let foreground = {
-                if is_error {
-                    Foreground(gruvbox::BRIGHT_RED)
-                } else {
-                    match node.map(|node| node.kind()).unwrap_or("") {
-                        "erroneous_end_tag_name" | "ERROR" | "MISSING" => {
-                            Foreground(gruvbox::BRIGHT_RED)
-                        }
-                        "tag_name" | "identifier" | "field_identifier" => {
-                            Foreground(gruvbox::BRIGHT_BLUE)
-                        }
-                        // "tag_name" => Foreground(gruvbox::NEUTRAL_ORANGE),
-                        "primitive_type" => Foreground(gruvbox::BRIGHT_YELLOW),
-                        "attribute_name" | "=" => Foreground(gruvbox::FADED_YELLOW),
-                        "\"" | "attribute_value" => Foreground(gruvbox::NEUTRAL_AQUA),
-                        "<" | ">" | "/>" | "</" => Foreground(gruvbox::GRAY_245),
-                        "fn" | "struct" | "fenced_code_block" => Foreground(gruvbox::FADED_YELLOW),
-                        _ => theme.text.foreground,
-                    }
-                }
-            };
-
-            Style {
-                background: if self.cursor.selection().contains(&char_index) {
-                    theme.selection_background
-                } else if line_under_cursor && focused {
-                    theme.text_current_line.background
-                } else {
-                    theme.text.background
-                },
-                foreground,
-                bold: node
-                    .map(|node| node.kind() == "identifier")
-                    .unwrap_or(false),
-                underline: is_error
-                    || node
-                        .map(|node| node.kind() == "link_destination")
-                        .unwrap_or(false),
-                // bold: syntax_style.font_style.contains(SyntaxFontStyle::BOLD),
-                // underline: syntax_style.font_style.contains(SyntaxFontStyle::UNDERLINE),
-            }
-        }
-    }
-
-    #[inline]
     fn draw_line(
         &self,
         screen: &mut Screen,
@@ -307,6 +220,7 @@ impl Buffer {
         line_index: usize,
         line: RopeSlice,
     ) -> usize {
+        // Get references to the relevant bits of context
         let Context {
             ref frame,
             focused,
@@ -316,7 +230,7 @@ impl Buffer {
             ..
         } = *context;
 
-        let mut visual_cursor_x = 0;
+        // Highlight the currently selected line
         let line_under_cursor = self.text.char_to_line(self.cursor.range.start) == line_index;
         if line_under_cursor && focused {
             screen.clear_region(
@@ -324,45 +238,86 @@ impl Buffer {
                     Position::new(frame.origin.x, frame.origin.y),
                     Size::new(frame.size.width, 1),
                 ),
-                theme.text_current_line,
+                theme.syntax.text_current_line,
             );
         }
 
-        // let line: Cow<str> = line.slice(..cmp::min(line.len_chars(), 1000)).into();
-        // let ranges: Vec<(SyntaxStyle, &str)> = highlighter.highlight(&line, &self.syntax_set);
-
+        let mut visual_cursor_x = 0;
         let mut visual_x = frame.origin.x;
         let mut char_index = self.text.line_to_char(line_index);
 
-        // let line = Rope::from(line);
+        let mut path = Vec::new();
+        let mut node_stack = Vec::new();
+        let mut nth_children = Vec::new();
 
+        let mut root_node = self
+            .tree
+            .as_ref()
+            .map(|tree| tree.root_node())
+            .map(|root| (root, root.walk()));
         for grapheme in RopeGraphemes::new(&line.slice(..)) {
+            path.clear();
+            node_stack.clear();
+            nth_children.clear();
+
+            let mut scope = None;
+            let mut content: Cow<str> = "".into();
+            match (&mut root_node, self.mode.highlights()) {
+                (Some((ref root_node, ref mut node_cursor)), Some(highlights)) => {
+                    let byte_index = self.text.char_to_byte(char_index);
+                    // let node = root_node.descendant_for_byte_range(byte_index, byte_index + 1);
+
+                    node_cursor.reset(*root_node);
+                    path.push(node_cursor.node().kind().to_string());
+                    node_stack.push(highlights.get_selector_node_id(node_cursor.node().kind_id()));
+                    nth_children.push(0);
+
+                    while let Some(nth_child) = node_cursor.goto_first_child_for_byte(byte_index) {
+                        path.push(node_cursor.node().kind().to_string());
+                        node_stack
+                            .push(highlights.get_selector_node_id(node_cursor.node().kind_id()));
+                        nth_children.push(nth_child as u16);
+                    }
+
+                    node_stack.reverse();
+                    nth_children.reverse();
+
+                    let node = node_cursor.node();
+                    content = self
+                        .text
+                        .slice(
+                            self.text.byte_to_char(node.start_byte())
+                                ..self.text.byte_to_char(node.end_byte()),
+                        )
+                        .into();
+
+                    scope = highlights
+                        .matches(&node_stack, &nth_children, &content)
+                        .map(|scope| scope.0.as_str());
+                }
+                _ => {}
+            };
+
             if self.cursor.range.contains(&char_index) && focused {
+                eprintln!(
+                    "Symbol under cursor [{}] -- {:?} {:?} {:?} {}",
+                    scope.unwrap_or(""),
+                    path,
+                    node_stack,
+                    nth_children,
+                    content,
+                );
                 visual_cursor_x = visual_x.saturating_sub(frame.origin.x);
             }
 
-            let maybe_node = match self.tree {
-                Some(ref tree) => {
-                    let byte_index = self.text.char_to_byte(char_index);
-                    tree.root_node()
-                        .descendant_for_byte_range(byte_index, byte_index + 1)
-                        .and_then(|mut x| {
-                            let initial = x;
-                            if !x.is_error() {
-                                while let Some(parent) = x.parent() {
-                                    if parent.is_error() {
-                                        return Some(parent);
-                                    }
-                                    x = parent;
-                                }
-                            }
-                            Some(initial)
-                        })
-                }
-                _ => None,
-            };
-
-            let style = self.text_style_at_char(context, char_index, line_under_cursor, maybe_node);
+            let style = text_style_at_char(
+                &theme.syntax,
+                &self.cursor,
+                char_index,
+                focused,
+                line_under_cursor,
+                scope.unwrap_or(""),
+            );
             let mut grapheme_width = utils::grapheme_width(&grapheme);
             let horizontal_bounds_inclusive = frame.min_x()..=frame.max_x();
             if !horizontal_bounds_inclusive.contains(&(visual_x + grapheme_width)) {
@@ -389,9 +344,9 @@ impl Buffer {
                 frame.origin.x,
                 frame.origin.y,
                 if focused {
-                    theme.cursor_focused
+                    theme.syntax.cursor_focused
                 } else {
-                    theme.cursor_unfocused
+                    theme.syntax.cursor_unfocused
                 },
                 " ",
             );
@@ -547,6 +502,8 @@ impl Buffer {
     }
 
     fn cursor_up(&mut self) {
+        // text, cursor, first_line
+
         let current_line_index = self.text.char_to_line(self.cursor.range.start);
         if current_line_index == 0 {
             return;
@@ -559,6 +516,8 @@ impl Buffer {
     }
 
     fn cursor_down(&mut self) {
+        // text, cursor, first_line
+
         let current_line_index = self.text.char_to_line(self.cursor.range.start);
         if current_line_index >= self.text.len_lines() {
             return;
@@ -779,13 +738,13 @@ impl Component for Buffer {
     #[inline]
     fn draw(&mut self, screen: &mut Screen, scheduler: &mut Scheduler, context: &Context) {
         match (&self.tree, &self.parse_syntax_task_id) {
-            (None, None) if self.mode.language.is_some() => {
+            (None, None) if self.mode.language().is_some() => {
                 self.parse_syntax_task_id = Some(self.spawn_parse_syntax(scheduler).unwrap());
             }
             _ => {}
         };
 
-        screen.clear_region(context.frame, context.theme.buffer.text);
+        screen.clear_region(context.frame, context.theme.buffer.syntax.text);
 
         self.draw_line_info(screen, context);
         let visual_cursor_x = self.draw_text(
@@ -927,7 +886,7 @@ impl Component for Buffer {
                 - self.text.line_to_byte(self.text.char_to_line(cursor_end)),
         };
 
-        if text_changed && self.mode.language.is_some() {
+        if text_changed && self.mode.language().is_some() {
             let changes = TreeSitterInputEdit {
                 start_byte: initial_cursor.start,
                 old_end_byte: initial_cursor.end,

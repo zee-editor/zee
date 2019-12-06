@@ -2,13 +2,31 @@ use lazy_static::lazy_static;
 use std::{ffi::OsStr, path::Path};
 use tree_sitter::Language;
 use zee_grammar as grammar;
+use zee_highlight::{
+    HighlightRules, HTML_RULES, JSON_RULES, MARKDOWN_RULES, PYTHON_RULES, RUST_RULES,
+};
 
 use crate::smallstring::SmallString;
 
 pub struct Mode {
     pub name: SmallString,
     file: Vec<FilenamePattern>,
-    pub language: Option<Language>,
+    pub parser: Option<SyntaxParser>,
+}
+
+impl Mode {
+    pub fn language(&self) -> Option<&Language> {
+        self.parser.as_ref().map(|parser| &parser.language)
+    }
+
+    pub fn highlights(&self) -> Option<&HighlightRules> {
+        self.parser.as_ref().map(|parser| &parser.highlights)
+    }
+}
+
+pub struct SyntaxParser {
+    pub language: Language,
+    pub highlights: HighlightRules,
 }
 
 impl Mode {
@@ -25,7 +43,7 @@ impl Default for Mode {
         Mode {
             name: "Plain".into(),
             file: vec![],
-            language: None,
+            parser: None,
         }
     }
 }
@@ -74,7 +92,10 @@ lazy_static! {
         Mode {
             name: "Rust".into(),
             file: vec![FilenamePattern::suffix(".rs")],
-            language: Some(*grammar::RUST),
+            parser: Some(SyntaxParser {
+                language: *grammar::RUST,
+                highlights: RUST_RULES.clone()
+            }),
         },
         Mode {
             name: "Python".into(),
@@ -92,12 +113,18 @@ lazy_static! {
                 FilenamePattern::suffix(".rpy"),
                 FilenamePattern::suffix(".cpy"),
             ],
-            language: Some(*grammar::PYTHON),
+            parser: Some(SyntaxParser {
+                language: *grammar::PYTHON,
+                highlights: PYTHON_RULES.clone()
+            }),
         },
         Mode {
             name: "Javascript".into(),
             file: vec![FilenamePattern::suffix(".js")],
-            language: Some(*grammar::JAVASCRIPT),
+            parser: Some(SyntaxParser {
+                language: *grammar::JAVASCRIPT,
+                highlights: RUST_RULES.clone()
+            }),
         },
         Mode {
             name: "HTML".into(),
@@ -107,7 +134,10 @@ lazy_static! {
                 FilenamePattern::suffix(".xhtml"),
                 FilenamePattern::suffix(".shtml"),
             ],
-            language: Some(*grammar::HTML),
+            parser: Some(SyntaxParser {
+                language: *grammar::HTML,
+                highlights: HTML_RULES.clone()
+            }),
         },
         Mode {
             name: "JSON".into(),
@@ -115,12 +145,18 @@ lazy_static! {
                 FilenamePattern::suffix(".json"),
                 FilenamePattern::suffix(".jsonl"),
             ],
-            language: Some(*grammar::JSON),
+            parser: Some(SyntaxParser {
+                language: *grammar::JSON,
+                highlights: JSON_RULES.clone()
+            }),
         },
         Mode {
             name: "C".into(),
             file: vec![FilenamePattern::suffix(".c"), FilenamePattern::suffix(".h")],
-            language: Some(*grammar::C),
+            parser: Some(SyntaxParser {
+                language: *grammar::C,
+                highlights: RUST_RULES.clone()
+            }),
         },
         Mode {
             name: "CPP".into(),
@@ -139,27 +175,42 @@ lazy_static! {
                 FilenamePattern::suffix(".inl"),
                 FilenamePattern::suffix(".ipp"),
             ],
-            language: Some(*grammar::CPP),
+            parser: Some(SyntaxParser {
+                language: *grammar::CPP,
+                highlights: RUST_RULES.clone()
+            }),
         },
         Mode {
             name: "CSS".into(),
             file: vec![FilenamePattern::suffix(".css"),],
-            language: Some(*grammar::CSS),
+            parser: Some(SyntaxParser {
+                language: *grammar::CSS,
+                highlights: RUST_RULES.clone()
+            }),
         },
         Mode {
             name: "Markdown".into(),
             file: vec![FilenamePattern::suffix(".md"),],
-            language: Some(*grammar::MARKDOWN),
+            parser: Some(SyntaxParser {
+                language: *grammar::MARKDOWN,
+                highlights: MARKDOWN_RULES.clone()
+            }),
         },
         Mode {
             name: "Typescript".into(),
             file: vec![FilenamePattern::suffix(".ts"),],
-            language: Some(*grammar::TYPESCRIPT),
+            parser: Some(SyntaxParser {
+                language: *grammar::TYPESCRIPT,
+                highlights: RUST_RULES.clone()
+            }),
         },
         Mode {
             name: "Typescript TSX".into(),
             file: vec![FilenamePattern::suffix(".tsx"),],
-            language: Some(*grammar::TSX),
+            parser: Some(SyntaxParser {
+                language: *grammar::TSX,
+                highlights: RUST_RULES.clone()
+            }),
         }
     ];
     pub static ref PLAIN_TEXT_MODE: Mode = Default::default();

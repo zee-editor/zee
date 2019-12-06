@@ -1,5 +1,6 @@
 use super::{
     buffer::Theme as BufferTheme, prompt::Theme as PromptTheme, splash::Theme as SplashTheme,
+    syntax::Theme as SyntaxTheme,
 };
 use crate::terminal::{Background, Colour, Foreground, Style};
 
@@ -16,12 +17,14 @@ impl Theme {
 
         Self {
             buffer: BufferTheme {
-                text: normal(BASE03, BASE0),
-                text_current_line: normal(BASE02, BASE0),
+                syntax: SyntaxTheme {
+                    text: normal(BASE03, BASE0),
+                    text_current_line: normal(BASE02, BASE0),
+                    cursor_focused: normal(BASE2, BASE00),
+                    cursor_unfocused: normal(BASE01, BASE0),
+                    selection_background: Background(Colour::rgb(8, 23, 34)),
+                },
                 border: normal(BASE02, BASE01),
-                cursor_focused: normal(BASE2, BASE00),
-                cursor_unfocused: normal(BASE01, BASE0),
-                selection_background: Background(Colour::rgb(8, 23, 34)),
                 status_base: normal(BASE02, BASE02),
                 status_frame_id_focused: normal(BASE01, BASE2),
                 status_frame_id_unfocused: normal(BASE01, BASE2),
@@ -48,12 +51,14 @@ impl Theme {
 
         Self {
             buffer: BufferTheme {
-                text: normal(DARK0_SOFT, LIGHT0_HARD),
-                text_current_line: normal(DARK0, LIGHT0_HARD),
+                syntax: SyntaxTheme {
+                    text: normal(DARK0_SOFT, LIGHT0_HARD),
+                    text_current_line: normal(DARK0, LIGHT0_HARD),
+                    cursor_focused: normal(LIGHT0, DARK0),
+                    cursor_unfocused: normal(GRAY_245, DARK0_HARD),
+                    selection_background: Background(DARK0_HARD),
+                },
                 border: normal(DARK0, GRAY_245),
-                cursor_focused: normal(LIGHT0, DARK0),
-                cursor_unfocused: normal(GRAY_245, DARK0_HARD),
-                selection_background: Background(DARK0_HARD),
                 status_base: normal(DARK0, DARK0),
                 status_frame_id_focused: normal(BRIGHT_BLUE, DARK0_HARD),
                 status_frame_id_unfocused: normal(GRAY_245, DARK0_HARD),

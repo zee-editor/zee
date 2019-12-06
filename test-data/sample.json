@@ -1,0 +1,43 @@
+{
+  "test": "123",
+  "number": 123,
+  "bool": true,
+  "a-number": 42.0,
+  "null": null,
+  "url-example": "https://reinfer.io/some-path?x=123&y=param",
+  "object": {
+    "key": [
+      "some-string-in-array",
+      1,
+      5.1,
+      true,
+      false,
+      null
+    ]
+  },
+  "escaped": {
+    "object > \",\"": "punctuation.separator.dictionary.pair",
+    "array > \",\"": "punctuation.separator.array",
+    "\"[\"": "punctuation.definition.array.begin",
+    "\"]\"": "punctuation.definition.array.end"
+  },
+  "moduleNameMapper": {
+    "\\.(jpg|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$": "<rootDir>/__mocks__/fileMock.js",
+    "\\.(css|scss)$": "<rootDir>/__mocks__/styleMock.js"
+  },
+  "devDependencies": {
+    "selenium-standalone": "^6.6.0",
+    "webpack-dev-server": "^3.2.1",
+    "yarn-deduplicate": "^1.1.1"
+  },
+  "dependencies": {
+    "@babel/cli": "^7.1.0",
+    "@babel/core": "^7.1.0",
+    "@babel/plugin-syntax-dynamic-import": "^7.0.0",
+    "@babel/polyfill": "^7.0.0",
+    "@babel/preset-env": "^7.1.0",
+    "@babel/preset-react": "^7.0.0",
+    "@babel/preset-typescript": "^7.1.0",
+    "save-svg-as-png": "git://github.com/exupero/saveSvgAsPng.git#7f6551fc7eef742fa345ad383a7ea129bc4b3d1d"
+  }
+}

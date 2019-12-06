@@ -1,0 +1,75 @@
+{
+  "name": "Rust",
+  "scopes": {
+    "type_identifier": "support.type",
+    "primitive_type": "support.type",
+    "field_identifier": "variable.other.member",
+    "line_comment": "comment.block",
+    "block_comment": "comment.block",
+    "identifier": [
+      {
+        "match": "^[A-Z\\d_]+$",
+        "scopes": "constant.other"
+      }
+    ],
+    "identifier,\ncall_expression > identifier,\ncall_expression > field_expression > field_identifier,\ncall_expression > scoped_identifier > identifier:nth-child(2)": [
+      {
+        "match": "^[A-Z]",
+        "scopes": "entity.name.class"
+      }
+    ],
+    "macro_invocation > identifier,\nmacro_invocation > \"!\",\nmacro_definition > identifier,\ncall_expression > identifier,\ncall_expression > field_expression > field_identifier,\ncall_expression > scoped_identifier > identifier:nth-child(2),\ngeneric_function > identifier,\ngeneric_function > field_expression > field_identifier,\ngeneric_function > scoped_identifier > identifier,\nfunction_item > identifier,\nfunction_signature_item > identifier,": "entity.name.function",
+    "use_list > self,\nscoped_use_list > self,\nscoped_identifier > self,\ncrate,\nsuper": "keyword.control",
+    "self": "variable.self",
+    "use_wildcard > identifier:nth-child(0),\nuse_wildcard > scoped_identifier > identifier:nth-child(2),\nscoped_type_identifier > identifier:nth-child(0),\nscoped_type_identifier > scoped_identifier:nth-child(0) > identifier,\nscoped_identifier > identifier:nth-child(0),\nscoped_identifier > scoped_identifier:nth-child(0) > identifier,\nuse_declaration > identifier,\nuse_declaration > scoped_identifier > identifier,\nuse_list > identifier,\nuse_list > scoped_identifier > identifier,\nmeta_item > identifier": [
+      {
+        "match": "^[A-Z]",
+        "scopes": "support.type"
+      }
+    ],
+    "lifetime > identifier": "constant.variable",
+    "\"let\"": "keyword.control",
+    "\"const\"": "storage.modifier",
+    "\"static\"": "storage.modifier",
+    "\"extern\"": "storage.modifier",
+    "\"fn\"": "storage.modifier",
+    "\"type\"": "storage.modifier",
+    "\"impl\"": "storage.modifier",
+    "\"dyn\"": "storage.modifier",
+    "\"trait\"": "storage.modifier",
+    "\"mod\"": "storage.modifier",
+    "\"pub\"": "storage.modifier",
+    "\"crate\"": "storage.modifier",
+    "\"default\"": "storage.modifier",
+    "\"struct\"": "storage.modifier",
+    "\"enum\"": "storage.modifier",
+    "\"union\"": "storage.modifier",
+    "mutable_specifier": "storage.modifier",
+    "\"unsafe\"": "keyword.control",
+    "\"use\"": "keyword.control",
+    "\"match\"": "keyword.control",
+    "\"if\"": "keyword.control",
+    "\"in\"": "keyword.control",
+    "\"else\"": "keyword.control",
+    "\"move\"": "keyword.control",
+    "\"while\"": "keyword.control",
+    "\"loop\"": "keyword.control",
+    "\"for\"": "keyword.control",
+    "\"return\"": "keyword.control",
+    "\"continue\"": "keyword.control",
+    "\"break\"": "keyword.control",
+    "\"where\"": "keyword.control",
+    "\"ref\"": "keyword.control",
+    "\"macro_rules!\"": "keyword.control",
+    "\"as\"": "keyword.operator",
+    "char_literal": "string.quoted.single",
+    "string_literal": "string.quoted.double",
+    "raw_string_literal": "string.quoted.other",
+    "boolean_literal": "constant.language.boolean",
+    "integer_literal": "constant.numeric.decimal",
+    "float_literal": "constant.numeric.decimal",
+    "escape_sequence": "constant.character.escape",
+    "attribute_item, inner_attribute_item": "entity.other.attribute-name",
+    "\"as\",\n\"*\",\n\"&\",": "keyword.operator"
+  }
+}

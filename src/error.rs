@@ -4,6 +4,7 @@ use std::{
     io,
     result::Result as StdResult,
 };
+use tree_sitter::LanguageError;
 
 pub type Result<T> = StdResult<T, Error>;
 
@@ -13,10 +14,18 @@ pub enum Error {
     Editor(io::Error),
     Io(io::Error),
     TaskPool(Box<dyn StdError + Send>),
+    CancelledLanguageParser,
+    MissingLanguageParser(String),
+    IncompatibleLanguageGrammar(LanguageError),
 }
 
 impl Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        // .expect("Compatible tree sitter grammer version");
+
+        // match self {
+
+        // }
         write!(formatter, "{:?}", self)
     }
 }
