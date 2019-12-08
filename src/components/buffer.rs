@@ -17,6 +17,7 @@ use tree_sitter::{
 use zee_highlight::{Scope, ScopePattern};
 
 use super::{
+    cursor::Cursor,
     syntax::{text_style_at_char, Theme as SyntaxTheme},
     theme::{gruvbox, Theme as EditorTheme},
     Component, Context, Scheduler, TaskKind, TaskResult,
@@ -32,23 +33,6 @@ use crate::{
     },
 };
 use termion::event::Key;
-
-#[derive(Debug)]
-pub struct Cursor {
-    pub range: Range<usize>, // char range under cursor
-    visual_horizontal_offset: Option<usize>,
-    select: Option<usize>,
-}
-
-impl Cursor {
-    pub fn selection(&self) -> Range<usize> {
-        match self.select {
-            Some(select) if select > self.range.start => self.range.start..select,
-            Some(select) if select < self.range.start => select..self.range.start,
-            _ => self.range.clone(),
-        }
-    }
-}
 
 #[derive(Clone, Debug)]
 pub struct Theme {
@@ -501,76 +485,6 @@ impl Buffer {
         );
     }
 
-    fn cursor_up(&mut self) {
-        // text, cursor, first_line
-
-        let current_line_index = self.text.char_to_line(self.cursor.range.start);
-        if current_line_index == 0 {
-            return;
-        }
-        self.move_cursor_vertically(current_line_index, current_line_index - 1);
-
-        if current_line_index - 1 < self.first_line {
-            self.first_line -= 1;
-        }
-    }
-
-    fn cursor_down(&mut self) {
-        // text, cursor, first_line
-
-        let current_line_index = self.text.char_to_line(self.cursor.range.start);
-        if current_line_index >= self.text.len_lines() {
-            return;
-        }
-        self.move_cursor_vertically(current_line_index, current_line_index + 1);
-    }
-
-    fn cursor_left(&mut self) {
-        let previous_grapheme_start =
-            prev_grapheme_boundary(&self.text.slice(..), self.cursor.range.start);
-        if previous_grapheme_start == 0 && self.cursor.range.start == 0 {
-            return;
-        }
-
-        self.cursor.range = previous_grapheme_start..self.cursor.range.start;
-        self.cursor.visual_horizontal_offset = None;
-    }
-
-    fn cursor_right(&mut self) {
-        let grapheme_start = self.cursor.range.end;
-        let grapheme_end = next_grapheme_boundary(&self.text.slice(..), self.cursor.range.end);
-        if grapheme_start != grapheme_end {
-            self.cursor.range = grapheme_start..grapheme_end;
-        }
-        self.cursor.visual_horizontal_offset = None;
-    }
-
-    fn cursor_start_of_line(&mut self) {
-        let line_index = self.text.char_to_line(self.cursor.range.start);
-        let char_index = self.text.line_to_char(line_index);
-        self.cursor.range = char_index..next_grapheme_boundary(&self.text.slice(..), char_index);
-        self.cursor.visual_horizontal_offset = None;
-    }
-
-    fn cursor_end_of_line(&mut self) {
-        let line_index = self.text.char_to_line(self.cursor.range.start);
-        let char_index = self.text.line_to_char(line_index);
-        let line_len = self.text.line(line_index).len_chars();
-        self.cursor.range = (char_index + line_len).saturating_sub(1)..char_index + line_len;
-        self.cursor.visual_horizontal_offset = None;
-    }
-
-    fn cursor_start_of_buffer(&mut self) {
-        self.cursor.range = 0..next_grapheme_boundary(&self.text.slice(..), 0);
-        self.cursor.visual_horizontal_offset = None;
-    }
-
-    fn cursor_end_of_buffer(&mut self) {
-        let len_chars = self.text.len_chars();
-        self.cursor.range = prev_grapheme_boundary(&self.text.slice(..), len_chars)..len_chars;
-        self.cursor.visual_horizontal_offset = None;
-    }
-
     fn center_visual_cursor(&mut self, frame: &Rect) {
         let line_index = self.text.char_to_line(self.cursor.range.start);
         if line_index >= frame.size.height / 2 {
@@ -764,41 +678,44 @@ impl Component for Buffer {
         // Stateless
         match key {
             Key::Ctrl('p') | Key::Up => {
-                self.cursor_up();
+                self.cursor.move_up(&self.text);
+                // if self.text.char_to_line(self.cursor.range.start) < self.first_line {
+                //     self.first_line -= 1;
+                // }
             }
             Key::Ctrl('n') | Key::Down => {
-                self.cursor_down();
+                self.cursor.move_down(&self.text);
             }
             Key::Ctrl('b') | Key::Left => {
-                self.cursor_left();
+                self.cursor.move_left(&self.text);
             }
             Key::Ctrl('f') | Key::Right => {
-                self.cursor_right();
+                self.cursor.move_right(&self.text);
             }
             Key::Ctrl('v') | Key::PageDown => {
                 for _ in 0..(context.frame.size.height - 1) {
-                    self.cursor_down();
+                    self.cursor.move_down(&self.text);
                 }
             }
             Key::Alt('v') | Key::PageUp => {
                 for _ in 0..(context.frame.size.height - 1) {
-                    self.cursor_up();
+                    self.cursor.move_up(&self.text);
                 }
             }
             Key::Ctrl('a') | Key::Home => {
-                self.cursor_start_of_line();
+                self.cursor.move_to_start_of_line(&self.text);
             }
             Key::Ctrl('e') | Key::End => {
-                self.cursor_end_of_line();
+                self.cursor.move_to_end_of_line(&self.text);
+            }
+            Key::Alt('<') => {
+                self.cursor.move_to_start_of_buffer(&self.text);
+            }
+            Key::Alt('>') => {
+                self.cursor.move_to_end_of_buffer(&self.text);
             }
             Key::Ctrl('l') => {
                 self.center_visual_cursor(&context.frame);
-            }
-            Key::Alt('<') => {
-                self.cursor_start_of_buffer();
-            }
-            Key::Alt('>') => {
-                self.cursor_end_of_buffer();
             }
             _ => {}
         };
@@ -833,7 +750,7 @@ impl Component for Buffer {
             }
             Key::Backspace => {
                 if self.cursor.range.start > 0 {
-                    self.cursor_left();
+                    self.cursor.move_left(&self.text);
                     self.delete();
                 }
             }
@@ -848,19 +765,19 @@ impl Component for Buffer {
             Key::Char('\t') if DISABLE_TABS => {
                 for _ in 0..TAB_WIDTH {
                     self.insert_char(' ');
-                    self.cursor_right();
+                    self.cursor.move_right(&self.text);
                 }
             }
             Key::Char('\n') => {
                 self.insert_newline();
                 self.ensure_trailing_newline_with_content();
-                self.cursor_down();
-                self.cursor_start_of_line();
+                self.cursor.move_down(&self.text);
+                self.cursor.move_to_start_of_line(&self.text);
             }
             Key::Char(character) => {
                 self.insert_char(character);
                 self.ensure_trailing_newline_with_content();
-                self.cursor_right();
+                self.cursor.move_right(&self.text);
             }
             Key::Alt('s') => {
                 self.spawn_save_file(scheduler, context)?;

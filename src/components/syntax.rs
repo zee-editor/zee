@@ -1,4 +1,4 @@
-use super::{buffer::Cursor, theme::gruvbox};
+use super::{cursor::Cursor, theme::gruvbox};
 use crate::terminal::{Background, Foreground, Style};
 
 #[derive(Clone, Debug)]
