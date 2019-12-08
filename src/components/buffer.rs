@@ -4,29 +4,26 @@ use size_format::SizeFormatterBinary;
 use std::{
     borrow::Cow,
     cmp,
-    ffi::OsStr,
     fs::File,
     io::{self, BufReader, BufWriter},
-    ops::Range,
     path::PathBuf,
     time::Instant,
 };
 use tree_sitter::{
-    InputEdit as TreeSitterInputEdit, Node, Parser, Point as TreeSitterPoint, Tree, TreeCursor,
+    InputEdit as TreeSitterInputEdit, Parser, Point as TreeSitterPoint, Tree, TreeCursor,
 };
-use zee_highlight::{Scope, ScopePattern};
 
 use super::{
     cursor::Cursor,
     syntax::{text_style_at_char, Theme as SyntaxTheme},
-    theme::{gruvbox, Theme as EditorTheme},
+    theme::Theme as EditorTheme,
     Component, Context, Scheduler, TaskKind, TaskResult,
 };
 use crate::{
     error::{Error, Result},
-    jobs::{JobId as TaskId, Poll},
+    jobs::JobId as TaskId,
     mode::{self, Mode},
-    terminal::{Background, Colour, Foreground, Position, Rect, Screen, Size, Style},
+    terminal::{Position, Rect, Screen, Size, Style},
     utils::{
         self, next_grapheme_boundary, prev_grapheme_boundary, strip_trailing_whitespace,
         RopeGraphemes, TAB_WIDTH,
@@ -101,11 +98,7 @@ impl Buffer {
             yanked_line: None,
             has_unsaved_changes: ModifiedStatus::Unchanged,
             file_path: Some(file_path),
-            cursor: Cursor {
-                range: 0..1,
-                visual_horizontal_offset: None,
-                select: None,
-            },
+            cursor: Cursor::new(),
             first_line: 0,
             tree: None,
             parse_syntax_task_id: None,
@@ -172,18 +165,9 @@ impl Buffer {
         {
             return;
         }
-
         let ParsedSyntax { tree, text } = parsed;
-
+        assert!(tree.root_node().end_byte() <= text.len_bytes() + 1);
         self.tree = Some(tree.clone());
-        let root = tree.root_node();
-        assert!(root.end_byte() <= text.len_bytes() + 1);
-
-        // eprintln!("SEXP: {:?}", tree.root_node().to_sexp());
-        // let mut cursor = tree.walk();
-        // eprintln!(" ** Recon **");
-        // print_tree(&mut cursor, &text, 0);
-        // eprintln!(" ** ***** **");
     }
 
     #[inline]
@@ -246,10 +230,10 @@ impl Buffer {
 
             let mut scope = None;
             let mut content: Cow<str> = "".into();
+            let mut is_error = false;
             match (&mut root_node, self.mode.highlights()) {
                 (Some((ref root_node, ref mut node_cursor)), Some(highlights)) => {
                     let byte_index = self.text.char_to_byte(char_index);
-                    // let node = root_node.descendant_for_byte_range(byte_index, byte_index + 1);
 
                     node_cursor.reset(*root_node);
                     path.push(node_cursor.node().kind().to_string());
@@ -257,6 +241,7 @@ impl Buffer {
                     nth_children.push(0);
 
                     while let Some(nth_child) = node_cursor.goto_first_child_for_byte(byte_index) {
+                        is_error = is_error || node_cursor.node().is_error();
                         path.push(node_cursor.node().kind().to_string());
                         node_stack
                             .push(highlights.get_selector_node_id(node_cursor.node().kind_id()));
@@ -283,14 +268,14 @@ impl Buffer {
             };
 
             if self.cursor.range.contains(&char_index) && focused {
-                eprintln!(
-                    "Symbol under cursor [{}] -- {:?} {:?} {:?} {}",
-                    scope.unwrap_or(""),
-                    path,
-                    node_stack,
-                    nth_children,
-                    content,
-                );
+                // eprintln!(
+                //     "Symbol under cursor [{}] -- {:?} {:?} {:?} {}",
+                //     scope.unwrap_or(""),
+                //     path,
+                //     node_stack,
+                //     nth_children,
+                //     content,
+                // );
                 visual_cursor_x = visual_x.saturating_sub(frame.origin.x);
             }
 
@@ -301,16 +286,18 @@ impl Buffer {
                 focused,
                 line_under_cursor,
                 scope.unwrap_or(""),
+                is_error,
             );
-            let mut grapheme_width = utils::grapheme_width(&grapheme);
+            let grapheme_width = utils::grapheme_width(&grapheme);
             let horizontal_bounds_inclusive = frame.min_x()..=frame.max_x();
             if !horizontal_bounds_inclusive.contains(&(visual_x + grapheme_width)) {
                 break;
             }
 
             if grapheme == "\t" {
-                grapheme_width = 4;
-                screen.draw_str(visual_x, frame.origin.y, style, "    ");
+                for offset in 0..grapheme_width {
+                    screen.draw_str(visual_x + offset, frame.origin.y, style, " ");
+                }
             } else if grapheme_width == 0 {
                 screen.draw_str(visual_x, frame.origin.y, style, " ");
             } else {
@@ -867,33 +854,6 @@ impl Component for Buffer {
 
         Ok(())
     }
-}
-
-fn print_tree(cursor: &mut TreeCursor, text: &Rope, mut line_num: usize) -> usize {
-    if cursor.goto_first_child() {
-        line_num = print_tree(cursor, text, line_num);
-    } else {
-        let new_line_num = text.byte_to_line(cursor.node().start_byte());
-        assert!(new_line_num >= line_num);
-        if new_line_num > line_num {
-            eprintln!("");
-            line_num = new_line_num;
-        }
-
-        let range = text.byte_to_char(cursor.node().start_byte())
-            ..text.byte_to_char(cmp::min(cursor.node().end_byte(), text.len_bytes()));
-        let range_str: Cow<str> = text.slice(range).into();
-        // eprint!("{} ", range_str);
-        eprint!("{}[{}] ", range_str, cursor.node().kind());
-    }
-
-    if cursor.goto_next_sibling() {
-        line_num = print_tree(cursor, text, line_num);
-    } else {
-        cursor.goto_parent();
-    }
-
-    line_num
 }
 
 const DISABLE_TABS: bool = false;

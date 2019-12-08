@@ -6,6 +6,7 @@ pub mod syntax;
 pub mod theme;
 
 pub use buffer::{Buffer, BufferTask};
+pub use cursor::Cursor;
 pub use prompt::Prompt;
 pub use splash::Splash;
 pub use theme::Theme;

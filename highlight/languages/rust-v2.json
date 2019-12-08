@@ -63,7 +63,13 @@
     "empty_type": "support.type.never",
     "unit_type": "support.type.unit",
     "field_identifier": "entity.name.variable.field",
-    "line_comment": "comment.block.line",
+    "line_comment": [
+      {
+        "match": "^\\s*///",
+        "scopes": "comment.block.line.docstr"
+      },
+      "comment.block.line"
+    ],
     "block_comment": "comment.block.block",
     "identifier": [
       {
@@ -192,6 +198,7 @@
     "float_literal": "constant.numeric.decimal",
     "escape_sequence": "constant.character.escape",
     "unary_expression > \"-\"": "constant.numeric.neg",
-    "attribute_item, inner_attribute_item": "entity.attribute.name"
+    "attribute_item, inner_attribute_item": "entity.attribute.name",
+    "attribute_item> \"[\", attribute_item> \"]\", meta_arguments > \"(\", meta_arguments > \")\", meta_arguments > \",\"": "entity.attribute.name.punctuation"
   }
 }

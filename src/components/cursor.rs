@@ -13,6 +13,14 @@ pub struct Cursor {
 }
 
 impl Cursor {
+    pub fn new() -> Self {
+        Self {
+            range: 0..1,
+            visual_horizontal_offset: None,
+            select: None,
+        }
+    }
+
     pub fn selection(&self) -> Range<usize> {
         match self.select {
             Some(select) if select > self.range.start => self.range.start..select,
