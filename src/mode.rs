@@ -3,7 +3,8 @@ use std::{ffi::OsStr, path::Path};
 use tree_sitter::Language;
 use zee_grammar as grammar;
 use zee_highlight::{
-    HighlightRules, HTML_RULES, JSON_RULES, MARKDOWN_RULES, PYTHON_RULES, RUST_RULES,
+    HighlightRules, BASH_RULES, CPP_RULES, CSS_RULES, C_RULES, HTML_RULES, JAVASCRIPT_RULES,
+    JSON_RULES, MARKDOWN_RULES, PYTHON_RULES, RUST_RULES, TSX_RULES, TYPESCRIPT_RULES,
 };
 
 use crate::smallstring::SmallString;
@@ -88,7 +89,15 @@ pub fn find_by_filename(filename: impl AsRef<Path>) -> &'static Mode {
 }
 
 lazy_static! {
-    pub static ref LANGUAGE_MODES: [Mode; 11] = [
+    pub static ref LANGUAGE_MODES: [Mode; 12] = [
+        Mode {
+            name: "Shell Script".into(),
+            file: vec![FilenamePattern::suffix(".sh")],
+            parser: Some(SyntaxParser {
+                language: *grammar::BASH,
+                highlights: BASH_RULES.clone()
+            }),
+        },
         Mode {
             name: "Rust".into(),
             file: vec![FilenamePattern::suffix(".rs")],
@@ -123,7 +132,7 @@ lazy_static! {
             file: vec![FilenamePattern::suffix(".js")],
             parser: Some(SyntaxParser {
                 language: *grammar::JAVASCRIPT,
-                highlights: RUST_RULES.clone()
+                highlights: JAVASCRIPT_RULES.clone()
             }),
         },
         Mode {
@@ -155,11 +164,11 @@ lazy_static! {
             file: vec![FilenamePattern::suffix(".c"), FilenamePattern::suffix(".h")],
             parser: Some(SyntaxParser {
                 language: *grammar::C,
-                highlights: RUST_RULES.clone()
+                highlights: C_RULES.clone()
             }),
         },
         Mode {
-            name: "CPP".into(),
+            name: "C++".into(),
             file: vec![
                 FilenamePattern::suffix(".cpp"),
                 FilenamePattern::suffix(".cc"),
@@ -177,7 +186,7 @@ lazy_static! {
             ],
             parser: Some(SyntaxParser {
                 language: *grammar::CPP,
-                highlights: RUST_RULES.clone()
+                highlights: CPP_RULES.clone()
             }),
         },
         Mode {
@@ -185,7 +194,7 @@ lazy_static! {
             file: vec![FilenamePattern::suffix(".css"),],
             parser: Some(SyntaxParser {
                 language: *grammar::CSS,
-                highlights: RUST_RULES.clone()
+                highlights: CSS_RULES.clone()
             }),
         },
         Mode {
@@ -201,7 +210,7 @@ lazy_static! {
             file: vec![FilenamePattern::suffix(".ts"),],
             parser: Some(SyntaxParser {
                 language: *grammar::TYPESCRIPT,
-                highlights: RUST_RULES.clone()
+                highlights: TYPESCRIPT_RULES.clone()
             }),
         },
         Mode {
@@ -209,7 +218,7 @@ lazy_static! {
             file: vec![FilenamePattern::suffix(".tsx"),],
             parser: Some(SyntaxParser {
                 language: *grammar::TSX,
-                highlights: RUST_RULES.clone()
+                highlights: TSX_RULES.clone()
             }),
         }
     ];
