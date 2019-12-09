@@ -46,7 +46,7 @@ impl Editor {
             prompt: Prompt::new(),
             job_pool,
             themes: [
-                (Theme::gruvbox(), "gruvbox-dark-soft"),
+                (Theme::gruvbox(), "zee-gruvbox"),
                 (
                     Theme::from_base16(&base16::GRUVBOX_DARK_HARD),
                     "base16-gruvbox-dark-hard",

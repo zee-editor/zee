@@ -25,7 +25,6 @@ pub type ComponentId = usize;
 pub type FrameId = usize;
 pub type LaidComponentIds = SmallVec<[LaidComponentId; 16]>;
 
-#[derive(Debug)]
 pub enum TaskKind {
     Buffer(BufferTask),
 }

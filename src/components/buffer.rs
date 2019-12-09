@@ -10,12 +10,12 @@ use std::{
     time::Instant,
 };
 use tree_sitter::{
-    InputEdit as TreeSitterInputEdit, Parser, Point as TreeSitterPoint, Tree, TreeCursor,
+    InputEdit as TreeSitterInputEdit, Language, Parser, Point as TreeSitterPoint, Tree, TreeCursor,
 };
 
 use super::{
     cursor::Cursor,
-    syntax::{text_style_at_char, Theme as SyntaxTheme},
+    syntax::{text_style_at_char, ParserStatus, SyntaxTree, Theme as SyntaxTheme},
     theme::Theme as EditorTheme,
     Component, Context, Scheduler, TaskKind, TaskResult,
 };
@@ -53,16 +53,9 @@ enum ModifiedStatus {
     Saving(Instant),
 }
 
-#[derive(Debug)]
 pub enum BufferTask {
     SaveFile { text: Rope },
-    ParseSyntax(ParsedSyntax),
-}
-
-#[derive(Debug)]
-pub struct ParsedSyntax {
-    tree: Tree,
-    text: Rope,
+    ParseSyntax(ParserStatus),
 }
 
 pub struct Buffer {
@@ -73,9 +66,7 @@ pub struct Buffer {
     file_path: Option<PathBuf>,
     cursor: Cursor,
     first_line: usize,
-    tree: Option<Tree>,
-    parse_syntax_task_id: Option<TaskId>,
-    parser: Option<Parser>,
+    syntax: Option<SyntaxTree>,
 }
 
 impl Buffer {
@@ -100,15 +91,7 @@ impl Buffer {
             file_path: Some(file_path),
             cursor: Cursor::new(),
             first_line: 0,
-            tree: None,
-            parse_syntax_task_id: None,
-            parser: mode.language().map(|language| {
-                let mut parser = Parser::new();
-                parser
-                    .set_language(*language)
-                    .expect("Compatible tree sitter grammer version");
-                parser
-            }),
+            syntax: mode.language().map(|language| SyntaxTree::new(*language)),
             mode,
         })
     }
@@ -126,48 +109,6 @@ impl Buffer {
         }
 
         Ok(())
-    }
-
-    pub fn spawn_parse_syntax(&mut self, scheduler: &mut Scheduler) -> Result<TaskId> {
-        let mode = self.mode;
-        let text = self.text.clone();
-        scheduler.spawn(move || {
-            mode.language()
-                .ok_or_else(|| Error::MissingLanguageParser(mode.name.clone().into()))
-                .and_then(|language| {
-                    let mut parser = Parser::new();
-                    parser
-                        .set_language(*language)
-                        .map_err(|error| Error::IncompatibleLanguageGrammar(error))?;
-                    Ok(parser)
-                })
-                .and_then(|mut parser| {
-                    parser
-                        .parse_with(
-                            &mut |byte_index, _| {
-                                let (chunk, chunk_byte_idx, _, _) = text.chunk_at_byte(byte_index);
-                                assert!(byte_index >= chunk_byte_idx);
-                                &chunk.as_bytes()[byte_index - chunk_byte_idx..]
-                            },
-                            None,
-                        )
-                        .ok_or_else(|| Error::CancelledLanguageParser)
-                })
-                .map(|tree| TaskKind::Buffer(BufferTask::ParseSyntax(ParsedSyntax { tree, text })))
-        })
-    }
-
-    pub fn handle_parse_syntax_done(&mut self, task_id: TaskId, parsed: ParsedSyntax) {
-        if self
-            .parse_syntax_task_id
-            .map(|expected_task_id| expected_task_id != task_id)
-            .unwrap_or(true)
-        {
-            return;
-        }
-        let ParsedSyntax { tree, text } = parsed;
-        assert!(tree.root_node().end_byte() <= text.len_bytes() + 1);
-        self.tree = Some(tree.clone());
     }
 
     #[inline]
@@ -219,8 +160,9 @@ impl Buffer {
         let mut nth_children = Vec::new();
 
         let mut root_node = self
-            .tree
+            .syntax
             .as_ref()
+            .and_then(|syntax| syntax.tree.as_ref())
             .map(|tree| tree.root_node())
             .map(|root| (root, root.walk()));
         for grapheme in RopeGraphemes::new(&line.slice(..)) {
@@ -268,14 +210,14 @@ impl Buffer {
             };
 
             if self.cursor.range.contains(&char_index) && focused {
-                // eprintln!(
-                //     "Symbol under cursor [{}] -- {:?} {:?} {:?} {}",
-                //     scope.unwrap_or(""),
-                //     path,
-                //     node_stack,
-                //     nth_children,
-                //     content,
-                // );
+                eprintln!(
+                    "Symbol under cursor [{}] -- {:?} {:?} {:?} {}",
+                    scope.unwrap_or(""),
+                    path,
+                    node_stack,
+                    nth_children,
+                    content,
+                );
                 visual_cursor_x = visual_x.saturating_sub(frame.origin.x);
             }
 
@@ -414,7 +356,7 @@ impl Buffer {
             },
             match self.has_unsaved_changes {
                 ModifiedStatus::Unchanged => " - ",
-                ModifiedStatus::Changed | ModifiedStatus::Saving(..) => " * ",
+                ModifiedStatus::Changed | ModifiedStatus::Saving(..) => " ☲ ",
                 // ModifiedStatus::Saving(start_time) => [" | ", " / ", " - ", " \\ "]
                 //     [((context.time - start_time).as_millis() / 250) as usize % 4],
             },
@@ -582,52 +524,6 @@ impl Buffer {
         self.cursor.visual_horizontal_offset = None;
     }
 
-    fn move_cursor_vertically(&mut self, current_line_index: usize, new_line_index: usize) {
-        if new_line_index >= self.text.len_lines() {
-            return;
-        }
-
-        let Self {
-            ref text,
-            cursor:
-                Cursor {
-                    range: ref mut cursor_range,
-                    ref mut visual_horizontal_offset,
-                    ..
-                },
-            ..
-        } = *self;
-
-        let current_line_start = text.line_to_char(current_line_index);
-        let current_visual_x = visual_horizontal_offset.get_or_insert_with(|| {
-            utils::grapheme_width(&text.slice(current_line_start..cursor_range.start))
-        });
-
-        let new_line = text.line(new_line_index);
-        let mut graphemes = RopeGraphemes::new(&new_line);
-        let mut new_visual_x = 0;
-        while let Some(grapheme) = graphemes.next() {
-            let width = utils::grapheme_width(&grapheme);
-            if new_visual_x + width > *current_visual_x {
-                break;
-            }
-            new_visual_x += width;
-        }
-
-        let new_line_offset =
-            text.byte_to_char(text.line_to_byte(new_line_index) + graphemes.cursor.cur_cursor());
-
-        if new_visual_x <= *current_visual_x {
-            let grapheme_start = prev_grapheme_boundary(&text.slice(..), new_line_offset);
-            let grapheme_end = next_grapheme_boundary(&text.slice(..), grapheme_start);
-            *cursor_range = grapheme_start..grapheme_end;
-        } else {
-            let grapheme_end = next_grapheme_boundary(&text.slice(..), new_line_offset);
-            let grapheme_start = prev_grapheme_boundary(&text.slice(..), grapheme_end);
-            *cursor_range = grapheme_start..grapheme_end;
-        }
-    }
-
     fn ensure_trailing_newline_with_content(&mut self) {
         if self.text.len_chars() == 0 || self.text.char(self.text.len_chars() - 1) != '\n' {
             self.text.insert_char(self.text.len_chars(), '\n');
@@ -638,15 +534,18 @@ impl Buffer {
 impl Component for Buffer {
     #[inline]
     fn draw(&mut self, screen: &mut Screen, scheduler: &mut Scheduler, context: &Context) {
-        match (&self.tree, &self.parse_syntax_task_id) {
-            (None, None) if self.mode.language().is_some() => {
-                self.parse_syntax_task_id = Some(self.spawn_parse_syntax(scheduler).unwrap());
-            }
-            _ => {}
-        };
+        {
+            let Self {
+                ref mut syntax,
+                ref text,
+                ..
+            } = self;
+            if let Some(syntax) = syntax.as_mut() {
+                syntax.ensure_tree(scheduler, || text.clone()).unwrap();
+            };
+        }
 
         screen.clear_region(context.frame, context.theme.buffer.syntax.text);
-
         self.draw_line_info(screen, context);
         let visual_cursor_x = self.draw_text(
             screen,
@@ -801,13 +700,20 @@ impl Component for Buffer {
             };
             // eprintln!("changes: {:?}", changes);
 
-            match self.tree {
-                Some(ref mut tree) => {
-                    tree.edit(&changes);
-                }
-                _ => {}
-            };
-            self.parse_syntax_task_id = Some(self.spawn_parse_syntax(scheduler)?);
+            {
+                let Self {
+                    ref mut syntax,
+                    ref text,
+                    ..
+                } = self;
+                if let Some(syntax) = syntax.as_mut() {
+                    if let Some(tree) = syntax.tree.as_mut() {
+                        tree.edit(&changes);
+                    }
+                    let text = text.clone();
+                    syntax.spawn_parse_task(scheduler, text)?;
+                };
+            }
         }
 
         Ok(())
@@ -848,7 +754,9 @@ impl Component for Buffer {
                 self.has_unsaved_changes = ModifiedStatus::Unchanged;
             }
             TaskKind::Buffer(BufferTask::ParseSyntax(parsed)) => {
-                self.handle_parse_syntax_done(task_id, parsed)
+                self.syntax
+                    .as_mut()
+                    .map(|syntax| syntax.handle_parse_syntax_done(task_id, parsed));
             }
         }
 
