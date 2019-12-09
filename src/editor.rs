@@ -176,9 +176,16 @@ impl Editor {
                     frame = Rect::new(Position::new(0, 0), Size::new(screen.width, screen.height));
                     screen.resize_to_terminal()?;
                     self.draw(&mut screen);
+                    let drawn_time = now.elapsed();
+
+                    let now = Instant::now();
                     screen.present()?;
                     last_drawn = Instant::now();
-                    eprintln!("Drawn in {:?}", now.elapsed());
+                    eprintln!(
+                        "Drawn in {:?} | Presented in {:?}",
+                        drawn_time,
+                        now.elapsed(),
+                    );
                 }
                 PollState::Exit => {
                     return Ok(());

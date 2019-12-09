@@ -1,19 +1,22 @@
 use ropey::Rope;
+use smallvec::SmallVec;
 use std::{
-    ops::{Deref, DerefMut},
+    ops::{Deref, DerefMut, Range},
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
     },
 };
 use tree_sitter::{
-    InputEdit as TreeSitterInputEdit, Language, Parser, Point as TreeSitterPoint, Tree,
+    InputEdit as TreeSitterInputEdit, Language, Node, Parser, Point as TreeSitterPoint, Tree,
+    TreeCursor,
 };
 
 use super::{buffer::BufferTask, cursor::Cursor, Scheduler, TaskKind};
 use crate::{
     error::{Error, Result},
     jobs::JobId as TaskId,
+    smallstring::SmallString,
     terminal::{Background, Style},
 };
 
@@ -79,6 +82,72 @@ impl DerefMut for CancelableParser {
     }
 }
 
+pub struct NodeTrace<T> {
+    pub path: Vec<SmallString>,
+    pub nth_children: SmallVec<[u16; 32]>,
+    pub trace: SmallVec<[T; 32]>,
+    pub is_error: bool,
+    pub byte_range: Range<usize>,
+}
+
+impl<T> NodeTrace<T> {
+    pub fn new() -> Self {
+        Self {
+            path: Vec::new(),
+            nth_children: SmallVec::new(),
+            trace: SmallVec::new(),
+            is_error: false,
+            byte_range: 0..0,
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.path.clear();
+        self.nth_children.clear();
+        self.trace.clear();
+        self.is_error = false;
+        self.byte_range = 0..0;
+    }
+}
+
+pub struct SyntaxCursor<'a> {
+    root: Node<'a>,
+    cursor: TreeCursor<'a>,
+}
+
+impl<'a> SyntaxCursor<'a> {
+    #[inline]
+    pub fn trace_at<T>(
+        &mut self,
+        trace: &mut NodeTrace<T>,
+        byte_index: usize,
+        map_node: impl Fn(&Node<'a>) -> T,
+    ) {
+        if trace.byte_range.contains(&byte_index) {
+            return;
+        }
+
+        self.cursor.reset(self.root);
+        trace.clear();
+
+        trace.is_error = trace.is_error || self.cursor.node().is_error();
+        trace.path.push(self.cursor.node().kind().into());
+        trace.trace.push(map_node(&self.cursor.node()));
+        trace.nth_children.push(0);
+        while let Some(nth_child) = self.cursor.goto_first_child_for_byte(byte_index) {
+            trace.is_error = trace.is_error || self.cursor.node().is_error();
+            trace.path.push(self.cursor.node().kind().into());
+            trace.trace.push(map_node(&self.cursor.node()));
+            trace.nth_children.push(nth_child as u16);
+        }
+        trace.trace.reverse();
+        trace.nth_children.reverse();
+
+        let node = self.cursor.node();
+        trace.byte_range = node.start_byte()..node.end_byte();
+    }
+}
+
 pub struct SyntaxTree {
     language: Language,
     parsers: Vec<CancelableParser>,
@@ -94,6 +163,16 @@ impl SyntaxTree {
             tree: None,
             current_parse_task: None,
         }
+    }
+
+    pub fn cursor(&self) -> Option<SyntaxCursor> {
+        self.tree.as_ref().map(|tree| {
+            let root_node = tree.root_node();
+            SyntaxCursor {
+                cursor: root_node.walk(),
+                root: root_node,
+            }
+        })
     }
 
     pub fn ensure_tree(

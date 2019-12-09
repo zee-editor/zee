@@ -6,7 +6,7 @@ use std::{self, borrow::Borrow, ops::Deref, ptr, str};
 
 #[derive(Clone, Default)]
 pub struct SmallString {
-    buffer: SmallVec<[u8; 8]>,
+    buffer: SmallVec<[u8; 16]>,
 }
 
 impl SmallString {

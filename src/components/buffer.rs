@@ -12,10 +12,13 @@ use std::{
 use tree_sitter::{
     InputEdit as TreeSitterInputEdit, Language, Parser, Point as TreeSitterPoint, Tree, TreeCursor,
 };
+use zee_highlight::SelectorNodeId;
 
 use super::{
     cursor::Cursor,
-    syntax::{text_style_at_char, ParserStatus, SyntaxTree, Theme as SyntaxTheme},
+    syntax::{
+        text_style_at_char, NodeTrace, ParserStatus, SyntaxCursor, SyntaxTree, Theme as SyntaxTheme,
+    },
     theme::Theme as EditorTheme,
     Component, Context, Scheduler, TaskKind, TaskResult,
 };
@@ -44,6 +47,31 @@ pub struct Theme {
     pub status_file_size: Style,
     pub status_position_in_file: Style,
     pub status_mode: Style,
+}
+
+#[derive(Clone, Debug)]
+pub struct OpaqueDiff {
+    char_index: usize,
+    old_length: usize,
+    new_length: usize,
+}
+
+impl OpaqueDiff {
+    fn new(char_index: usize, old_length: usize, new_length: usize) -> Self {
+        Self {
+            char_index,
+            old_length,
+            new_length,
+        }
+    }
+
+    fn no_diff() -> Self {
+        Self {
+            char_index: 0,
+            old_length: 0,
+            new_length: 0,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -128,6 +156,8 @@ impl Buffer {
         context: &Context,
         line_index: usize,
         line: RopeSlice,
+        mut syntax_cursor: Option<&mut SyntaxCursor>,
+        mut trace: &mut NodeTrace<SelectorNodeId>,
     ) -> usize {
         // Get references to the relevant bits of context
         let Context {
@@ -155,55 +185,38 @@ impl Buffer {
         let mut visual_x = frame.origin.x;
         let mut char_index = self.text.line_to_char(line_index);
 
-        let mut path = Vec::new();
-        let mut node_stack = Vec::new();
-        let mut nth_children = Vec::new();
+        let mut content: Cow<str> = self
+            .text
+            .slice(
+                self.text.byte_to_char(trace.byte_range.start)
+                    ..self.text.byte_to_char(trace.byte_range.end),
+            )
+            .into();
+        let mut scope = self
+            .mode
+            .highlights()
+            .and_then(|highlights| highlights.matches(&trace.trace, &trace.nth_children, &content))
+            .map(|scope| scope.0.as_str());
 
-        let mut root_node = self
-            .syntax
-            .as_ref()
-            .and_then(|syntax| syntax.tree.as_ref())
-            .map(|tree| tree.root_node())
-            .map(|root| (root, root.walk()));
         for grapheme in RopeGraphemes::new(&line.slice(..)) {
-            path.clear();
-            node_stack.clear();
-            nth_children.clear();
-
-            let mut scope = None;
-            let mut content: Cow<str> = "".into();
-            let mut is_error = false;
-            match (&mut root_node, self.mode.highlights()) {
-                (Some((ref root_node, ref mut node_cursor)), Some(highlights)) => {
-                    let byte_index = self.text.char_to_byte(char_index);
-
-                    node_cursor.reset(*root_node);
-                    path.push(node_cursor.node().kind().to_string());
-                    node_stack.push(highlights.get_selector_node_id(node_cursor.node().kind_id()));
-                    nth_children.push(0);
-
-                    while let Some(nth_child) = node_cursor.goto_first_child_for_byte(byte_index) {
-                        is_error = is_error || node_cursor.node().is_error();
-                        path.push(node_cursor.node().kind().to_string());
-                        node_stack
-                            .push(highlights.get_selector_node_id(node_cursor.node().kind_id()));
-                        nth_children.push(nth_child as u16);
-                    }
-
-                    node_stack.reverse();
-                    nth_children.reverse();
-
-                    let node = node_cursor.node();
+            let byte_index = self.text.char_to_byte(char_index);
+            match (syntax_cursor.as_mut(), self.mode.highlights()) {
+                (Some(syntax_cursor), Some(highlights))
+                    if !trace.byte_range.contains(&byte_index) =>
+                {
+                    syntax_cursor.trace_at(&mut trace, byte_index, |node| {
+                        highlights.get_selector_node_id(node.kind_id())
+                    });
                     content = self
                         .text
                         .slice(
-                            self.text.byte_to_char(node.start_byte())
-                                ..self.text.byte_to_char(node.end_byte()),
+                            self.text.byte_to_char(trace.byte_range.start)
+                                ..self.text.byte_to_char(trace.byte_range.end),
                         )
                         .into();
 
                     scope = highlights
-                        .matches(&node_stack, &nth_children, &content)
+                        .matches(&trace.trace, &trace.nth_children, &content)
                         .map(|scope| scope.0.as_str());
                 }
                 _ => {}
@@ -213,9 +226,9 @@ impl Buffer {
                 eprintln!(
                     "Symbol under cursor [{}] -- {:?} {:?} {:?} {}",
                     scope.unwrap_or(""),
-                    path,
-                    node_stack,
-                    nth_children,
+                    trace.path,
+                    trace.trace,
+                    trace.nth_children,
                     content,
                 );
                 visual_cursor_x = visual_x.saturating_sub(frame.origin.x);
@@ -228,7 +241,7 @@ impl Buffer {
                 focused,
                 line_under_cursor,
                 scope.unwrap_or(""),
-                is_error,
+                trace.is_error,
             );
             let grapheme_width = utils::grapheme_width(&grapheme);
             let horizontal_bounds_inclusive = frame.min_x()..=frame.max_x();
@@ -271,6 +284,8 @@ impl Buffer {
     #[inline]
     fn draw_text(&mut self, screen: &mut Screen, context: &Context) -> usize {
         self.ensure_cursor_in_view(&context.frame);
+        let mut syntax_cursor = self.syntax.as_ref().and_then(|syntax| syntax.cursor());
+        let mut trace: NodeTrace<SelectorNodeId> = NodeTrace::new();
 
         let mut visual_cursor_x = 0;
         for (line_index, line) in self
@@ -290,6 +305,8 @@ impl Buffer {
                     ),
                     self.first_line + line_index,
                     line,
+                    syntax_cursor.as_mut(),
+                    &mut trace,
                 ),
             );
         }
@@ -432,24 +449,32 @@ impl Buffer {
         }
     }
 
-    fn insert_char(&mut self, character: char) {
+    fn insert_char(&mut self, character: char) -> OpaqueDiff {
         self.has_unsaved_changes = ModifiedStatus::Changed;
         self.text.insert_char(self.cursor.range.start, character);
+        OpaqueDiff::new(self.cursor.range.start, 0, 1)
     }
 
-    fn insert_newline(&mut self) {
+    fn insert_newline(&mut self) -> OpaqueDiff {
         self.has_unsaved_changes = ModifiedStatus::Changed;
         self.text.insert_char(self.cursor.range.start, '\n');
+        OpaqueDiff::new(self.cursor.range.start, 0, 1)
     }
 
-    fn delete(&mut self) {
+    fn delete(&mut self) -> OpaqueDiff {
         if self.text.len_chars() == 0 {
-            return;
+            return OpaqueDiff::no_diff();
         }
 
         self.has_unsaved_changes = ModifiedStatus::Changed;
         self.text
             .remove(self.cursor.range.start..self.cursor.range.end);
+        let diff = OpaqueDiff::new(
+            self.cursor.range.start,
+            self.cursor.range.end - self.cursor.range.start,
+            0,
+        );
+
         let grapheme_start = self.cursor.range.start;
         let grapheme_end = next_grapheme_boundary(&self.text.slice(..), self.cursor.range.start);
         if grapheme_start < grapheme_end {
@@ -457,23 +482,26 @@ impl Buffer {
         } else {
             self.cursor.range = 0..1
         }
+        diff
     }
 
-    fn delete_line(&mut self) {
+    fn delete_line(&mut self) -> OpaqueDiff {
         if self.text.len_chars() == 0 {
-            return;
+            return OpaqueDiff::no_diff();
         }
+
+        // Delete line
         self.has_unsaved_changes = ModifiedStatus::Changed;
         let line_index = self.text.char_to_line(self.cursor.range.start);
-        let start = self.text.line_to_char(line_index);
-
+        let delete_range_start = self.text.line_to_char(line_index);
+        let delete_range_end = self.text.line_to_char(line_index + 1);
         self.yanked_line = Some(Rope::from(
-            self.text
-                .slice(start..self.text.line_to_char(line_index + 1)),
+            self.text.slice(delete_range_start..delete_range_end),
         ));
-        self.text
-            .remove(start..self.text.line_to_char(line_index + 1));
+        self.text.remove(delete_range_start..delete_range_end);
+        let diff = OpaqueDiff::new(delete_range_start, delete_range_end - delete_range_start, 0);
 
+        // Place cursor
         let grapheme_start = self.text.line_to_char(cmp::min(
             line_index,
             self.text.len_lines().saturating_sub(2),
@@ -485,6 +513,8 @@ impl Buffer {
             self.cursor.range = 0..1
         }
         self.cursor.visual_horizontal_offset = None;
+
+        diff
     }
 
     fn yank_line(&mut self) {
