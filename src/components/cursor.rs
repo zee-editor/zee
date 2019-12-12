@@ -55,6 +55,12 @@ impl Cursor {
         self.visual_horizontal_offset = None;
     }
 
+    pub fn move_right_n(&mut self, text: &Rope, n: usize) {
+        for _ in 0..n {
+            self.move_right(text);
+        }
+    }
+
     pub fn move_right(&mut self, text: &Rope) {
         let grapheme_start = self.range.end;
         let grapheme_end = next_grapheme_boundary(&text.slice(..), self.range.end);

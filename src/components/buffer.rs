@@ -6,12 +6,11 @@ use std::{
     cmp,
     fs::File,
     io::{self, BufReader, BufWriter},
+    iter,
     path::PathBuf,
     time::Instant,
 };
-use tree_sitter::{
-    InputEdit as TreeSitterInputEdit, Language, Parser, Point as TreeSitterPoint, Tree, TreeCursor,
-};
+use tree_sitter::{InputEdit as TreeSitterInputEdit, Point as TreeSitterPoint};
 use zee_highlight::SelectorNodeId;
 
 use super::{
@@ -23,8 +22,7 @@ use super::{
     Component, Context, Scheduler, TaskKind, TaskResult,
 };
 use crate::{
-    error::{Error, Result},
-    jobs::JobId as TaskId,
+    error::Result,
     mode::{self, Mode},
     terminal::{Position, Rect, Screen, Size, Style},
     utils::{
@@ -49,17 +47,17 @@ pub struct Theme {
     pub status_mode: Style,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct OpaqueDiff {
-    char_index: usize,
+    byte_index: usize,
     old_length: usize,
     new_length: usize,
 }
 
 impl OpaqueDiff {
-    fn new(char_index: usize, old_length: usize, new_length: usize) -> Self {
+    fn new(byte_index: usize, old_length: usize, new_length: usize) -> Self {
         Self {
-            char_index,
+            byte_index,
             old_length,
             new_length,
         }
@@ -67,10 +65,14 @@ impl OpaqueDiff {
 
     fn no_diff() -> Self {
         Self {
-            char_index: 0,
+            byte_index: 0,
             old_length: 0,
             new_length: 0,
         }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.byte_index == 0 && self.old_length == 0 && self.new_length == 0
     }
 }
 
@@ -449,15 +451,24 @@ impl Buffer {
         }
     }
 
+    fn insert_characters(&mut self, characters: impl Iterator<Item = char>) -> OpaqueDiff {
+        self.has_unsaved_changes = ModifiedStatus::Changed;
+        let mut num_bytes = 0;
+        characters.enumerate().for_each(|(offset, character)| {
+            self.text
+                .insert_char(self.cursor.range.start + offset, character);
+            num_bytes += character.len_utf8();
+        });
+        OpaqueDiff::new(
+            self.text.char_to_byte(self.cursor.range.start),
+            0,
+            num_bytes,
+        )
+    }
+
     fn insert_char(&mut self, character: char) -> OpaqueDiff {
         self.has_unsaved_changes = ModifiedStatus::Changed;
         self.text.insert_char(self.cursor.range.start, character);
-        OpaqueDiff::new(self.cursor.range.start, 0, 1)
-    }
-
-    fn insert_newline(&mut self) -> OpaqueDiff {
-        self.has_unsaved_changes = ModifiedStatus::Changed;
-        self.text.insert_char(self.cursor.range.start, '\n');
         OpaqueDiff::new(self.cursor.range.start, 0, 1)
     }
 
@@ -517,9 +528,10 @@ impl Buffer {
         diff
     }
 
-    fn yank_line(&mut self) {
+    fn yank_line(&mut self) -> OpaqueDiff {
         if let Some(clipboard) = self.yanked_line.as_ref() {
             self.has_unsaved_changes = ModifiedStatus::Changed;
+            let diff = OpaqueDiff::new(self.cursor.range.start, 0, clipboard.len_bytes());
             let mut cursor_start = self.cursor.range.start;
             for chunk in clipboard.chunks() {
                 self.text.insert(cursor_start, chunk);
@@ -527,17 +539,22 @@ impl Buffer {
                 self.cursor.range =
                     cursor_start..next_grapheme_boundary(&self.text.slice(..), cursor_start);
             }
+            return diff;
         }
+        OpaqueDiff::no_diff()
     }
 
-    fn copy_selection(&mut self) {
+    fn copy_selection(&mut self) -> OpaqueDiff {
         self.yanked_line = Some(Rope::from(self.text.slice(self.cursor.selection())));
         self.cursor.select = None;
+        OpaqueDiff::no_diff()
     }
 
-    fn cut_selection(&mut self) {
+    fn cut_selection(&mut self) -> OpaqueDiff {
+        let selection = self.cursor.selection();
+        let diff = OpaqueDiff::new(selection.start, selection.end - selection.start, 0);
         self.has_unsaved_changes = ModifiedStatus::Changed;
-        self.yanked_line = Some(Rope::from(self.text.slice(self.cursor.selection())));
+        self.yanked_line = Some(Rope::from(self.text.slice(selection)));
         self.text.remove(self.cursor.selection());
         self.cursor.select = None;
 
@@ -552,6 +569,7 @@ impl Buffer {
             self.cursor.range = 0..1
         }
         self.cursor.visual_horizontal_offset = None;
+        diff
     }
 
     fn ensure_trailing_newline_with_content(&mut self) {
@@ -595,9 +613,6 @@ impl Component for Buffer {
         match key {
             Key::Ctrl('p') | Key::Up => {
                 self.cursor.move_up(&self.text);
-                // if self.text.char_to_line(self.cursor.range.start) < self.first_line {
-                //     self.first_line -= 1;
-                // }
             }
             Key::Ctrl('n') | Key::Down => {
                 self.cursor.move_down(&self.text);
@@ -630,105 +645,63 @@ impl Component for Buffer {
             Key::Alt('>') => {
                 self.cursor.move_to_end_of_buffer(&self.text);
             }
-            Key::Ctrl('l') => {
-                self.center_visual_cursor(&context.frame);
+            Key::Ctrl('l') => self.center_visual_cursor(&context.frame),
+
+            Key::Null => self.cursor.select = Some(self.cursor.range.start),
+            Key::Ctrl('g') => self.cursor.select = None,
+            Key::Alt('s') => {
+                self.spawn_save_file(scheduler, context)?;
             }
             _ => {}
         };
 
-        let mut text_changed = true;
-
-        let cursor_end = cmp::min(self.cursor.range.end, self.text.len_chars());
-        let initial_cursor =
-            self.text.char_to_byte(self.cursor.range.start)..self.text.char_to_byte(cursor_end);
-        let initial_point_start = TreeSitterPoint {
-            row: self.text.char_to_line(self.cursor.range.start),
-            column: self.text.char_to_byte(self.cursor.range.start)
-                - self
-                    .text
-                    .line_to_byte(self.text.char_to_line(self.cursor.range.start)),
-        };
-        let initial_point_end = TreeSitterPoint {
-            row: self.text.char_to_line(cursor_end),
-            column: self.text.char_to_byte(cursor_end)
-                - self.text.line_to_byte(self.text.char_to_line(cursor_end)),
-        };
-
-        match key {
-            Key::Ctrl('d') | Key::Delete => {
-                self.delete();
-            }
-            Key::Ctrl('k') => {
-                self.delete_line();
-            }
-            Key::Ctrl('y') => {
-                self.yank_line();
-            }
+        let diff = match key {
+            Key::Ctrl('d') | Key::Delete => self.delete(),
+            Key::Ctrl('k') => self.delete_line(),
+            Key::Ctrl('y') => self.yank_line(),
             Key::Backspace => {
                 if self.cursor.range.start > 0 {
                     self.cursor.move_left(&self.text);
-                    self.delete();
+                    self.delete()
+                } else {
+                    OpaqueDiff::no_diff()
                 }
-            }
-            Key::Null => {
-                self.cursor.select = Some(self.cursor.range.start);
             }
             Key::Alt('w') => self.copy_selection(),
             Key::Ctrl('w') => self.cut_selection(),
-            Key::Ctrl('g') => {
-                self.cursor.select = None;
-            }
             Key::Char('\t') if DISABLE_TABS => {
-                for _ in 0..TAB_WIDTH {
-                    self.insert_char(' ');
-                    self.cursor.move_right(&self.text);
-                }
+                let diff = self.insert_characters(iter::repeat(' ').take(TAB_WIDTH));
+                self.cursor.move_right_n(&self.text, TAB_WIDTH);
+                diff
             }
             Key::Char('\n') => {
-                self.insert_newline();
+                let diff = self.insert_char('\n');
                 self.ensure_trailing_newline_with_content();
                 self.cursor.move_down(&self.text);
                 self.cursor.move_to_start_of_line(&self.text);
+                diff
             }
             Key::Char(character) => {
-                self.insert_char(character);
+                let diff = self.insert_char(character);
                 self.ensure_trailing_newline_with_content();
                 self.cursor.move_right(&self.text);
+                diff
             }
-            Key::Alt('s') => {
-                self.spawn_save_file(scheduler, context)?;
-            }
-            _ => {
-                text_changed = false;
-            }
-        }
-
-        let cursor_end = cmp::min(self.cursor.range.end, self.text.len_chars());
-        let final_cursor =
-            self.text.char_to_byte(self.cursor.range.start)..self.text.char_to_byte(cursor_end);
-        let final_point_start = TreeSitterPoint {
-            row: self.text.char_to_line(self.cursor.range.start),
-            column: self.text.char_to_byte(self.cursor.range.start)
-                - self
-                    .text
-                    .line_to_byte(self.text.char_to_line(self.cursor.range.start)),
-        };
-        let final_point_end = TreeSitterPoint {
-            row: self.text.char_to_line(cursor_end),
-            column: self.text.char_to_byte(cursor_end)
-                - self.text.line_to_byte(self.text.char_to_line(cursor_end)),
+            _ => OpaqueDiff::no_diff(),
         };
 
-        if text_changed && self.mode.language().is_some() {
+        if !diff.is_empty() && self.mode.language().is_some() {
             let changes = TreeSitterInputEdit {
-                start_byte: initial_cursor.start,
-                old_end_byte: initial_cursor.end,
-                new_end_byte: final_cursor.end,
-                start_position: initial_point_start,
-                old_end_position: initial_point_end,
-                new_end_position: final_point_end,
+                start_byte: diff.byte_index,
+                old_end_byte: diff.byte_index + diff.old_length,
+                new_end_byte: diff.byte_index + diff.new_length,
+                // I don't use tree sitter's line/col tracking; I'm assuming
+                // here that passing in dummy values doesn't cause any other
+                // problem apart from incorrect line/col after editing a tree.
+                start_position: TreeSitterPoint::new(0, 0),
+                old_end_position: TreeSitterPoint::new(0, 0),
+                new_end_position: TreeSitterPoint::new(0, 0),
             };
-            // eprintln!("changes: {:?}", changes);
 
             {
                 let Self {

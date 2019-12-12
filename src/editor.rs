@@ -166,6 +166,8 @@ impl Editor {
 
     pub fn ui_loop(&mut self, mut screen: Screen) -> Result<()> {
         let input = Input::from_reader(termion::get_tty()?);
+        let mut average = 0.0;
+        let mut n = 0;
         let mut last_drawn = Instant::now() - REDRAW_LATENCY;
         let mut frame = Rect::new(Position::new(0, 0), Size::new(screen.width, screen.height));
         let mut poll_state = PollState::Dirty;
@@ -177,14 +179,18 @@ impl Editor {
                     screen.resize_to_terminal()?;
                     self.draw(&mut screen);
                     let drawn_time = now.elapsed();
+                    n += 1;
+                    average =
+                        (average * (n as f64 - 1.0) + drawn_time.as_millis() as f64) / n as f64;
 
                     let now = Instant::now();
                     screen.present()?;
                     last_drawn = Instant::now();
                     eprintln!(
-                        "Drawn in {:?} | Presented in {:?}",
+                        "Drawn in {:?} | Presented in {:?} | average drawn {:.2}",
                         drawn_time,
                         now.elapsed(),
+                        average
                     );
                 }
                 PollState::Exit => {
