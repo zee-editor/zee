@@ -200,6 +200,7 @@ impl SyntaxTree {
                 })?;
 
         let cancel_flag = parser.cancel_flag();
+        let tree = self.tree.clone();
         let task_id = scheduler.spawn(move || {
             let maybe_tree = parser.parse_with(
                 &mut |byte_index, _| {
@@ -207,7 +208,7 @@ impl SyntaxTree {
                     assert!(byte_index >= chunk_byte_idx);
                     &chunk.as_bytes()[byte_index - chunk_byte_idx..]
                 },
-                None,
+                tree.as_ref(),
             );
             Ok(match maybe_tree {
                 Some(tree) => TaskKind::Buffer(BufferTask::ParseSyntax(ParserStatus {
