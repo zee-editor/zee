@@ -1,68 +1,15 @@
 {
   "name": "Rust",
-  "scopeName": "source.rust",
-  "type": "tree-sitter",
-  "parser": "tree-sitter-rust",
-  "injectionRegex": "rust",
-  "injectionRegExp": "rust",
-  "fileTypes": [
-    "rs"
-  ],
   "comments": {
     "start": "// "
   },
-  "folds": [
-    {
-      "type": "block_comment"
-    },
-    {
-      "start": {
-        "index": 0,
-        "type": "{"
-      },
-      "end": {
-        "index": -1,
-        "type": "}"
-      }
-    },
-    {
-      "start": {
-        "index": 0,
-        "type": "["
-      },
-      "end": {
-        "index": -1,
-        "type": "]"
-      }
-    },
-    {
-      "start": {
-        "index": 0,
-        "type": "("
-      },
-      "end": {
-        "index": -1,
-        "type": ")"
-      }
-    },
-    {
-      "start": {
-        "index": 0,
-        "type": "<"
-      },
-      "end": {
-        "index": -1,
-        "type": ">"
-      }
-    }
-  ],
   "scopes": {
     "source_file": "source.rust",
     "type_identifier": "support.type.other",
     "primitive_type": "support.type.primitive",
     "empty_type": "support.type.never",
     "unit_type": "support.type.unit",
-    "field_identifier": "entity.name.variable.field",
+    "field_identifier, field_expression > integer_literal": "entity.name.variable.field",
     "line_comment": [
       {
         "match": "^\\s*///",
@@ -189,7 +136,7 @@
     "match_arm > \"=>\"": "keyword.operator.match-arm",
     "macro_rule > \"=>\"": "keyword.operator.match-rule",
     "\"->\"": "keyword.operator.misc",
-    "\"-\", \"/\", \"%\", \"<<\", \">>\", \"&&\", \"||\", \"<\", \">\", \"=>\",\n\"==\", \"<=\", \">=\", \"!=\", \"&\", \"|\", \"^\", \"..\", \"..=\", \"...\", \"->\"": "misc.other",
+    "\"-\", \"/\", \"%\", \"<<\", \">>\", \"&&\", \"||\", \"<\", \">\", \"=>\",\n\"==\", \"<=\", \">=\", \"!=\", \"&\", \"|\", \"^\", \"..\", \"..=\", \"...\", \"->\",\".\"": "misc.other",
     "char_literal": "string.quoted.single",
     "string_literal": "string.quoted.double",
     "raw_string_literal": "string.quoted.other",

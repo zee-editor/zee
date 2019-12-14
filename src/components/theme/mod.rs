@@ -49,12 +49,12 @@ impl Theme {
                     selection_background: Background(DARK0_HARD),
                     code_invalid: underline(DARK0_SOFT, BRIGHT_RED),
                     code_constant: normal(DARK0_SOFT, BRIGHT_GREEN),
-                    code_keyword: bold(DARK0_SOFT, BRIGHT_PURPLE),
-                    code_keyword_light: normal(DARK0_SOFT, BRIGHT_PURPLE),
+                    code_keyword: bold(DARK0_SOFT, BRIGHT_RED),
+                    code_keyword_light: normal(DARK0_SOFT, BRIGHT_RED),
                     code_string: normal(DARK0_SOFT, BRIGHT_GREEN),
-                    code_char: normal(DARK0_SOFT, NEUTRAL_GREEN),
+                    code_char: normal(DARK0_SOFT, BRIGHT_GREEN),
                     code_operator: normal(DARK0_SOFT, BRIGHT_PURPLE),
-                    code_macro_call: normal(DARK0_SOFT, NEUTRAL_ORANGE),
+                    code_macro_call: normal(DARK0_SOFT, BRIGHT_ORANGE),
                     code_function_call: normal(DARK0_SOFT, BRIGHT_BLUE),
                     code_comment: normal(DARK0_SOFT, DARK4),
                     code_comment_doc: normal(DARK0_SOFT, LIGHT4),
@@ -85,22 +85,38 @@ impl Theme {
 
     pub fn from_base16(base16: &Base16Theme) -> Self {
         let Base16Theme {
+            // Default Background
             base00: default_background,
+            // Lighter Background (Used for status bars)
             base01: lighter_background,
+            // Selection Background
             base02: selection_background,
+            // Comments, Invisibles, Line Highlighting
             base03: comments,
+            // Dark Foreground (Used for status bars)
             base04: dark_foreground,
+            // Default Foreground, Caret, Delimiters, Operators
             base05: default_foreground,
+            // Light Foreground (Not often used)
             base06: light_foreground,
+            // Light Background (Not often used)
             base07: _light_background,
-            base08,
-            base09,
-            base0a,
-            base0b,
-            base0c,
-            base0d,
-            base0e,
-            base0f,
+            // Variables, XML Tags, Markup Link Text, Markup Lists, Diff Deleted
+            base08: variables,
+            // Integers, Boolean, Constants, XML Attributes, Markup Link Url
+            base09: constants,
+            // Classes, Markup Bold, Search Text Background
+            base0a: classes,
+            // Strings, Inherited Class, Markup Code, Diff Inserted
+            base0b: strings,
+            // Support, Regular Expressions, Escape Characters, Markup Quotes
+            base0c: support,
+            // Functions, Methods, Attribute IDs, Headings
+            base0d: functions,
+            // Keywords, Storage, Selector, Markup Italic, Diff Changed
+            base0e: keywords,
+            // Deprecated, Opening/Closing Embedded Language Tags, e.g. <?php ?>
+            base0f: embedded,
         } = *base16;
 
         Self {
@@ -111,38 +127,38 @@ impl Theme {
                     cursor_focused: normal(light_foreground, default_background),
                     cursor_unfocused: normal(comments, default_background),
                     selection_background: Background(selection_background),
-                    code_invalid: underline(default_background, base08),
-                    code_constant: normal(default_background, base0b),
-                    code_keyword: bold(default_background, base0e),
-                    code_keyword_light: normal(default_background, base0e),
-                    code_string: normal(default_background, base0b),
-                    code_char: normal(default_background, base0c),
+                    code_invalid: underline(default_background, variables),
+                    code_constant: normal(default_background, strings),
+                    code_keyword: normal(default_background, variables),
+                    code_keyword_light: normal(default_background, variables),
+                    code_string: normal(default_background, strings),
+                    code_char: normal(default_background, support),
                     code_operator: normal(default_background, default_foreground),
-                    code_macro_call: bold(default_background, base0f),
-                    code_function_call: normal(default_background, base0d),
+                    code_macro_call: bold(default_background, embedded),
+                    code_function_call: normal(default_background, functions),
                     code_comment: normal(default_background, comments),
                     code_comment_doc: bold(default_background, comments),
-                    code_link: underline(default_background, base09),
-                    code_type: normal(default_background, base0a),
+                    code_link: underline(default_background, constants),
+                    code_type: normal(default_background, classes),
                 },
                 border: normal(lighter_background, dark_foreground),
                 status_base: normal(lighter_background, default_background),
-                status_frame_id_focused: normal(base0d, default_background),
+                status_frame_id_focused: normal(functions, default_background),
                 status_frame_id_unfocused: normal(comments, default_background),
-                status_is_modified: normal(lighter_background, base09),
+                status_is_modified: normal(lighter_background, constants),
                 status_is_not_modified: normal(lighter_background, comments),
-                status_file_name: bold(lighter_background, base0d),
+                status_file_name: bold(lighter_background, strings),
                 status_file_size: normal(lighter_background, dark_foreground),
                 status_position_in_file: normal(lighter_background, dark_foreground),
-                status_mode: normal(lighter_background, base0b),
+                status_mode: normal(lighter_background, strings),
             },
             splash: SplashTheme {
                 logo: normal(lighter_background, dark_foreground),
-                tagline: normal(lighter_background, base0c),
+                tagline: normal(lighter_background, support),
                 credits: normal(lighter_background, comments),
             },
             prompt: PromptTheme {
-                base: normal(default_background, base0a),
+                base: normal(default_background, classes),
             },
         }
     }
