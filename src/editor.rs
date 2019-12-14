@@ -7,8 +7,8 @@ use crate::{
     },
     error::{Error, Result},
     frontend::Frontend,
-    jobs::{JobId, JobPool},
     settings::Paths,
+    task::{TaskId, TaskPool},
     terminal::{Key, Position, Rect, Screen},
 };
 use crossbeam_channel::select;
@@ -22,19 +22,19 @@ use std::{
 
 pub(crate) struct Editor {
     components: HashMap<ComponentId, Box<dyn Component>>,
-    task_owners: HashMap<JobId, ComponentId>,
+    task_owners: HashMap<TaskId, ComponentId>,
     layout: Layout,
     laid_components: LaidComponentIds,
     next_component_id: ComponentId,
     focus: Option<usize>,
     prompt: Prompt,
-    job_pool: JobPool<Result<TaskKind>>,
+    task_pool: TaskPool<Result<TaskKind>>,
     themes: [(Theme, &'static str); 30],
     theme_index: usize,
 }
 
 impl Editor {
-    pub fn new(settings: Paths, job_pool: JobPool<Result<TaskKind>>) -> Self {
+    pub fn new(settings: Paths, task_pool: TaskPool<Result<TaskKind>>) -> Self {
         Self {
             components: HashMap::with_capacity(8),
             task_owners: HashMap::with_capacity(8),
@@ -43,7 +43,7 @@ impl Editor {
             next_component_id: cmp::max(PROMPT_ID, SPLASH_ID) + 1,
             focus: None,
             prompt: Prompt::new(),
-            job_pool,
+            task_pool,
             themes: [
                 (Theme::gruvbox(), "zee-gruvbox"),
                 (
@@ -225,7 +225,7 @@ impl Editor {
             };
 
             select! {
-                recv(self.job_pool.receiver) -> task_result => {
+                recv(self.task_pool.receiver) -> task_result => {
                     let task_result = task_result.unwrap();
                     let component_id = self.task_owners.remove(&task_result.id);
                     if let Err(err) = task_result.payload.as_ref() {
@@ -273,7 +273,7 @@ impl Editor {
             ref focus,
             ref layout,
             ref themes,
-            ref job_pool,
+            ref task_pool,
             theme_index,
             ..
         } = *self;
@@ -295,7 +295,7 @@ impl Editor {
                     frame_id,
                     theme: &themes[theme_index].0,
                 };
-                let mut scheduler = job_pool.scheduler();
+                let mut scheduler = task_pool.scheduler();
 
                 if id == PROMPT_ID {
                     prompt.draw(screen, &mut scheduler, &context)
@@ -312,8 +312,8 @@ impl Editor {
                                 .unwrap_or(false),
                         ),
                     );
-                    for job_id in scheduler.scheduled() {
-                        task_owners.insert(job_id, id);
+                    for task_id in scheduler.scheduled() {
+                        task_owners.insert(task_id, id);
                     }
                 }
             },
@@ -363,7 +363,7 @@ impl Editor {
                 ref laid_components,
                 ref themes,
                 theme_index,
-                ref job_pool,
+                ref task_pool,
                 ..
             } = *self;
             laid_components.iter().for_each(
@@ -373,7 +373,7 @@ impl Editor {
                      frame_id,
                  }| {
                     if id_with_focus == id {
-                        let mut scheduler = job_pool.scheduler();
+                        let mut scheduler = task_pool.scheduler();
                         if let Err(error) = components.get_mut(&id).unwrap().handle_event(
                             key,
                             &mut scheduler,
@@ -387,8 +387,8 @@ impl Editor {
                         ) {
                             prompt.log_error(format!("{}", error));
                         }
-                        for job_id in scheduler.scheduled() {
-                            task_owners.insert(job_id, id);
+                        for task_id in scheduler.scheduled() {
+                            task_owners.insert(task_id, id);
                         }
                     }
                 },
@@ -396,7 +396,7 @@ impl Editor {
         }
 
         // Update prompt
-        let mut scheduler = self.job_pool.scheduler();
+        let mut scheduler = self.task_pool.scheduler();
         self.prompt.handle_event(
             key,
             &mut scheduler,
@@ -408,8 +408,8 @@ impl Editor {
                 theme: &self.themes[self.theme_index].0,
             },
         )?;
-        for job_id in scheduler.scheduled() {
-            self.task_owners.insert(job_id, PROMPT_ID);
+        for task_id in scheduler.scheduled() {
+            self.task_owners.insert(task_id, PROMPT_ID);
         }
         if let Some(Command::OpenFile(path)) = self.prompt.poll_and_clear() {
             self.open_file(path)?;

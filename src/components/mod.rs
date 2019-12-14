@@ -15,7 +15,7 @@ use std::{cmp, time::Instant};
 
 use crate::{
     error::Result,
-    jobs,
+    task,
     terminal::{screen::Screen, Key, Position, Rect, Size},
 };
 
@@ -27,8 +27,8 @@ pub enum TaskKind {
     Buffer(BufferTask),
 }
 
-pub type Scheduler<'pool> = jobs::Scheduler<'pool, Result<TaskKind>>;
-pub type TaskResult = jobs::JobResult<Result<TaskKind>>;
+pub type Scheduler<'pool> = task::Scheduler<'pool, Result<TaskKind>>;
+pub type TaskResult = task::TaskResult<Result<TaskKind>>;
 
 #[derive(Debug, Clone)]
 pub struct Context<'t> {

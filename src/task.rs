@@ -11,31 +11,31 @@ use crate::error::{Error, Result};
 
 #[derive(Debug)]
 pub enum Poll<T> {
-    Pending(JobId),
+    Pending(TaskId),
     Ready(T),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct JobId(usize);
+pub struct TaskId(usize);
 
-pub struct JobResult<T> {
-    pub id: JobId,
+pub struct TaskResult<T> {
+    pub id: TaskId,
     pub payload: T,
 }
 
 #[derive(Debug)]
-pub struct JobPool<T> {
+pub struct TaskPool<T> {
     thread_pool: ThreadPool,
-    next_job_id: AtomicUsize,
-    sender: Sender<JobResult<T>>,
-    pub receiver: Receiver<JobResult<T>>,
+    next_task_id: AtomicUsize,
+    sender: Sender<TaskResult<T>>,
+    pub receiver: Receiver<TaskResult<T>>,
 }
 
-impl<T: Send + 'static> JobPool<T> {
+impl<T: Send + 'static> TaskPool<T> {
     pub fn new() -> Result<Self> {
         // By default, leave two cpus unused, so there's no contention with the
         // drawing thread + allow other programs to make progress even if the
-        // job pool is 100% used.
+        // task pool is 100% used.
         let num_threads = cmp::max(1, num_cpus::get().saturating_sub(2));
         let (sender, receiver) = crossbeam_channel::bounded(3200);
         Ok(Self {
@@ -43,20 +43,26 @@ impl<T: Send + 'static> JobPool<T> {
                 .num_threads(num_threads)
                 .build()
                 .map_err(|err| Error::TaskPool(Box::new(err)))?,
-            next_job_id: AtomicUsize::new(0),
+            next_task_id: AtomicUsize::new(0),
             sender,
             receiver,
         })
     }
 
-    pub fn spawn<JobT>(&self, job: JobT) -> Result<JobId>
+    pub fn spawn<TaskT>(&self, task: TaskT) -> Result<TaskId>
     where
-        JobT: FnOnce() -> T + Send + 'static,
+        TaskT: FnOnce() -> T + Send + 'static,
     {
-        let id = JobId(self.next_job_id.fetch_add(1, Ordering::SeqCst));
+        let id = TaskId(self.next_task_id.fetch_add(1, Ordering::SeqCst));
         let sender = self.sender.clone();
-        self.thread_pool
-            .spawn(move || sender.send(JobResult { id, payload: job() }).unwrap());
+        self.thread_pool.spawn(move || {
+            sender
+                .send(TaskResult {
+                    id,
+                    payload: task(),
+                })
+                .unwrap()
+        });
         Ok(id)
     }
 
@@ -70,23 +76,23 @@ impl<T: Send + 'static> JobPool<T> {
 
 #[derive(Debug)]
 pub struct Scheduler<'a, T> {
-    pool: &'a JobPool<T>,
-    scheduled: SmallVec<[JobId; 2]>,
+    pool: &'a TaskPool<T>,
+    scheduled: SmallVec<[TaskId; 2]>,
 }
 
 impl<'a, T: Send + 'static> Scheduler<'a, T> {
-    pub fn spawn<JobT>(&mut self, job: JobT) -> Result<JobId>
+    pub fn spawn<TaskT>(&mut self, task: TaskT) -> Result<TaskId>
     where
-        JobT: FnOnce() -> T + Send + 'static,
+        TaskT: FnOnce() -> T + Send + 'static,
     {
-        let job_id = self.pool.spawn(job);
-        if let Ok(job_id) = job_id.as_ref() {
-            self.scheduled.push(*job_id);
+        let task_id = self.pool.spawn(task);
+        if let Ok(task_id) = task_id.as_ref() {
+            self.scheduled.push(*task_id);
         }
-        job_id
+        task_id
     }
 
-    pub fn scheduled(self) -> impl IntoIterator<Item = JobId> {
+    pub fn scheduled(self) -> impl IntoIterator<Item = TaskId> {
         self.scheduled.into_iter()
     }
 }

@@ -15,8 +15,8 @@ use tree_sitter::{
 use crate::{
     components::{buffer::BufferTask, Scheduler, TaskKind},
     error::{Error, Result},
-    jobs::JobId as TaskId,
     smallstring::SmallString,
+    task::TaskId,
 };
 
 pub struct ParserStatus {

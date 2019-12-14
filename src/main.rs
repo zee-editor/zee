@@ -2,11 +2,11 @@ mod components;
 mod editor;
 mod error;
 mod frontend;
-mod jobs;
 mod mode;
 mod settings;
 mod smallstring;
 mod syntax;
+mod task;
 mod terminal;
 mod utils;
 
@@ -18,7 +18,7 @@ use crate::{
     editor::Editor,
     error::Result,
     frontend::{Frontend, Termion},
-    jobs::JobPool,
+    task::TaskPool,
     terminal::Screen,
 };
 
@@ -38,7 +38,7 @@ fn main() -> Result<()> {
     let args = Args::from_args();
     let settings = settings::find(args.config)?;
 
-    let mut editor = Editor::new(settings, JobPool::new()?);
+    let mut editor = Editor::new(settings, TaskPool::new()?);
     for file_path in args.files.iter() {
         editor.open_file(file_path)?;
     }
