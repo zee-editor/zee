@@ -10,7 +10,6 @@ use std::{
     path::PathBuf,
     time::Instant,
 };
-use tree_sitter::{InputEdit as TreeSitterInputEdit, Point as TreeSitterPoint};
 use zee_highlight::SelectorNodeId;
 
 use super::{
@@ -22,7 +21,7 @@ use crate::{
     mode::{self, Mode},
     syntax::{
         highlight::{text_style_at_char, Theme as SyntaxTheme},
-        parse::{NodeTrace, ParserStatus, SyntaxCursor, SyntaxTree},
+        parse::{NodeTrace, OpaqueDiff, ParserStatus, SyntaxCursor, SyntaxTree},
     },
     terminal::{Key, Position, Rect, Screen, Size, Style},
     utils::{
@@ -44,35 +43,6 @@ pub struct Theme {
     pub status_file_size: Style,
     pub status_position_in_file: Style,
     pub status_mode: Style,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct OpaqueDiff {
-    byte_index: usize,
-    old_length: usize,
-    new_length: usize,
-}
-
-impl OpaqueDiff {
-    fn new(byte_index: usize, old_length: usize, new_length: usize) -> Self {
-        Self {
-            byte_index,
-            old_length,
-            new_length,
-        }
-    }
-
-    fn no_diff() -> Self {
-        Self {
-            byte_index: 0,
-            old_length: 0,
-            new_length: 0,
-        }
-    }
-
-    fn is_empty(&self) -> bool {
-        self.byte_index == 0 && self.old_length == 0 && self.new_length == 0
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -224,14 +194,14 @@ impl Buffer {
             };
 
             if self.cursor.range.contains(&char_index) && focused {
-                eprintln!(
-                    "Symbol under cursor [{}] -- {:?} {:?} {:?} {}",
-                    scope.unwrap_or(""),
-                    trace.path,
-                    trace.trace,
-                    trace.nth_children,
-                    content,
-                );
+                // eprintln!(
+                //     "Symbol under cursor [{}] -- {:?} {:?} {:?} {}",
+                //     scope.unwrap_or(""),
+                //     trace.path,
+                //     trace.trace,
+                //     trace.nth_children,
+                //     content,
+                // );
                 visual_cursor_x = visual_x.saturating_sub(frame.origin.x);
             }
 
@@ -579,7 +549,6 @@ impl Buffer {
 }
 
 impl Component for Buffer {
-    #[inline]
     fn draw(&mut self, screen: &mut Screen, scheduler: &mut Scheduler, context: &Context) {
         {
             let Self {
@@ -601,7 +570,6 @@ impl Component for Buffer {
         self.draw_status_bar(screen, context, visual_cursor_x);
     }
 
-    #[inline]
     fn handle_event(
         &mut self,
         key: Key,
@@ -689,33 +657,13 @@ impl Component for Buffer {
             _ => OpaqueDiff::no_diff(),
         };
 
-        if !diff.is_empty() && self.mode.language().is_some() {
-            let changes = TreeSitterInputEdit {
-                start_byte: diff.byte_index,
-                old_end_byte: diff.byte_index + diff.old_length,
-                new_end_byte: diff.byte_index + diff.new_length,
-                // I don't use tree sitter's line/col tracking; I'm assuming
-                // here that passing in dummy values doesn't cause any other
-                // problem apart from incorrect line/col after editing a tree.
-                start_position: TreeSitterPoint::new(0, 0),
-                old_end_position: TreeSitterPoint::new(0, 0),
-                new_end_position: TreeSitterPoint::new(0, 0),
-            };
-
-            {
-                let Self {
-                    ref mut syntax,
-                    ref text,
-                    ..
-                } = self;
-                if let Some(syntax) = syntax.as_mut() {
-                    if let Some(tree) = syntax.tree.as_mut() {
-                        tree.edit(&changes);
-                    }
-                    let text = text.clone();
-                    syntax.spawn_parse_task(scheduler, text)?;
-                };
+        match self.syntax.as_mut() {
+            Some(syntax) if !diff.is_empty() => {
+                syntax.edit(&diff);
+                let text = self.text.clone();
+                syntax.spawn_parse_task(scheduler, text)?;
             }
+            _ => {}
         }
 
         Ok(())

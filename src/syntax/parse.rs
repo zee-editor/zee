@@ -13,11 +13,21 @@ use tree_sitter::{
 };
 
 use crate::{
-    components::{buffer::BufferTask, cursor::Cursor, Scheduler, TaskKind},
+    components::{buffer::BufferTask, Scheduler, TaskKind},
     error::{Error, Result},
     jobs::JobId as TaskId,
     smallstring::SmallString,
 };
+
+pub struct ParserStatus {
+    parser: CancelableParser,
+    parsed: Option<ParsedSyntax>, // None if the parsing operation has been cancelled
+}
+
+pub struct ParsedSyntax {
+    tree: Tree,
+    text: Rope,
+}
 
 pub struct SyntaxTree {
     language: Language,
@@ -123,6 +133,57 @@ impl SyntaxTree {
             self.tree = Some(tree.clone());
         }
     }
+
+    pub fn edit(&mut self, diff: &OpaqueDiff) {
+        match self.tree {
+            Some(ref mut tree) if !diff.is_empty() => {
+                tree.edit(&TreeSitterInputEdit {
+                    start_byte: diff.byte_index,
+                    old_end_byte: diff.byte_index + diff.old_length,
+                    new_end_byte: diff.byte_index + diff.new_length,
+                    // I don't use tree sitter's line/col tracking; I'm assuming
+                    // here that passing in dummy values doesn't cause any other
+                    // problem apart from incorrect line/col after editing a tree.
+                    start_position: TreeSitterPoint::new(0, 0),
+                    old_end_position: TreeSitterPoint::new(0, 0),
+                    new_end_position: TreeSitterPoint::new(0, 0),
+                });
+            }
+            _ => {}
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct OpaqueDiff {
+    byte_index: usize,
+    old_length: usize,
+    new_length: usize,
+}
+
+impl OpaqueDiff {
+    #[inline]
+    pub fn new(byte_index: usize, old_length: usize, new_length: usize) -> Self {
+        Self {
+            byte_index,
+            old_length,
+            new_length,
+        }
+    }
+
+    #[inline]
+    pub fn no_diff() -> Self {
+        Self {
+            byte_index: 0,
+            old_length: 0,
+            new_length: 0,
+        }
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.byte_index == 0 && self.old_length == 0 && self.new_length == 0
+    }
 }
 
 pub struct NodeTrace<T> {
@@ -189,16 +250,6 @@ impl<'a> SyntaxCursor<'a> {
         let node = self.cursor.node();
         trace.byte_range = node.start_byte()..node.end_byte();
     }
-}
-
-pub struct ParserStatus {
-    parser: CancelableParser,
-    parsed: Option<ParsedSyntax>, // None if the parsing operation has been cancelled
-}
-
-pub struct ParsedSyntax {
-    tree: Tree,
-    text: Rope,
 }
 
 struct CancelFlag(Arc<AtomicUsize>);
