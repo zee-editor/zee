@@ -1,10 +1,9 @@
 use std::{env, io, mem, path::PathBuf};
-use termion::event::Key;
 
 use super::{Component, Context, Scheduler};
 use crate::{
     error::{Error, Result},
-    terminal::{Screen, Style},
+    terminal::{Key, Screen, Style},
 };
 
 #[derive(Clone, Debug)]

@@ -1,37 +1,43 @@
-use crossbeam_channel::{self, Receiver};
-use std::{
-    io::Read,
-    thread::{self, JoinHandle},
-};
-use termion::{event::Key, input::TermRead};
-
-pub struct Input {
-    pub receiver: Receiver<Key>,
-    handle: JoinHandle<()>,
-}
-
-impl Input {
-    pub fn from_reader(reader: impl Read + Send + 'static) -> Self {
-        let (sender, receiver) = crossbeam_channel::bounded(2048);
-        let handle = thread::spawn(move || {
-            let mut keys = reader.keys();
-            while let Some(event) = keys.next() {
-                match event {
-                    Ok(key) => {
-                        sender.send(key).unwrap();
-                    }
-                    error => {
-                        error.unwrap();
-                    }
-                }
-            }
-        });
-        Self { receiver, handle }
-    }
-}
-
-impl Drop for Input {
-    fn drop(&mut self) {
-        // ??
-    }
+#[derive(Debug, PartialOrd, PartialEq, Eq, Clone, Copy)]
+pub enum Key {
+    /// Backspace.
+    Backspace,
+    /// Left arrow.
+    Left,
+    /// Right arrow.
+    Right,
+    /// Up arrow.
+    Up,
+    /// Down arrow.
+    Down,
+    /// Home key.
+    Home,
+    /// End key.
+    End,
+    /// Page Up key.
+    PageUp,
+    /// Page Down key.
+    PageDown,
+    /// Backward Tab key.
+    BackTab,
+    /// Delete key.
+    Delete,
+    /// Insert key.
+    Insert,
+    /// Function keys.
+    ///
+    /// Only function keys 1 through 12 are supported.
+    F(u8),
+    /// Normal character.
+    Char(char),
+    /// Alt modified character.
+    Alt(char),
+    /// Ctrl modified character.
+    ///
+    /// Note that certain keys may not be modifiable with `ctrl`, due to limitations of terminals.
+    Ctrl(char),
+    /// Null byte.
+    Null,
+    /// Esc key.
+    Esc,
 }

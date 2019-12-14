@@ -12,12 +12,11 @@ pub use theme::Theme;
 
 use smallvec::{smallvec, SmallVec};
 use std::{cmp, time::Instant};
-use termion::event::Key;
 
 use crate::{
     error::Result,
     jobs,
-    terminal::{screen::Screen, Position, Rect, Size},
+    terminal::{screen::Screen, Key, Position, Rect, Size},
 };
 
 pub type ComponentId = usize;

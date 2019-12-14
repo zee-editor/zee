@@ -24,13 +24,12 @@ use crate::{
         highlight::{text_style_at_char, Theme as SyntaxTheme},
         parse::{NodeTrace, ParserStatus, SyntaxCursor, SyntaxTree},
     },
-    terminal::{Position, Rect, Screen, Size, Style},
+    terminal::{Key, Position, Rect, Screen, Size, Style},
     utils::{
         self, next_grapheme_boundary, prev_grapheme_boundary, strip_trailing_whitespace,
         RopeGraphemes, TAB_WIDTH,
     },
 };
-use termion::event::Key;
 
 #[derive(Clone, Debug)]
 pub struct Theme {

@@ -1,13 +1,3 @@
-use crossbeam_channel::select;
-use std::{
-    cmp,
-    collections::HashMap,
-    io, mem,
-    path::Path,
-    time::{Duration, Instant},
-};
-use termion::{self, event::Key};
-
 use crate::{
     components::{
         prompt::Command,
@@ -16,9 +6,18 @@ use crate::{
         LayoutDirection, LayoutNode, LayoutNodeFlex, Prompt, Splash, TaskKind,
     },
     error::{Error, Result},
+    frontend::Frontend,
     jobs::{JobId, JobPool},
     settings::Paths,
-    terminal::{Input, Position, Rect, Screen, Size},
+    terminal::{Key, Position, Rect, Screen},
+};
+use crossbeam_channel::select;
+use std::{
+    cmp,
+    collections::HashMap,
+    io, mem,
+    path::Path,
+    time::{Duration, Instant},
 };
 
 pub(crate) struct Editor {
@@ -164,19 +163,18 @@ impl Editor {
         Ok(())
     }
 
-    pub fn ui_loop(&mut self, mut screen: Screen) -> Result<()> {
-        let input = Input::from_reader(termion::get_tty()?);
+    pub fn ui_loop(&mut self, mut screen: Screen, mut frontend: impl Frontend) -> Result<()> {
         let mut average = 0.0;
         let mut n = 0;
         let mut last_drawn = Instant::now() - REDRAW_LATENCY;
-        let mut frame = Rect::new(Position::new(0, 0), Size::new(screen.width, screen.height));
+        let mut frame = Rect::new(Position::new(0, 0), screen.size());
         let mut poll_state = PollState::Dirty;
         loop {
             match poll_state {
                 PollState::Dirty => {
                     let now = Instant::now();
-                    frame = Rect::new(Position::new(0, 0), Size::new(screen.width, screen.height));
-                    screen.resize_to_terminal()?;
+                    frame = Rect::new(Position::new(0, 0), screen.size());
+                    screen.resize(frontend.size()?);
                     self.draw(&mut screen);
                     let drawn_time = now.elapsed();
                     n += 1;
@@ -184,7 +182,7 @@ impl Editor {
                         (average * (n as f64 - 1.0) + drawn_time.as_millis() as f64) / n as f64;
 
                     let now = Instant::now();
-                    screen.present()?;
+                    frontend.present(&screen)?;
                     last_drawn = Instant::now();
                     eprintln!(
                         "Drawn in {:?} | Presented in {:?} | average drawn {:.2}",
@@ -199,14 +197,14 @@ impl Editor {
                 _ => {}
             }
 
-            poll_state = self.poll_events_batch(&input, frame, last_drawn)?;
+            poll_state = self.poll_events_batch(&frontend, frame, last_drawn)?;
         }
     }
 
     /// Poll as many events as we can respecting REDRAW_LATENCY and REDRAW_LATENCY_SUSTAINED_IO
     fn poll_events_batch(
         &mut self,
-        input: &Input,
+        frontend: &impl Frontend,
         frame: Rect,
         last_drawn: Instant,
     ) -> Result<PollState> {
@@ -238,7 +236,7 @@ impl Editor {
                     }
                     dirty = true; // notify_task_done should return whether we need to rerender
                 }
-                recv(input.receiver) -> event => {
+                recv(frontend.events()) -> event => {
                     match event.unwrap() {
                         Key::Ctrl('c') => {
                             return Ok(PollState::Exit);
@@ -279,7 +277,7 @@ impl Editor {
             theme_index,
             ..
         } = *self;
-        let frame = Rect::new(Position::new(0, 0), Size::new(screen.width, screen.height));
+        let frame = Rect::new(Position::new(0, 0), screen.size());
         let time = Instant::now();
 
         laid_components.clear();

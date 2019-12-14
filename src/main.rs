@@ -1,6 +1,7 @@
 mod components;
 mod editor;
 mod error;
+mod frontend;
 mod jobs;
 mod mode;
 mod settings;
@@ -13,7 +14,13 @@ use clap;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
-use crate::{editor::Editor, error::Result, jobs::JobPool, terminal::Screen};
+use crate::{
+    editor::Editor,
+    error::Result,
+    frontend::{Frontend, Termion},
+    jobs::JobPool,
+    terminal::Screen,
+};
 
 #[derive(Debug, StructOpt)]
 #[structopt(global_settings(&[clap::AppSettings::ColoredHelp]))]
@@ -35,5 +42,6 @@ fn main() -> Result<()> {
     for file_path in args.files.iter() {
         editor.open_file(file_path)?;
     }
-    editor.ui_loop(Screen::new()?)
+    let frontend = Termion::new()?;
+    editor.ui_loop(Screen::new(frontend.size()?), frontend)
 }

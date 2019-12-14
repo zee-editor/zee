@@ -1,101 +1,52 @@
 use ropey::RopeSlice;
-use std::{
-    self, cmp,
-    fmt::{self, Display, Formatter},
-    io::{self, BufWriter, Stdout, Write},
-    iter,
-};
-use termion::{
-    self,
-    cursor::Goto,
-    raw::{IntoRawMode, RawTerminal},
-    screen::AlternateScreen,
-};
+use std::{self, cmp, iter};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
+use super::Size;
 use crate::{smallstring::SmallString, terminal::Rect, utils::RopeGraphemes};
 
 #[derive(Default, Clone, PartialEq)]
 pub struct Textel {
-    style: Style,
-    content: SmallString,
+    pub style: Style,
+    pub content: SmallString,
 }
 
 pub struct Screen {
-    pub width: usize,
-    pub height: usize,
-    screen: AlternateScreen<RawTerminal<BufWriter<Stdout>>>,
+    width: usize,
+    height: usize,
     buffer: Vec<Option<Textel>>,
 }
 
 impl Screen {
-    pub fn new() -> Result<Self, io::Error> {
-        // Determine the current size of the terminal
-        let (width, height) = termion::terminal_size()?;
-        let (width, height) = (width as usize, height as usize);
-
+    pub fn new(size: Size) -> Self {
         // Allocate initial draw buffer
-        let buffer = iter::repeat(Textel::default())
-            .map(Some)
-            .take(width * height)
-            .collect();
-
-        // Create draw target
-        let mut screen =
-            AlternateScreen::from(BufWriter::with_capacity(1 << 20, io::stdout()).into_raw_mode()?);
-        write!(screen, "{}", termion::cursor::Hide)?;
-
-        Ok(Screen {
-            width,
-            height,
-            screen,
-            buffer,
-        })
+        Screen {
+            width: size.width,
+            height: size.height,
+            buffer: iter::repeat(Textel::default())
+                .map(Some)
+                .take(size.width * size.height)
+                .collect(),
+        }
     }
 
-    pub fn resize(&mut self, width: usize, height: usize) {
-        self.width = width;
-        self.height = height;
-        self.buffer.resize(width * height, Default::default());
+    #[inline]
+    pub fn size(&self) -> Size {
+        Size::new(self.width, self.height)
     }
 
-    pub fn resize_to_terminal(&mut self) -> Result<(), io::Error> {
-        let (width, height) = termion::terminal_size()?;
-        self.resize(width as usize, height as usize);
-        Ok(())
+    #[inline]
+    pub fn buffer(&self) -> &[Option<Textel>] {
+        self.buffer.as_slice()
     }
 
-    pub fn present(&mut self) -> Result<(), io::Error> {
-        let Self {
-            width,
-            ref mut buffer,
-            ref mut screen,
-            ..
-        } = *self;
-
-        let mut last_style = Style::default();
-        write!(screen, "{}", last_style)?;
-
-        buffer.chunks(width).enumerate().try_for_each(|(y, line)| {
-            write!(screen, "{}", Self::goto(0, y as u16))?;
-            line.iter().try_for_each(|textel| -> Result<(), io::Error> {
-                if let Some(Textel {
-                    ref style,
-                    ref content,
-                }) = textel
-                {
-                    if *style != last_style {
-                        write!(screen, "{}", style)?;
-                        last_style = *style;
-                    }
-                    write!(screen, "{}", content)?;
-                }
-                Ok(())
-            })
-        })?;
-
-        screen.flush()
+    #[inline]
+    pub fn resize(&mut self, size: Size) {
+        self.width = size.width;
+        self.height = size.height;
+        self.buffer
+            .resize(size.width * size.height, Default::default());
     }
 
     #[inline]
@@ -185,26 +136,6 @@ impl Screen {
             }
         }
     }
-
-    #[inline]
-    pub fn goto(x: u16, y: u16) -> Goto {
-        Goto(x + 1, y + 1)
-    }
-}
-
-impl Drop for Screen {
-    fn drop(&mut self) {
-        write!(
-            self.screen,
-            "{}{}{}{}{}",
-            termion::color::Fg(termion::color::Reset),
-            termion::color::Bg(termion::color::Reset),
-            termion::clear::All,
-            termion::cursor::Show,
-            termion::screen::ToMainScreen
-        )
-        .expect("clear screen on drop");
-    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -267,9 +198,9 @@ impl Default for Style {
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Colour {
-    red: u8,
-    blue: u8,
-    green: u8,
+    pub red: u8,
+    pub blue: u8,
+    pub green: u8,
 }
 
 impl Colour {
@@ -293,48 +224,3 @@ pub struct Background(pub Colour);
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Foreground(pub Colour);
-
-impl Display for Style {
-    #[inline]
-    fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
-        // Bold
-        if self.bold {
-            write!(formatter, "{}", termion::style::Bold)?;
-        } else {
-            // Using Reset is not ideal as it resets all style attributes. The correct thing to do
-            // would be to use `NoBold`, but it seems this is not reliably supported (at least it
-            // didn't work for me in tmux, although it does in alacritty).
-            // Also see https://github.com/crossterm-rs/crossterm/issues/294
-            write!(formatter, "{}", termion::style::Reset)?;
-        }
-
-        // Underline
-        if self.underline {
-            write!(formatter, "{}", termion::style::Underline)?;
-        } else {
-            write!(formatter, "{}", termion::style::NoUnderline)?;
-        }
-
-        // Background
-        {
-            let Colour { red, green, blue } = self.background.0;
-            write!(
-                formatter,
-                "{}",
-                termion::color::Bg(termion::color::Rgb(red, green, blue))
-            )?;
-        }
-
-        // Foreground
-        {
-            let Colour { red, green, blue } = self.foreground.0;
-            write!(
-                formatter,
-                "{}",
-                termion::color::Fg(termion::color::Rgb(red, green, blue))
-            )?;
-        }
-
-        Ok(())
-    }
-}
