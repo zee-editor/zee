@@ -5,6 +5,7 @@ mod jobs;
 mod mode;
 mod settings;
 mod smallstring;
+mod syntax;
 mod terminal;
 mod utils;
 

@@ -2,9 +2,11 @@ pub mod base16;
 
 use super::{
     buffer::Theme as BufferTheme, prompt::Theme as PromptTheme, splash::Theme as SplashTheme,
-    syntax::Theme as SyntaxTheme,
 };
-use crate::terminal::{Background, Colour, Foreground, Style};
+use crate::{
+    syntax::highlight::Theme as SyntaxTheme,
+    terminal::{Background, Colour, Foreground, Style},
+};
 pub use base16::Base16Theme;
 
 #[derive(Clone, Debug)]

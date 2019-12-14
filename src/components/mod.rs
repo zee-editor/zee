@@ -2,7 +2,6 @@ pub mod buffer;
 pub mod cursor;
 pub mod prompt;
 pub mod splash;
-pub mod syntax;
 pub mod theme;
 
 pub use buffer::{Buffer, BufferTask};

@@ -14,16 +14,16 @@ use tree_sitter::{InputEdit as TreeSitterInputEdit, Point as TreeSitterPoint};
 use zee_highlight::SelectorNodeId;
 
 use super::{
-    cursor::Cursor,
-    syntax::{
-        text_style_at_char, NodeTrace, ParserStatus, SyntaxCursor, SyntaxTree, Theme as SyntaxTheme,
-    },
-    theme::Theme as EditorTheme,
-    Component, Context, Scheduler, TaskKind, TaskResult,
+    cursor::Cursor, theme::Theme as EditorTheme, Component, Context, Scheduler, TaskKind,
+    TaskResult,
 };
 use crate::{
     error::Result,
     mode::{self, Mode},
+    syntax::{
+        highlight::{text_style_at_char, Theme as SyntaxTheme},
+        parse::{NodeTrace, ParserStatus, SyntaxCursor, SyntaxTree},
+    },
     terminal::{Position, Rect, Screen, Size, Style},
     utils::{
         self, next_grapheme_boundary, prev_grapheme_boundary, strip_trailing_whitespace,

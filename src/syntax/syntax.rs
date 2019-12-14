@@ -19,6 +19,7 @@ use crate::{
     smallstring::SmallString,
     terminal::{Background, Style},
 };
+use zee_highlight::SelectorNodeId;
 
 pub struct ParserStatus {
     parser: CancelableParser,
@@ -123,9 +124,9 @@ impl<'a> SyntaxCursor<'a> {
         byte_index: usize,
         map_node: impl Fn(&Node<'a>) -> T,
     ) {
-        if trace.byte_range.contains(&byte_index) {
-            return;
-        }
+        // if trace.byte_range.contains(&byte_index) {
+        //     return;
+        // }
 
         self.cursor.reset(self.root);
         trace.clear();
