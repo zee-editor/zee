@@ -404,20 +404,20 @@ impl Buffer {
 
     fn center_visual_cursor(&mut self, frame: &Rect) {
         let line_index = self.text.char_to_line(self.cursor.range.start);
-        if line_index >= frame.size.height / 2 {
-            let middle_vertical = line_index - frame.size.height / 2;
-
-            if self.first_line != middle_vertical {
-                self.first_line = middle_vertical;
-            } else if self.first_line != line_index {
-                self.first_line = line_index;
-            }
-
-            // In Emacs C-L is a 3 state ting
-            // else if self.text.len_lines() > frame.size.height {
-            //     self.first_line = line_index - frame.size.height;
-            // }
+        if line_index >= frame.size.height / 2
+            && self.first_line != line_index - frame.size.height / 2
+        {
+            self.first_line = line_index - frame.size.height / 2;
+        } else if self.first_line != line_index {
+            self.first_line = line_index;
+        } else {
+            self.first_line = 0;
         }
+
+        // In Emacs C-L is a 3 state ting
+        // else if self.text.len_lines() > frame.size.height {
+        //     self.first_line = line_index - frame.size.height;
+        // }
     }
 
     fn delete_line(&mut self) -> OpaqueDiff {
