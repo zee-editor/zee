@@ -420,51 +420,6 @@ impl Buffer {
         }
     }
 
-    fn insert_characters(&mut self, characters: impl Iterator<Item = char>) -> OpaqueDiff {
-        self.has_unsaved_changes = ModifiedStatus::Changed;
-        let mut num_bytes = 0;
-        characters.enumerate().for_each(|(offset, character)| {
-            self.text
-                .insert_char(self.cursor.range.start + offset, character);
-            num_bytes += character.len_utf8();
-        });
-        OpaqueDiff::new(
-            self.text.char_to_byte(self.cursor.range.start),
-            0,
-            num_bytes,
-        )
-    }
-
-    fn insert_char(&mut self, character: char) -> OpaqueDiff {
-        self.has_unsaved_changes = ModifiedStatus::Changed;
-        self.text.insert_char(self.cursor.range.start, character);
-        OpaqueDiff::new(self.cursor.range.start, 0, 1)
-    }
-
-    fn delete(&mut self) -> OpaqueDiff {
-        if self.text.len_chars() == 0 {
-            return OpaqueDiff::no_diff();
-        }
-
-        self.has_unsaved_changes = ModifiedStatus::Changed;
-        self.text
-            .remove(self.cursor.range.start..self.cursor.range.end);
-        let diff = OpaqueDiff::new(
-            self.cursor.range.start,
-            self.cursor.range.end - self.cursor.range.start,
-            0,
-        );
-
-        let grapheme_start = self.cursor.range.start;
-        let grapheme_end = next_grapheme_boundary(&self.text.slice(..), self.cursor.range.start);
-        if grapheme_start < grapheme_end {
-            self.cursor.range = grapheme_start..grapheme_end
-        } else {
-            self.cursor.range = 0..1
-        }
-        diff
-    }
-
     fn delete_line(&mut self) -> OpaqueDiff {
         if self.text.len_chars() == 0 {
             return OpaqueDiff::no_diff();
@@ -623,39 +578,38 @@ impl Component for Buffer {
         };
 
         let diff = match key {
-            Key::Ctrl('d') | Key::Delete => self.delete(),
+            Key::Ctrl('d') | Key::Delete => self.cursor.delete(&mut self.text),
             Key::Ctrl('k') => self.delete_line(),
             Key::Ctrl('y') => self.yank_line(),
-            Key::Backspace => {
-                if self.cursor.range.start > 0 {
-                    self.cursor.move_left(&self.text);
-                    self.delete()
-                } else {
-                    OpaqueDiff::no_diff()
-                }
-            }
+            Key::Backspace => self.cursor.backspace(&mut self.text),
             Key::Alt('w') => self.copy_selection(),
             Key::Ctrl('w') => self.cut_selection(),
             Key::Char('\t') if DISABLE_TABS => {
-                let diff = self.insert_characters(iter::repeat(' ').take(TAB_WIDTH));
+                let diff = self
+                    .cursor
+                    .insert_characters(&mut self.text, iter::repeat(' ').take(TAB_WIDTH));
                 self.cursor.move_right_n(&self.text, TAB_WIDTH);
                 diff
             }
             Key::Char('\n') => {
-                let diff = self.insert_char('\n');
+                let diff = self.cursor.insert_char(&mut self.text, '\n');
                 self.ensure_trailing_newline_with_content();
                 self.cursor.move_down(&self.text);
                 self.cursor.move_to_start_of_line(&self.text);
                 diff
             }
             Key::Char(character) => {
-                let diff = self.insert_char(character);
+                let diff = self.cursor.insert_char(&mut self.text, character);
                 self.ensure_trailing_newline_with_content();
                 self.cursor.move_right(&self.text);
                 diff
             }
             _ => OpaqueDiff::no_diff(),
         };
+
+        if !diff.is_empty() {
+            self.has_unsaved_changes = ModifiedStatus::Changed;
+        }
 
         match self.syntax.as_mut() {
             Some(syntax) if !diff.is_empty() => {

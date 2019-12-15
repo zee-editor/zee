@@ -1,6 +1,7 @@
 use ropey::Rope;
 use std::ops::Range;
 
+use crate::syntax::OpaqueDiff;
 use crate::utils::{self, next_grapheme_boundary, prev_grapheme_boundary, RopeGraphemes};
 
 pub type CharIndex = usize;
@@ -95,6 +96,54 @@ impl Cursor {
         self.visual_horizontal_offset = None;
     }
 
+    pub fn insert_characters(
+        &mut self,
+        text: &mut Rope,
+        characters: impl Iterator<Item = char>,
+    ) -> OpaqueDiff {
+        let mut num_bytes = 0;
+        characters.enumerate().for_each(|(offset, character)| {
+            text.insert_char(self.range.start + offset, character);
+            num_bytes += character.len_utf8();
+        });
+        self.ensure_trailing_newline_with_content(text);
+        OpaqueDiff::new(text.char_to_byte(self.range.start), 0, num_bytes)
+    }
+
+    pub fn insert_char(&mut self, text: &mut Rope, character: char) -> OpaqueDiff {
+        text.insert_char(self.range.start, character);
+        self.ensure_trailing_newline_with_content(text);
+        OpaqueDiff::new(self.range.start, 0, 1)
+    }
+
+    pub fn delete(&mut self, text: &mut Rope) -> OpaqueDiff {
+        if text.len_chars() == 0 {
+            return OpaqueDiff::no_diff();
+        }
+
+        text.remove(self.range.start..self.range.end);
+        let diff = OpaqueDiff::new(self.range.start, self.range.end - self.range.start, 0);
+
+        let grapheme_start = self.range.start;
+        let grapheme_end = next_grapheme_boundary(&text.slice(..), self.range.start);
+        if grapheme_start < grapheme_end {
+            self.range = grapheme_start..grapheme_end
+        } else {
+            self.range = 0..1
+        }
+        self.ensure_trailing_newline_with_content(text);
+        diff
+    }
+
+    pub fn backspace(&mut self, text: &mut Rope) -> OpaqueDiff {
+        if self.range.start > 0 {
+            self.move_left(text);
+            self.delete(text)
+        } else {
+            OpaqueDiff::no_diff()
+        }
+    }
+
     fn move_vertically(&mut self, text: &Rope, current_line_index: usize, new_line_index: usize) {
         if new_line_index >= text.len_lines() {
             return;
@@ -128,6 +177,12 @@ impl Cursor {
             let grapheme_end = next_grapheme_boundary(&text.slice(..), new_line_offset);
             let grapheme_start = prev_grapheme_boundary(&text.slice(..), grapheme_end);
             grapheme_start..grapheme_end
+        }
+    }
+
+    fn ensure_trailing_newline_with_content(&mut self, text: &mut Rope) {
+        if text.len_chars() == 0 || text.char(text.len_chars() - 1) != '\n' {
+            text.insert_char(text.len_chars(), '\n');
         }
     }
 }
