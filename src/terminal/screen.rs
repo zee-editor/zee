@@ -148,7 +148,7 @@ pub struct Style {
 
 impl Style {
     #[inline]
-    pub fn normal(background: Background, foreground: Foreground) -> Self {
+    pub const fn normal(background: Background, foreground: Foreground) -> Self {
         Self {
             background,
             foreground,
@@ -158,7 +158,7 @@ impl Style {
     }
 
     #[inline]
-    pub fn bold(background: Background, foreground: Foreground) -> Self {
+    pub const fn bold(background: Background, foreground: Foreground) -> Self {
         Self {
             background,
             foreground,
@@ -169,7 +169,7 @@ impl Style {
 
     #[allow(dead_code)]
     #[inline]
-    pub fn underline(background: Background, foreground: Foreground) -> Self {
+    pub const fn underline(background: Background, foreground: Foreground) -> Self {
         Self {
             background,
             foreground,

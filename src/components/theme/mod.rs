@@ -9,6 +9,78 @@ use crate::{
 };
 pub use base16::Base16Theme;
 
+pub const THEMES: [(Theme, &'static str); 30] = [
+    (Theme::gruvbox(), "zee-gruvbox"),
+    (
+        Theme::from_base16(&base16::GRUVBOX_DARK_HARD),
+        "base16-gruvbox-dark-hard",
+    ),
+    (
+        Theme::from_base16(&base16::GRUVBOX_DARK_PALE),
+        "base16-gruvbox-dark-pale",
+    ),
+    (
+        Theme::from_base16(&base16::GRUVBOX_DARK_SOFT),
+        "base16-gruvbox-dark-soft",
+    ),
+    (
+        Theme::from_base16(&base16::GRUVBOX_LIGHT_HARD),
+        "base16-gruvbox-light-hard",
+    ),
+    (
+        Theme::from_base16(&base16::GRUVBOX_LIGHT_SOFT),
+        "base16-gruvbox-light-soft",
+    ),
+    (
+        Theme::from_base16(&base16::SOLARIZED_DARK),
+        "base16-solarized-dark",
+    ),
+    (
+        Theme::from_base16(&base16::SOLARIZED_LIGHT),
+        "base16-solarized-light",
+    ),
+    (
+        Theme::from_base16(&base16::SYNTH_MIDNIGHT),
+        "base16-synth-midnight",
+    ),
+    (
+        Theme::from_base16(&base16::DEFAULT_DARK),
+        "base16-default-dark",
+    ),
+    (
+        Theme::from_base16(&base16::DEFAULT_LIGHT),
+        "base16-default-light",
+    ),
+    (Theme::from_base16(&base16::EIGHTIES), "base16-eighties"),
+    (Theme::from_base16(&base16::MOCHA), "base16-mocha"),
+    (Theme::from_base16(&base16::OCEAN), "base16-ocean"),
+    (Theme::from_base16(&base16::CUPCAKE), "base16-cupcake"),
+    (Theme::from_base16(&base16::ONEDARK), "base16-onedark"),
+    (Theme::from_base16(&base16::MATERIAL), "base16-material"),
+    (
+        Theme::from_base16(&base16::MATERIAL_DARKER),
+        "base16-material-darker",
+    ),
+    (
+        Theme::from_base16(&base16::MATERIAL_PALENIGHT),
+        "base16-material-palenight",
+    ),
+    (
+        Theme::from_base16(&base16::MATERIAL_LIGHTER),
+        "base16-material-lighter",
+    ),
+    (Theme::from_base16(&base16::ATLAS), "base16-atlas"),
+    (Theme::from_base16(&base16::CIRCUS), "base16-circus"),
+    (Theme::from_base16(&base16::CODESCHOOL), "base16-codeschool"),
+    (Theme::from_base16(&base16::ESPRESSO), "base16-espresso"),
+    (Theme::from_base16(&base16::DECAF), "base16-decaf"),
+    (Theme::from_base16(&base16::HELIOS), "base16-helios"),
+    (Theme::from_base16(&base16::ICY), "base16-icy"),
+    (Theme::from_base16(&base16::WOODLAND), "base16-woodland"),
+    (Theme::from_base16(&base16::ZENBURN), "base16-zenburn"),
+    (Theme::from_base16(&base16::XCODE_DUSK), "base16-xcode-dusk"),
+];
+
 #[derive(Clone, Debug)]
 pub struct Theme {
     pub buffer: BufferTheme,
@@ -17,7 +89,7 @@ pub struct Theme {
 }
 
 impl Theme {
-    pub fn gruvbox() -> Self {
+    pub const fn gruvbox() -> Self {
         // For reference, in base16-gruvbox-dark-soft the colours are mapped as
         // folows:
         //
@@ -83,7 +155,7 @@ impl Theme {
         }
     }
 
-    pub fn from_base16(base16: &Base16Theme) -> Self {
+    pub const fn from_base16(base16: &Base16Theme) -> Self {
         let Base16Theme {
             // Default Background
             base00: default_background,
@@ -114,7 +186,7 @@ impl Theme {
             // Functions, Methods, Attribute IDs, Headings
             base0d: functions,
             // Keywords, Storage, Selector, Markup Italic, Diff Changed
-            base0e: keywords,
+            base0e: _keywords,
             // Deprecated, Opening/Closing Embedded Language Tags, e.g. <?php ?>
             base0f: embedded,
         } = *base16;
@@ -214,16 +286,16 @@ pub mod gruvbox {
 }
 
 #[inline]
-fn normal(background: Colour, foreground: Colour) -> Style {
+const fn normal(background: Colour, foreground: Colour) -> Style {
     Style::normal(Background(background), Foreground(foreground))
 }
 
 #[inline]
-fn bold(background: Colour, foreground: Colour) -> Style {
+const fn bold(background: Colour, foreground: Colour) -> Style {
     Style::bold(Background(background), Foreground(foreground))
 }
 
 #[inline]
-fn underline(background: Colour, foreground: Colour) -> Style {
+const fn underline(background: Colour, foreground: Colour) -> Style {
     Style::underline(Background(background), Foreground(foreground))
 }

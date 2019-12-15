@@ -1,7 +1,7 @@
 use crate::{
     components::{
         prompt::Command,
-        theme::{base16, Theme},
+        theme::{Theme, THEMES},
         Buffer, Component, ComponentId, Context, Flex, LaidComponentId, LaidComponentIds, Layout,
         LayoutDirection, LayoutNode, LayoutNodeFlex, Prompt, Splash, TaskKind,
     },
@@ -29,12 +29,12 @@ pub(crate) struct Editor {
     focus: Option<usize>,
     prompt: Prompt,
     task_pool: TaskPool<Result<TaskKind>>,
-    themes: [(Theme, &'static str); 30],
+    themes: &'static [(Theme, &'static str); 30],
     theme_index: usize,
 }
 
 impl Editor {
-    pub fn new(settings: Paths, task_pool: TaskPool<Result<TaskKind>>) -> Self {
+    pub fn new(_settings: Paths, task_pool: TaskPool<Result<TaskKind>>) -> Self {
         Self {
             components: HashMap::with_capacity(8),
             task_owners: HashMap::with_capacity(8),
@@ -44,78 +44,7 @@ impl Editor {
             focus: None,
             prompt: Prompt::new(),
             task_pool,
-            themes: [
-                (Theme::gruvbox(), "zee-gruvbox"),
-                (
-                    Theme::from_base16(&base16::GRUVBOX_DARK_HARD),
-                    "base16-gruvbox-dark-hard",
-                ),
-                (
-                    Theme::from_base16(&base16::GRUVBOX_DARK_PALE),
-                    "base16-gruvbox-dark-pale",
-                ),
-                (
-                    Theme::from_base16(&base16::GRUVBOX_DARK_SOFT),
-                    "base16-gruvbox-dark-soft",
-                ),
-                (
-                    Theme::from_base16(&base16::GRUVBOX_LIGHT_HARD),
-                    "base16-gruvbox-light-hard",
-                ),
-                (
-                    Theme::from_base16(&base16::GRUVBOX_LIGHT_SOFT),
-                    "base16-gruvbox-light-soft",
-                ),
-                (
-                    Theme::from_base16(&base16::SOLARIZED_DARK),
-                    "base16-solarized-dark",
-                ),
-                (
-                    Theme::from_base16(&base16::SOLARIZED_LIGHT),
-                    "base16-solarized-light",
-                ),
-                (
-                    Theme::from_base16(&base16::SYNTH_MIDNIGHT),
-                    "base16-synth-midnight",
-                ),
-                (
-                    Theme::from_base16(&base16::DEFAULT_DARK),
-                    "base16-default-dark",
-                ),
-                (
-                    Theme::from_base16(&base16::DEFAULT_LIGHT),
-                    "base16-default-light",
-                ),
-                (Theme::from_base16(&base16::EIGHTIES), "base16-eighties"),
-                (Theme::from_base16(&base16::MOCHA), "base16-mocha"),
-                (Theme::from_base16(&base16::OCEAN), "base16-ocean"),
-                (Theme::from_base16(&base16::CUPCAKE), "base16-cupcake"),
-                (Theme::from_base16(&base16::ONEDARK), "base16-onedark"),
-                (Theme::from_base16(&base16::MATERIAL), "base16-material"),
-                (
-                    Theme::from_base16(&base16::MATERIAL_DARKER),
-                    "base16-material-darker",
-                ),
-                (
-                    Theme::from_base16(&base16::MATERIAL_PALENIGHT),
-                    "base16-material-palenight",
-                ),
-                (
-                    Theme::from_base16(&base16::MATERIAL_LIGHTER),
-                    "base16-material-lighter",
-                ),
-                (Theme::from_base16(&base16::ATLAS), "base16-atlas"),
-                (Theme::from_base16(&base16::CIRCUS), "base16-circus"),
-                (Theme::from_base16(&base16::CODESCHOOL), "base16-codeschool"),
-                (Theme::from_base16(&base16::ESPRESSO), "base16-espresso"),
-                (Theme::from_base16(&base16::DECAF), "base16-decaf"),
-                (Theme::from_base16(&base16::HELIOS), "base16-helios"),
-                (Theme::from_base16(&base16::ICY), "base16-icy"),
-                (Theme::from_base16(&base16::WOODLAND), "base16-woodland"),
-                (Theme::from_base16(&base16::ZENBURN), "base16-zenburn"),
-                (Theme::from_base16(&base16::XCODE_DUSK), "base16-xcode-dusk"),
-                // (Theme::solarized(), "solarized-dark"),
-            ],
+            themes: &THEMES,
             theme_index: 0,
         }
     }
