@@ -1,4 +1,4 @@
 pub mod highlight;
 pub mod parse;
 
-pub use parse::{SyntaxCursor, SyntaxTree};
+pub use parse::{OpaqueDiff, SyntaxCursor, SyntaxTree};

@@ -91,6 +91,7 @@ impl SyntaxTree {
                 },
                 tree.as_ref(),
             );
+            parser.reset();
             Ok(match maybe_tree {
                 Some(tree) => TaskKind::Buffer(BufferTask::ParseSyntax(ParserStatus {
                     parser,
