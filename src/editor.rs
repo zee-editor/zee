@@ -35,14 +35,15 @@ pub(crate) struct Editor {
 
 impl Editor {
     pub fn new(_settings: Paths, task_pool: TaskPool<Result<TaskKind>>) -> Self {
+        let prompt = Prompt::new();
         Self {
             components: HashMap::with_capacity(8),
             task_owners: HashMap::with_capacity(8),
-            layout: wrap_layout_with_prompt(None),
+            layout: wrap_layout_with_prompt(prompt.height(), None),
             laid_components: LaidComponentIds::new(),
             next_component_id: cmp::max(PROMPT_ID, SPLASH_ID) + 1,
             focus: None,
-            prompt: Prompt::new(),
+            prompt,
             task_pool,
             themes: &THEMES,
             theme_index: 0,
@@ -59,12 +60,15 @@ impl Editor {
 
         let mut layout = Layout::Component(PROMPT_ID);
         mem::swap(&mut self.layout, &mut layout);
-        self.layout = wrap_layout_with_prompt(unwrap_prompt_from_layout(layout).map(|layout| {
-            layout
-                .add_left(component_id, Flex::Stretched)
-                .remove_component_id(SPLASH_ID)
-                .unwrap()
-        }));
+        self.layout = wrap_layout_with_prompt(
+            self.prompt.height(),
+            unwrap_prompt_from_layout(layout).map(|layout| {
+                layout
+                    .add_left(component_id, Flex::Stretched)
+                    .remove_component_id(SPLASH_ID)
+                    .unwrap()
+            }),
+        );
 
         component_id
     }
@@ -253,34 +257,37 @@ impl Editor {
     fn handle_event(&mut self, key: Key, frame: Rect) -> Result<()> {
         let time = Instant::now();
         self.prompt.clear_log();
-        match key {
-            Key::Ctrl('o') => {
-                self.cycle_focus(frame, CycleFocus::Next);
-                return Ok(());
-            }
-            Key::Ctrl('q') => {
-                if let Some(focus) = self.focus {
-                    let mut layout = Layout::Component(PROMPT_ID);
-                    mem::swap(&mut self.layout, &mut layout);
-                    self.layout = wrap_layout_with_prompt(
-                        unwrap_prompt_from_layout(layout)
-                            .and_then(|layout| layout.remove_component_id(focus)),
-                    );
-                    self.cycle_focus(frame, CycleFocus::Previous);
+        if !self.prompt.is_active() {
+            match key {
+                Key::Ctrl('o') => {
+                    self.cycle_focus(frame, CycleFocus::Next);
+                    return Ok(());
                 }
-                return Ok(());
-            }
-            Key::Ctrl('t') => {
-                self.theme_index = (self.theme_index + 1) % self.themes.len();
-                self.prompt.log_error(format!(
-                    "Theme changed to {}",
-                    self.themes[self.theme_index].1
-                ));
-                return Ok(());
-            }
+                Key::Ctrl('q') => {
+                    if let Some(focus) = self.focus {
+                        let mut layout = Layout::Component(PROMPT_ID);
+                        mem::swap(&mut self.layout, &mut layout);
+                        self.layout = wrap_layout_with_prompt(
+                            self.prompt.height(),
+                            unwrap_prompt_from_layout(layout)
+                                .and_then(|layout| layout.remove_component_id(focus)),
+                        );
+                        self.cycle_focus(frame, CycleFocus::Previous);
+                    }
+                    return Ok(());
+                }
+                Key::Ctrl('t') => {
+                    self.theme_index = (self.theme_index + 1) % self.themes.len();
+                    self.prompt.log_error(format!(
+                        "Theme changed to {}",
+                        self.themes[self.theme_index].1
+                    ));
+                    return Ok(());
+                }
 
-            _ => {}
-        };
+                _ => {}
+            };
+        }
 
         if let (false, Some(&id_with_focus)) = (self.prompt.is_active(), self.focus.as_ref()) {
             self.lay_components(frame);
@@ -344,6 +351,11 @@ impl Editor {
             self.open_file(path)?;
         }
 
+        let mut layout = Layout::Component(PROMPT_ID);
+        mem::swap(&mut self.layout, &mut layout);
+        self.layout =
+            wrap_layout_with_prompt(self.prompt.height(), unwrap_prompt_from_layout(layout));
+
         Ok(())
     }
 
@@ -397,7 +409,7 @@ enum CycleFocus {
 }
 
 #[inline]
-fn wrap_layout_with_prompt(layout: Option<Layout>) -> Layout {
+fn wrap_layout_with_prompt(prompt_height: usize, layout: Option<Layout>) -> Layout {
     Layout::vertical(
         LayoutNodeFlex {
             node: layout.unwrap_or_else(|| Layout::Component(SPLASH_ID)),
@@ -405,7 +417,7 @@ fn wrap_layout_with_prompt(layout: Option<Layout>) -> Layout {
         },
         LayoutNodeFlex {
             node: Layout::Component(PROMPT_ID),
-            flex: Flex::Fixed(PROMPT_HEIGHT),
+            flex: Flex::Fixed(prompt_height),
         },
     )
 }

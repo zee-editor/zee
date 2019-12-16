@@ -1,8 +1,11 @@
 use ropey::Rope;
-use std::ops::Range;
+use std::{cmp, ops::Range};
 
 use crate::syntax::OpaqueDiff;
-use crate::utils::{self, next_grapheme_boundary, prev_grapheme_boundary, RopeGraphemes};
+use crate::utils::{
+    self, ensure_trailing_newline_with_content, next_grapheme_boundary, prev_grapheme_boundary,
+    RopeGraphemes,
+};
 
 pub type CharIndex = usize;
 
@@ -79,7 +82,10 @@ impl Cursor {
     }
 
     pub fn move_to_end_of_line(&mut self, text: &Rope) {
-        let line_index = text.char_to_line(self.range.start);
+        let line_index = text.char_to_line(cmp::min(
+            text.len_chars().saturating_sub(1),
+            self.range.start,
+        ));
         let char_index = text.line_to_char(line_index);
         let line_len = text.line(line_index).len_chars();
         self.range = (char_index + line_len).saturating_sub(1)..char_index + line_len;
@@ -106,13 +112,13 @@ impl Cursor {
             text.insert_char(self.range.start + offset, character);
             num_bytes += character.len_utf8();
         });
-        self.ensure_trailing_newline_with_content(text);
+        ensure_trailing_newline_with_content(text);
         OpaqueDiff::new(text.char_to_byte(self.range.start), 0, num_bytes)
     }
 
     pub fn insert_char(&mut self, text: &mut Rope, character: char) -> OpaqueDiff {
         text.insert_char(self.range.start, character);
-        self.ensure_trailing_newline_with_content(text);
+        ensure_trailing_newline_with_content(text);
         OpaqueDiff::new(self.range.start, 0, 1)
     }
 
@@ -131,7 +137,7 @@ impl Cursor {
         } else {
             self.range = 0..1
         }
-        self.ensure_trailing_newline_with_content(text);
+        ensure_trailing_newline_with_content(text);
         diff
     }
 
@@ -177,12 +183,6 @@ impl Cursor {
             let grapheme_end = next_grapheme_boundary(&text.slice(..), new_line_offset);
             let grapheme_start = prev_grapheme_boundary(&text.slice(..), grapheme_end);
             grapheme_start..grapheme_end
-        }
-    }
-
-    fn ensure_trailing_newline_with_content(&mut self, text: &mut Rope) {
-        if text.len_chars() == 0 || text.char(text.len_chars() - 1) != '\n' {
-            text.insert_char(text.len_chars(), '\n');
         }
     }
 }

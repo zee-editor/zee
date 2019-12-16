@@ -199,12 +199,12 @@ fn build_node_to_selector_id_maps(
         node_id_to_selector_id.insert(node_id, *selector_id);
     }
 
-    eprintln!(
-        "NKC: {}, name->sid: {}, nid->sid: {}",
-        language.node_kind_count(),
-        node_name_to_selector_id.len(),
-        node_id_to_selector_id.len()
-    );
+    // eprintln!(
+    //     "NKC: {}, name->sid: {}, nid->sid: {}",
+    //     language.node_kind_count(),
+    //     node_name_to_selector_id.len(),
+    //     node_id_to_selector_id.len()
+    // );
 
     (node_name_to_selector_id, node_id_to_selector_id)
 }

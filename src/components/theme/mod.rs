@@ -12,6 +12,15 @@ pub use base16::Base16Theme;
 pub const THEMES: [(Theme, &'static str); 30] = [
     (Theme::gruvbox(), "zee-gruvbox"),
     (
+        Theme::from_base16(&base16::SOLARIZED_DARK),
+        "base16-solarized-dark",
+    ),
+    (
+        Theme::from_base16(&base16::SYNTH_MIDNIGHT),
+        "base16-synth-midnight",
+    ),
+    (Theme::from_base16(&base16::HELIOS), "base16-helios"),
+    (
         Theme::from_base16(&base16::GRUVBOX_DARK_HARD),
         "base16-gruvbox-dark-hard",
     ),
@@ -32,16 +41,8 @@ pub const THEMES: [(Theme, &'static str); 30] = [
         "base16-gruvbox-light-soft",
     ),
     (
-        Theme::from_base16(&base16::SOLARIZED_DARK),
-        "base16-solarized-dark",
-    ),
-    (
         Theme::from_base16(&base16::SOLARIZED_LIGHT),
         "base16-solarized-light",
-    ),
-    (
-        Theme::from_base16(&base16::SYNTH_MIDNIGHT),
-        "base16-synth-midnight",
     ),
     (
         Theme::from_base16(&base16::DEFAULT_DARK),
@@ -74,7 +75,6 @@ pub const THEMES: [(Theme, &'static str); 30] = [
     (Theme::from_base16(&base16::CODESCHOOL), "base16-codeschool"),
     (Theme::from_base16(&base16::ESPRESSO), "base16-espresso"),
     (Theme::from_base16(&base16::DECAF), "base16-decaf"),
-    (Theme::from_base16(&base16::HELIOS), "base16-helios"),
     (Theme::from_base16(&base16::ICY), "base16-icy"),
     (Theme::from_base16(&base16::WOODLAND), "base16-woodland"),
     (Theme::from_base16(&base16::ZENBURN), "base16-zenburn"),
@@ -150,7 +150,13 @@ impl Theme {
                 credits: normal(DARK0_SOFT, GRAY_245),
             },
             prompt: PromptTheme {
-                base: normal(DARK0_HARD, NEUTRAL_YELLOW),
+                input: normal(DARK0_HARD, NEUTRAL_YELLOW),
+                action: normal(BRIGHT_BLUE, DARK0_HARD),
+                cursor: normal(LIGHT0, DARK0),
+                item_focused_background: Background(DARK0_HARD),
+                item_unfocused_background: Background(DARK0),
+                item_file_foreground: Foreground(LIGHT1),
+                item_directory_foreground: Foreground(BRIGHT_RED),
             },
         }
     }
@@ -186,7 +192,7 @@ impl Theme {
             // Functions, Methods, Attribute IDs, Headings
             base0d: functions,
             // Keywords, Storage, Selector, Markup Italic, Diff Changed
-            base0e: _keywords,
+            base0e: keywords,
             // Deprecated, Opening/Closing Embedded Language Tags, e.g. <?php ?>
             base0f: embedded,
         } = *base16;
@@ -230,7 +236,13 @@ impl Theme {
                 credits: normal(lighter_background, comments),
             },
             prompt: PromptTheme {
-                base: normal(default_background, classes),
+                input: normal(default_background, classes),
+                action: normal(functions, default_background),
+                cursor: normal(light_foreground, default_background),
+                item_focused_background: Background(default_background),
+                item_unfocused_background: Background(lighter_background),
+                item_file_foreground: Foreground(default_foreground),
+                item_directory_foreground: Foreground(keywords),
             },
         }
     }

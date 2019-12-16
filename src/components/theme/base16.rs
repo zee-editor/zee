@@ -576,5 +576,5 @@ pub const ZENBURN: Base16Theme = Base16Theme {
     base0c: Colour::rgb(147, 224, 227),
     base0d: Colour::rgb(124, 184, 187),
     base0e: Colour::rgb(220, 140, 195),
-    base0f: Colour::rgb(0, 0, 0),
+    base0f: Colour::rgb(147, 224, 227),
 };
