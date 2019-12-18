@@ -102,7 +102,7 @@ impl Cursor {
         self.visual_horizontal_offset = None;
     }
 
-    pub fn insert_characters(
+    pub fn insert_chars(
         &mut self,
         text: &mut Rope,
         characters: impl Iterator<Item = char>,
@@ -123,7 +123,7 @@ impl Cursor {
     }
 
     pub fn delete(&mut self, text: &mut Rope) -> OpaqueDiff {
-        if text.len_chars() == 0 {
+        if text.len_chars() == 0 || self.range.start == text.len_chars().saturating_sub(1) {
             return OpaqueDiff::no_diff();
         }
 
@@ -138,6 +138,42 @@ impl Cursor {
             self.range = 0..1
         }
         ensure_trailing_newline_with_content(text);
+        diff
+    }
+
+    pub fn delete_line(&mut self, text: &mut Rope) -> OpaqueDiff {
+        if text.len_chars() == 0 {
+            return OpaqueDiff::no_diff();
+        }
+
+        // Delete line
+        let line_index = text.char_to_line(self.range.start);
+        let delete_range_start = text.line_to_char(line_index);
+        let delete_range_end = text.line_to_char(line_index + 1);
+        text.remove(delete_range_start..delete_range_end);
+        let diff = OpaqueDiff::new(delete_range_start, delete_range_end - delete_range_start, 0);
+
+        // Place cursor
+        let grapheme_start =
+            text.line_to_char(cmp::min(line_index, text.len_lines().saturating_sub(2)));
+        let grapheme_end = next_grapheme_boundary(&text.slice(..), grapheme_start);
+        if grapheme_start != grapheme_end {
+            self.range = grapheme_start..grapheme_end
+        } else {
+            self.range = 0..1
+        }
+
+        diff
+    }
+
+    fn insert_rope(&mut self, text: &mut Rope, insertion: &Rope) -> OpaqueDiff {
+        let diff = OpaqueDiff::new(self.range.start, 0, text.len_bytes());
+        let mut cursor_start = self.range.start;
+        for chunk in insertion.chunks() {
+            text.insert(cursor_start, chunk);
+            cursor_start += chunk.chars().count();
+            self.range = cursor_start..next_grapheme_boundary(&text.slice(..), cursor_start);
+        }
         diff
     }
 

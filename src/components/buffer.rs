@@ -1,4 +1,5 @@
 use euclid::default::SideOffsets2D;
+use git2::Repository;
 use ropey::{Rope, RopeSlice};
 use size_format::SizeFormatterBinary;
 use std::{
@@ -7,7 +8,7 @@ use std::{
     fs::File,
     io::{self, BufReader, BufWriter},
     iter,
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::Instant,
 };
 use zee_highlight::SelectorNodeId;
@@ -66,11 +67,13 @@ pub struct Buffer {
     cursor: Cursor,
     first_line: usize,
     syntax: Option<SyntaxTree>,
+    repo: Option<Repository>,
 }
 
 impl Buffer {
     pub fn from_file(file_path: PathBuf) -> Result<Self> {
         let mode = mode::find_by_filename(&file_path);
+        let repo = Repository::discover(&file_path).ok();
         Ok(Buffer {
             text: if file_path.exists() {
                 Rope::from_reader(BufReader::new(File::open(&file_path)?))?
@@ -92,6 +95,7 @@ impl Buffer {
             first_line: 0,
             syntax: mode.language().map(|language| SyntaxTree::new(*language)),
             mode,
+            repo,
         })
     }
 
@@ -369,7 +373,12 @@ impl Buffer {
             &self
                 .file_path
                 .as_ref()
-                .map(|path| format!("{} ", path.display()))
+                .map(
+                    |path| match path.file_name().and_then(|file_name| file_name.to_str()) {
+                        Some(file_name) => format!("{} ", file_name),
+                        None => format!("{} ", path.display()),
+                    },
+                )
                 .unwrap_or_else(String::new),
         );
 
@@ -381,11 +390,21 @@ impl Buffer {
             &format!(" {}", self.mode.name),
         );
 
+        // Name of the current mode
+        let reference = self.repo.as_ref().map(|repo| repo.head().unwrap());
+
         // The current position the file right-aligned
         let current_line = self.text.char_to_line(self.cursor.range.start);
         let num_lines = self.text.len_lines();
         let line_status = format!(
-            " {current_line}:{current_byte:>2} {percent:>3}% ",
+            "{}{current_line:>4}:{current_byte:>2} {percent:>3}% ",
+            match reference
+                .as_ref()
+                .and_then(|reference| reference.shorthand())
+            {
+                Some(reference) => format!("{}  ", reference),
+                None => String::new(),
+            },
             current_line = current_line,
             current_byte = visual_cursor_x,
             percent = if num_lines > 0 {
@@ -587,7 +606,7 @@ impl Component for Buffer {
             Key::Char('\t') if DISABLE_TABS => {
                 let diff = self
                     .cursor
-                    .insert_characters(&mut self.text, iter::repeat(' ').take(TAB_WIDTH));
+                    .insert_chars(&mut self.text, iter::repeat(' ').take(TAB_WIDTH));
                 self.cursor.move_right_n(&self.text, TAB_WIDTH);
                 diff
             }
@@ -665,6 +684,10 @@ impl Component for Buffer {
         }
 
         Ok(())
+    }
+
+    fn path(&self) -> Option<&Path> {
+        self.file_path.as_ref().map(|path| path.as_path())
     }
 }
 

@@ -11,7 +11,7 @@ mod terminal;
 mod utils;
 
 use clap;
-use std::path::PathBuf;
+use std::{env, path::PathBuf};
 use structopt::StructOpt;
 
 use crate::{
@@ -36,9 +36,8 @@ pub struct Args {
 
 fn main() -> Result<()> {
     let args = Args::from_args();
-    let settings = settings::find(args.config)?;
-
-    let mut editor = Editor::new(settings, TaskPool::new()?);
+    let current_dir = env::current_dir()?;
+    let mut editor = Editor::new(current_dir, TaskPool::new()?);
     for file_path in args.files.iter() {
         editor.open_file(file_path)?;
     }

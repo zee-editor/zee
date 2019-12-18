@@ -1,3 +1,4 @@
+use ignore;
 use std::{
     error::Error as StdError,
     fmt::{self, Display},
@@ -13,6 +14,7 @@ pub enum Error {
     Config(String),
     Editor(io::Error),
     Io(io::Error),
+    FilePicker(ignore::Error),
     TaskPool(Box<dyn StdError + Send>),
     CancelledLanguageParser,
     MissingLanguageParser(String),
@@ -35,5 +37,11 @@ impl StdError for Error {}
 impl From<io::Error> for Error {
     fn from(error: io::Error) -> Self {
         Self::Io(error)
+    }
+}
+
+impl From<ignore::Error> for Error {
+    fn from(error: ignore::Error) -> Self {
+        Self::FilePicker(error)
     }
 }

@@ -11,7 +11,7 @@ pub use splash::Splash;
 pub use theme::Theme;
 
 use smallvec::{smallvec, SmallVec};
-use std::{cmp, time::Instant};
+use std::{cmp, path::Path, time::Instant};
 
 use crate::{
     error::Result,
@@ -37,6 +37,7 @@ pub struct Context<'t> {
     pub focused: bool,
     pub frame_id: FrameId,
     pub theme: &'t Theme,
+    pub path: &'t Path,
 }
 
 impl<'t> Context<'t> {
@@ -47,6 +48,7 @@ impl<'t> Context<'t> {
             focused: self.focused,
             frame_id: self.frame_id,
             theme: self.theme,
+            path: self.path,
         }
     }
 
@@ -57,6 +59,7 @@ impl<'t> Context<'t> {
             focused,
             frame_id: self.frame_id,
             theme: self.theme,
+            path: self.path,
         }
     }
 }
@@ -75,6 +78,10 @@ pub trait Component {
 
     fn task_done(&mut self, _task: TaskResult) -> Result<()> {
         Ok(())
+    }
+
+    fn path(&self) -> Option<&Path> {
+        None
     }
 
     // fn handle_input(&mut self, controller: &Controller, context: &Context) {}

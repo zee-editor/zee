@@ -137,25 +137,7 @@ impl RawHighlightRules {
     fn compile(self, language: &Language) -> Result<HighlightRules> {
         let (node_name_to_selector_id, node_id_to_selector_id) =
             build_node_to_selector_id_maps(language);
-
         let RawHighlightRules { name, scopes } = self;
-
-        if &name == "HTML" {
-            (0..u16::try_from(language.node_kind_count())
-                .expect("node_kind_count() should fit in u16"))
-                .for_each(|id| {
-                    eprintln!(
-                        "{:?} -> {:?} -> {:?} | {:?}",
-                        id,
-                        language.node_kind_for_id(id as u16),
-                        node_id_to_selector_id.get(&(id as u16)).unwrap(),
-                        node_name_to_selector_id
-                            .get(language.node_kind_for_id(id as u16))
-                            .unwrap()
-                    );
-                })
-            // eprintln!("{:#?}", node_kind_map);
-        }
 
         scopes
             .into_iter()

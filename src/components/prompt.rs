@@ -1,9 +1,10 @@
 use euclid::default::SideOffsets2D;
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
+use ignore::WalkBuilder;
 use ropey::Rope;
 use std::{
     borrow::Cow,
-    cmp, env, fs, mem,
+    cmp, fs, mem,
     path::{Path, PathBuf},
 };
 
@@ -33,8 +34,21 @@ pub struct Prompt {
     input: Rope,
     cursor: Cursor,
     command: Option<Command>,
-    active: bool,
     file_picker: FilePicker,
+    state: State,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum State {
+    Inactive,
+    PickingFileFromRepo,
+    PickingFileFromDirectory,
+}
+
+impl State {
+    fn is_active(&self) -> bool {
+        *self != Self::Inactive
+    }
 }
 
 impl Prompt {
@@ -43,13 +57,13 @@ impl Prompt {
             input: Rope::new(),
             cursor: Cursor::new(),
             command: None,
-            active: false,
+            state: State::Inactive,
             file_picker: FilePicker::new(),
         }
     }
 
     pub fn is_active(&self) -> bool {
-        self.active
+        self.state.is_active()
     }
 
     pub fn poll_and_clear(&mut self) -> Option<Command> {
@@ -63,38 +77,94 @@ impl Prompt {
     }
 
     pub fn clear_log(&mut self) {
-        if !self.active {
+        if !self.is_active() {
             self.input.remove(0..self.input.len_chars());
         }
     }
 
     pub fn height(&self) -> usize {
-        if self.active {
+        if self.is_active() {
             PROMPT_INPUT_HEIGHT + PROMPT_SELECT_HEIGHT
         } else {
             PROMPT_INPUT_HEIGHT
         }
     }
 
-    fn read_dir(&mut self) -> Result<()> {
-        let path_str: String = self.input.slice(..).into();
+    fn pick_from_directory(&mut self) -> Result<()> {
+        let path_str: String = self.input.to_string();
+        let prefix = Path::new(&path_str).parent().unwrap();
         self.file_picker.reset(
-            fs::read_dir(
-                Path::new(&path_str)
-                    .parent()
-                    .unwrap_or_else(|| Path::new(&path_str)),
-            )?
-            .map(|entry| {
-                entry
-                    .map(|entry| entry.path().to_path_buf())
-                    .map_err(|error| Error::Io(error))
-            })
-            .collect::<Result<Vec<PathBuf>>>()?
-            .into_iter(),
+            directory_files_iter(&path_str)?
+                .filter_map(|result_path| result_path.ok())
+                .take(MAX_FILES_IN_PICKER),
             &path_str,
+            &prefix,
         );
         Ok(())
     }
+
+    fn pick_from_repository(&mut self) -> Result<()> {
+        let path_str: String = self.input.to_string();
+        let prefix = Path::new(&path_str).parent().unwrap();
+        self.file_picker.reset(
+            repository_files_iter(&path_str)
+                .filter_map(|result_path| result_path.ok())
+                .take(MAX_FILES_IN_PICKER),
+            &path_str,
+            &prefix,
+        );
+        Ok(())
+    }
+
+    #[inline]
+    fn set_input_to_cwd(&mut self, context: &Context) {
+        self.cursor.delete_line(&mut self.input);
+        self.cursor.insert_chars(
+            &mut self.input,
+            context
+                .path
+                .parent()
+                .unwrap_or(context.path)
+                .to_str()
+                .unwrap_or("")
+                .chars(),
+        );
+        self.cursor.move_to_end_of_line(&self.input);
+        self.cursor.insert_char(&mut self.input, '/');
+        self.cursor.move_right(&self.input);
+    }
+}
+
+fn repository_files_iter(path: impl AsRef<Path>) -> impl Iterator<Item = Result<PathBuf>> {
+    WalkBuilder::new(path.as_ref().parent().unwrap_or_else(|| path.as_ref()))
+        .build()
+        .filter_map(|entry| {
+            let is_dir = entry
+                .as_ref()
+                .map(|entry| entry.path().is_dir())
+                .unwrap_or(false);
+            if entry.is_ok() && !is_dir {
+                Some(
+                    entry
+                        .map(|entry| entry.path().to_path_buf())
+                        .map_err(|error| Error::FilePicker(error)),
+                )
+            } else {
+                None
+            }
+        })
+}
+
+fn directory_files_iter(path: impl AsRef<Path>) -> Result<impl Iterator<Item = Result<PathBuf>>> {
+    fs::read_dir(path.as_ref().parent().unwrap_or_else(|| path.as_ref()))
+        .map(|walk| {
+            walk.map(|entry| {
+                entry
+                    .map(|entry| entry.path().to_path_buf())
+                    .map_err(Error::Io)
+            })
+        })
+        .map_err(Error::Io)
 }
 
 impl Component for Prompt {
@@ -102,7 +172,7 @@ impl Component for Prompt {
     fn draw(&mut self, screen: &mut Screen, _: &mut Scheduler, context: &Context) {
         let theme = &context.theme.prompt;
 
-        if self.active {
+        if self.is_active() {
             self.file_picker.draw(
                 screen,
                 &context.set_frame(context.frame.inner_rect(SideOffsets2D::new(
@@ -114,9 +184,15 @@ impl Component for Prompt {
             );
         }
 
+        assert!(self.height() >= PROMPT_INPUT_HEIGHT);
+        eprintln!("cf: {:?} | h: {}", context.frame, self.height());
         screen.clear_region(
             context.frame.inner_rect(SideOffsets2D::new(
-                self.height() - PROMPT_INPUT_HEIGHT,
+                context
+                    .frame
+                    .size
+                    .height
+                    .saturating_sub(PROMPT_INPUT_HEIGHT),
                 0,
                 0,
                 0,
@@ -125,7 +201,17 @@ impl Component for Prompt {
         );
 
         // Draw prompt
-        let prefix = (if self.active { "open" } else { "" }).to_string();
+        let prefix = match self.state {
+            State::PickingFileFromRepo => "repo",
+            State::PickingFileFromDirectory => "open",
+            State::Inactive => "",
+        };
+        let prefix_offset = if prefix.is_empty() {
+            0
+        } else {
+            prefix.len() + 1
+        };
+
         screen.draw_str(
             context.frame.origin.x,
             context.frame.origin.y + self.height() - 1,
@@ -134,10 +220,10 @@ impl Component for Prompt {
         );
 
         let mut char_index = 0;
-        let mut screen_x = context.frame.origin.x + prefix.len() + 1;
+        let mut screen_x = context.frame.origin.x + prefix_offset;
         let screen_y = context.frame.origin.y + self.height() - 1;
         for grapheme in RopeGraphemes::new(&self.input.slice(..)) {
-            let style = if self.active && self.cursor.range.contains(&char_index) {
+            let style = if self.is_active() && self.cursor.range.contains(&char_index) {
                 theme.cursor
             } else {
                 theme.input
@@ -156,36 +242,37 @@ impl Component for Prompt {
     }
 
     #[inline]
-    fn handle_event(&mut self, key: Key, _: &mut Scheduler, _: &Context) -> Result<()> {
+    fn handle_event(&mut self, key: Key, _: &mut Scheduler, context: &Context) -> Result<()> {
         match key {
             Key::Ctrl('g') => {
-                self.active = false;
+                self.state = State::Inactive;
                 self.cursor = Cursor::new();
                 self.input.remove(..);
                 return Ok(());
             }
-            Key::Alt('x') => {
-                self.active = true;
-                self.input.remove(..);
-                self.input
-                    .insert(0, env::current_dir()?.to_str().unwrap_or(""));
-                self.input.insert_char(self.input.len_chars(), '/');
-                self.input.insert_char(self.input.len_chars(), '\n');
-                self.cursor.move_to_end_of_line(&self.input);
-                if let Err(_) = self.read_dir() {}
+            Key::Alt('x') if !self.is_active() => {
+                self.state = State::PickingFileFromDirectory;
+                self.set_input_to_cwd(context);
+                if let Err(_) = self.pick_from_directory() {}
                 return Ok(());
             }
-            Key::Char('\n') if self.active => {
+            Key::Alt('d') if !self.is_active() => {
+                self.state = State::PickingFileFromRepo;
+                self.set_input_to_cwd(context);
+                if let Err(_) = self.pick_from_repository() {}
+                return Ok(());
+            }
+            Key::Char('\n') if self.is_active() => {
                 let path_str: Cow<str> = self.input.slice(..).into();
                 self.command = Some(Command::OpenFile(PathBuf::from(path_str.trim())));
                 self.input.remove(..);
                 self.cursor = Cursor::new();
-                self.active = false;
+                self.state = State::Inactive;
             }
             _ => {}
         }
 
-        if self.active {
+        if self.is_active() {
             let input_changed = match key {
                 Key::Ctrl('b') | Key::Left => {
                     self.cursor.move_left(&self.input);
@@ -257,7 +344,11 @@ impl Component for Prompt {
             };
 
             if input_changed {
-                if let Err(_) = self.read_dir() {}
+                if let Err(_) = match self.state {
+                    State::PickingFileFromDirectory => self.pick_from_directory(),
+                    State::PickingFileFromRepo => self.pick_from_repository(),
+                    State::Inactive => Ok(()),
+                } {}
             }
         }
 
@@ -271,6 +362,7 @@ struct FilePicker {
     paths: Vec<PathBuf>,
     filtered: Vec<(usize, i64)>, // (index, score)
     matcher: SkimMatcherV2,
+    prefix: PathBuf,
 }
 
 impl FilePicker {
@@ -281,16 +373,23 @@ impl FilePicker {
             paths: Vec::new(),
             filtered: Vec::new(),
             matcher: Default::default(),
+            prefix: PathBuf::new(),
         }
     }
 
-    fn reset(&mut self, paths_iter: impl Iterator<Item = PathBuf>, filter: &str) {
+    fn reset(
+        &mut self,
+        paths_iter: impl Iterator<Item = PathBuf>,
+        filter: &str,
+        prefix_path: impl AsRef<Path>,
+    ) {
         let Self {
             ref mut offset,
             ref mut selected,
             ref mut paths,
             ref mut filtered,
             ref mut matcher,
+            ref mut prefix,
         } = *self;
 
         *offset = 0;
@@ -304,6 +403,15 @@ impl FilePicker {
                 .map(|score| (index, score))
         }));
         &mut filtered.sort_unstable_by_key(|(_, score)| -score);
+
+        // PathBuf::clear() is a nightly only thing, is there a nicer way to
+        // avoid the allocation?
+        let mut old_prefix = PathBuf::new();
+        mem::swap(prefix, &mut old_prefix);
+        let mut old_prefix_str = old_prefix.into_os_string();
+        old_prefix_str.clear();
+        *prefix = old_prefix_str.into();
+        prefix.push(prefix_path);
     }
 
     fn move_up(&mut self) {
@@ -376,14 +484,16 @@ impl FilePicker {
                 context.frame.origin.x,
                 context.frame.origin.y + screen_index,
                 style,
-                &path
-                    .file_name()
-                    .map(|name| name.to_string_lossy())
-                    .unwrap_or_else(|| path.to_string_lossy()),
+                &path.to_string_lossy()[self
+                    .prefix
+                    .to_str()
+                    .map(|prefix| prefix.len() + 1)
+                    .unwrap_or(0)..],
             );
         }
     }
 }
 
 const PROMPT_INPUT_HEIGHT: usize = 1;
-const PROMPT_SELECT_HEIGHT: usize = 11;
+const PROMPT_SELECT_HEIGHT: usize = 15;
+const MAX_FILES_IN_PICKER: usize = 8192;

@@ -7,7 +7,6 @@ use crate::{
     },
     error::{Error, Result},
     frontend::Frontend,
-    settings::Paths,
     task::{TaskId, TaskPool},
     terminal::{Key, Position, Rect, Screen},
 };
@@ -16,7 +15,7 @@ use std::{
     cmp,
     collections::HashMap,
     io, mem,
-    path::Path,
+    path::{Path, PathBuf},
     time::{Duration, Instant},
 };
 
@@ -31,10 +30,11 @@ pub(crate) struct Editor {
     task_pool: TaskPool<Result<TaskKind>>,
     themes: &'static [(Theme, &'static str); 30],
     theme_index: usize,
+    current_path: PathBuf,
 }
 
 impl Editor {
-    pub fn new(_settings: Paths, task_pool: TaskPool<Result<TaskKind>>) -> Self {
+    pub fn new(current_path: PathBuf, task_pool: TaskPool<Result<TaskKind>>) -> Self {
         let prompt = Prompt::new();
         Self {
             components: HashMap::with_capacity(8),
@@ -47,6 +47,7 @@ impl Editor {
             task_pool,
             themes: &THEMES,
             theme_index: 0,
+            current_path,
         }
     }
 
@@ -88,6 +89,10 @@ impl Editor {
                     "Permission denied while opening {}",
                     path.display()
                 ));
+            }
+            Err(Error::Io(ref error)) => {
+                self.prompt
+                    .log_error(format!("Could not open {} {}", path.display(), error));
             }
             error => {
                 error?;
@@ -207,6 +212,7 @@ impl Editor {
             ref layout,
             ref themes,
             ref task_pool,
+            ref current_path,
             theme_index,
             ..
         } = *self;
@@ -227,6 +233,7 @@ impl Editor {
                     frame,
                     frame_id,
                     theme: &themes[theme_index].0,
+                    path: current_path.as_path(),
                 };
                 let mut scheduler = task_pool.scheduler();
 
@@ -287,48 +294,57 @@ impl Editor {
 
                 _ => {}
             };
-        }
 
-        if let (false, Some(&id_with_focus)) = (self.prompt.is_active(), self.focus.as_ref()) {
-            self.lay_components(frame);
+            if let Some(&id_with_focus) = self.focus.as_ref() {
+                self.lay_components(frame);
 
-            let Self {
-                ref mut components,
-                ref mut task_owners,
-                ref mut prompt,
-                ref laid_components,
-                ref themes,
-                theme_index,
-                ref task_pool,
-                ..
-            } = *self;
-            laid_components.iter().for_each(
-                |&LaidComponentId {
-                     id,
-                     frame,
-                     frame_id,
-                 }| {
-                    if id_with_focus == id {
-                        let mut scheduler = task_pool.scheduler();
-                        if let Err(error) = components.get_mut(&id).unwrap().handle_event(
-                            key,
-                            &mut scheduler,
-                            &Context {
-                                time,
-                                focused: true,
-                                frame,
-                                frame_id,
-                                theme: &themes[theme_index].0,
-                            },
-                        ) {
-                            prompt.log_error(format!("{}", error));
+                let Self {
+                    ref mut components,
+                    ref mut task_owners,
+                    ref mut prompt,
+                    ref laid_components,
+                    ref themes,
+                    theme_index,
+                    ref task_pool,
+                    ref mut current_path,
+                    ..
+                } = *self;
+                laid_components.iter().try_for_each(
+                    |&LaidComponentId {
+                         id,
+                         frame,
+                         frame_id,
+                     }|
+                     -> Result<()> {
+                        if id_with_focus == id {
+                            let mut scheduler = task_pool.scheduler();
+                            let component = components.get_mut(&id).unwrap();
+                            if let Some(path) = component.path() {
+                                *current_path = path.canonicalize()?;
+                            }
+
+                            if let Err(error) = component.handle_event(
+                                key,
+                                &mut scheduler,
+                                &Context {
+                                    time,
+                                    focused: true,
+                                    frame,
+                                    frame_id,
+                                    theme: &themes[theme_index].0,
+                                    path: current_path.as_path(),
+                                },
+                            ) {
+                                prompt.log_error(format!("{}", error));
+                            }
+                            for task_id in scheduler.scheduled() {
+                                task_owners.insert(task_id, id);
+                            }
                         }
-                        for task_id in scheduler.scheduled() {
-                            task_owners.insert(task_id, id);
-                        }
-                    }
-                },
-            )
+                        Ok(())
+                    },
+                )?;
+            }
         }
 
         // Update prompt
@@ -342,6 +358,7 @@ impl Editor {
                 frame,
                 frame_id: 0,
                 theme: &self.themes[self.theme_index].0,
+                path: self.current_path.as_path(),
             },
         )?;
         for task_id in scheduler.scheduled() {
@@ -438,7 +455,6 @@ fn unwrap_prompt_from_layout(layout: Layout) -> Option<Layout> {
 }
 
 const PROMPT_ID: ComponentId = 0;
-const PROMPT_HEIGHT: usize = 1;
 const SPLASH_ID: ComponentId = 1;
 
 const REDRAW_LATENCY: Duration = Duration::from_millis(10);
