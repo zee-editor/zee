@@ -56,7 +56,7 @@ impl Screen {
         for y in y_range {
             self.buffer[y * self.width + x_range.start..y * self.width + x_range.end]
                 .iter_mut()
-                .for_each(|textel| Self::clear_textel(textel, style))
+                .for_each(|textel| clear_textel(textel, style));
         }
     }
 
@@ -71,17 +71,13 @@ impl Screen {
     }
 
     #[inline]
-    fn draw_graphemes<IteratorT, ItemT>(
+    fn draw_graphemes(
         &mut self,
         x: usize,
         y: usize,
         style: Style,
-        grapheme_iter: IteratorT,
-    ) -> usize
-    where
-        IteratorT: Iterator<Item = ItemT>,
-        ItemT: Into<SmallString>,
-    {
+        grapheme_iter: impl Iterator<Item = impl Into<SmallString>>,
+    ) -> usize {
         if y >= self.height || x >= self.width {
             return 0;
         }
@@ -97,7 +93,6 @@ impl Screen {
 
             let grapheme = grapheme.into();
             let grapheme_width = UnicodeWidthStr::width(grapheme.as_ref());
-            // eprintln!("'{}' {}", grapheme, grapheme_width);
             if grapheme_width == 0 {
                 continue;
             }
@@ -115,26 +110,6 @@ impl Screen {
             current_offset += num_modified;
         }
         current_offset - initial_offset
-    }
-
-    #[inline]
-    fn clear_textel(textel: &mut Option<Textel>, style: Style) {
-        match *textel {
-            Some(Textel {
-                style: ref mut textel_style,
-                ref mut content,
-            }) => {
-                *textel_style = style;
-                content.clear();
-                content.push_str(" ");
-            }
-            _ => {
-                *textel = Some(Textel {
-                    style,
-                    content: " ".into(),
-                });
-            }
-        }
     }
 }
 
@@ -224,3 +199,23 @@ pub struct Background(pub Colour);
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Foreground(pub Colour);
+
+#[inline]
+fn clear_textel(textel: &mut Option<Textel>, style: Style) {
+    match *textel {
+        Some(Textel {
+            style: ref mut textel_style,
+            ref mut content,
+        }) => {
+            *textel_style = style;
+            content.clear();
+            content.push_str(" ");
+        }
+        _ => {
+            *textel = Some(Textel {
+                style,
+                content: " ".into(),
+            });
+        }
+    }
+}
