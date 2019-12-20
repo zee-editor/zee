@@ -681,6 +681,7 @@ impl Component for Buffer {
                     .as_mut()
                     .map(|syntax| syntax.handle_parse_syntax_done(task_id, parsed));
             }
+            _ => unreachable!(),
         }
 
         Ok(())

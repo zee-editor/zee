@@ -4,13 +4,14 @@ use ignore::WalkBuilder;
 use ropey::Rope;
 use std::{
     borrow::Cow,
-    cmp, fs, mem,
+    cmp, fs, iter, mem,
     path::{Path, PathBuf},
 };
 
-use super::{Component, Context, Cursor, Position, Rect, Scheduler, Size};
+use super::{Component, Context, Cursor, Position, Rect, Scheduler, Size, TaskKind, TaskResult};
 use crate::{
     error::{Error, Result},
+    task::TaskId,
     terminal::{Background, Foreground, Key, Screen, Style},
     utils::{self, RopeGraphemes},
 };
@@ -30,12 +31,8 @@ pub enum Command {
     OpenFile(PathBuf),
 }
 
-pub struct Prompt {
-    input: Rope,
-    cursor: Cursor,
-    command: Option<Command>,
+pub struct PromptTask {
     file_picker: FilePicker,
-    state: State,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -51,6 +48,15 @@ impl State {
     }
 }
 
+pub struct Prompt {
+    input: Rope,
+    cursor: Cursor,
+    command: Option<Command>,
+    state: State,
+    file_picker: FilePicker,
+    file_picker_task: Option<TaskId>,
+}
+
 impl Prompt {
     pub fn new() -> Self {
         Self {
@@ -59,6 +65,7 @@ impl Prompt {
             command: None,
             state: State::Inactive,
             file_picker: FilePicker::new(),
+            file_picker_task: None,
         }
     }
 
@@ -84,35 +91,29 @@ impl Prompt {
 
     pub fn height(&self) -> usize {
         if self.is_active() {
-            PROMPT_INPUT_HEIGHT + PROMPT_SELECT_HEIGHT
+            PROMPT_INPUT_HEIGHT + cmp::min(self.file_picker.filtered.len(), PROMPT_SELECT_HEIGHT)
         } else {
             PROMPT_INPUT_HEIGHT
         }
     }
 
-    fn pick_from_directory(&mut self) -> Result<()> {
-        let path_str: String = self.input.to_string();
-        let prefix = Path::new(&path_str).parent().unwrap();
-        self.file_picker.reset(
-            directory_files_iter(&path_str)?
-                .filter_map(|result_path| result_path.ok())
-                .take(MAX_FILES_IN_PICKER),
-            &path_str,
-            &prefix,
-        );
+    fn pick_from_directory(&mut self, scheduler: &mut Scheduler) -> Result<()> {
+        let path_str = self.input.to_string();
+        let mut file_picker = self.file_picker.clone();
+        self.file_picker_task = Some(scheduler.spawn(move || {
+            pick_from_directory(&mut file_picker, path_str)?;
+            Ok(TaskKind::Prompt(PromptTask { file_picker }))
+        })?);
         Ok(())
     }
 
-    fn pick_from_repository(&mut self) -> Result<()> {
-        let path_str: String = self.input.to_string();
-        let prefix = Path::new(&path_str).parent().unwrap();
-        self.file_picker.reset(
-            repository_files_iter(&path_str)
-                .filter_map(|result_path| result_path.ok())
-                .take(MAX_FILES_IN_PICKER),
-            &path_str,
-            &prefix,
-        );
+    fn pick_from_repository(&mut self, scheduler: &mut Scheduler) -> Result<()> {
+        let path_str = self.input.to_string();
+        let mut file_picker = self.file_picker.clone();
+        self.file_picker_task = Some(scheduler.spawn(move || {
+            pick_from_repository(&mut file_picker, path_str)?;
+            Ok(TaskKind::Prompt(PromptTask { file_picker }))
+        })?);
         Ok(())
     }
 
@@ -185,7 +186,6 @@ impl Component for Prompt {
         }
 
         assert!(self.height() >= PROMPT_INPUT_HEIGHT);
-        eprintln!("cf: {:?} | h: {}", context.frame, self.height());
         screen.clear_region(
             context.frame.inner_rect(SideOffsets2D::new(
                 context
@@ -201,10 +201,12 @@ impl Component for Prompt {
         );
 
         // Draw prompt
-        let prefix = match self.state {
-            State::PickingFileFromRepo => "repo",
-            State::PickingFileFromDirectory => "open",
-            State::Inactive => "",
+        let prefix = match (&self.state, self.file_picker_task.is_some()) {
+            (State::PickingFileFromRepo, true) => "repo*",
+            (State::PickingFileFromRepo, false) => "repo ",
+            (State::PickingFileFromDirectory, true) => "open*",
+            (State::PickingFileFromDirectory, false) => "open ",
+            (State::Inactive, _) => "",
         };
         let prefix_offset = if prefix.is_empty() {
             0
@@ -242,24 +244,31 @@ impl Component for Prompt {
     }
 
     #[inline]
-    fn handle_event(&mut self, key: Key, _: &mut Scheduler, context: &Context) -> Result<()> {
+    fn handle_event(
+        &mut self,
+        key: Key,
+        scheduler: &mut Scheduler,
+        context: &Context,
+    ) -> Result<()> {
         match key {
             Key::Ctrl('g') => {
                 self.state = State::Inactive;
                 self.cursor = Cursor::new();
                 self.input.remove(..);
+                self.file_picker.clear();
+                self.file_picker_task = None;
                 return Ok(());
             }
             Key::Alt('x') if !self.is_active() => {
                 self.state = State::PickingFileFromDirectory;
                 self.set_input_to_cwd(context);
-                if let Err(_) = self.pick_from_directory() {}
+                self.pick_from_directory(scheduler)?;
                 return Ok(());
             }
             Key::Alt('d') if !self.is_active() => {
                 self.state = State::PickingFileFromRepo;
                 self.set_input_to_cwd(context);
-                if let Err(_) = self.pick_from_repository() {}
+                self.pick_from_repository(scheduler)?;
                 return Ok(());
             }
             Key::Char('\n') if self.is_active() => {
@@ -317,12 +326,12 @@ impl Component for Prompt {
                         false
                     }
                 }
-                Key::Ctrl('n') | Key::Up => {
-                    self.file_picker.move_up();
+                Key::Ctrl('n') | Key::Down => {
+                    self.file_picker.move_down();
                     false
                 }
-                Key::Ctrl('p') | Key::Down => {
-                    self.file_picker.move_down();
+                Key::Ctrl('p') | Key::Up => {
+                    self.file_picker.move_up();
                     false
                 }
                 Key::Alt('<') => {
@@ -344,14 +353,33 @@ impl Component for Prompt {
             };
 
             if input_changed {
-                if let Err(_) = match self.state {
-                    State::PickingFileFromDirectory => self.pick_from_directory(),
-                    State::PickingFileFromRepo => self.pick_from_repository(),
-                    State::Inactive => Ok(()),
-                } {}
+                match self.state {
+                    State::PickingFileFromDirectory => self.pick_from_directory(scheduler)?,
+                    State::PickingFileFromRepo => self.pick_from_repository(scheduler)?,
+                    State::Inactive => {}
+                }
             }
         }
 
+        Ok(())
+    }
+
+    fn task_done(&mut self, task_result: TaskResult) -> Result<()> {
+        let task_id = task_result.id;
+        let payload = task_result.payload?;
+        match payload {
+            TaskKind::Prompt(PromptTask { file_picker })
+                if self
+                    .file_picker_task
+                    .map(|expected| expected == task_id)
+                    .unwrap_or(false) =>
+            {
+                self.file_picker_task = None;
+                self.file_picker = file_picker;
+            }
+            TaskKind::Prompt(_) => {}
+            _ => unreachable!(),
+        }
         Ok(())
     }
 }
@@ -363,6 +391,19 @@ struct FilePicker {
     filtered: Vec<(usize, i64)>, // (index, score)
     matcher: SkimMatcherV2,
     prefix: PathBuf,
+}
+
+impl Clone for FilePicker {
+    fn clone(&self) -> Self {
+        Self {
+            offset: self.offset,
+            selected: self.selected,
+            paths: self.paths.clone(),
+            filtered: self.filtered.clone(),
+            matcher: Default::default(),
+            prefix: self.prefix.clone(),
+        }
+    }
 }
 
 impl FilePicker {
@@ -377,25 +418,21 @@ impl FilePicker {
         }
     }
 
-    fn reset(
-        &mut self,
-        paths_iter: impl Iterator<Item = PathBuf>,
-        filter: &str,
-        prefix_path: impl AsRef<Path>,
-    ) {
+    fn prefix(&self) -> &Path {
+        self.prefix.as_path()
+    }
+
+    fn set_filter(&mut self, filter: &str) {
         let Self {
             ref mut offset,
             ref mut selected,
             ref mut paths,
             ref mut filtered,
             ref mut matcher,
-            ref mut prefix,
+            ..
         } = *self;
-
         *offset = 0;
         *selected = 0;
-        paths.clear();
-        paths.extend(paths_iter);
         filtered.clear();
         filtered.extend(paths.iter().enumerate().filter_map(|(index, file)| {
             matcher
@@ -403,15 +440,28 @@ impl FilePicker {
                 .map(|score| (index, score))
         }));
         &mut filtered.sort_unstable_by_key(|(_, score)| -score);
+    }
 
-        // PathBuf::clear() is a nightly only thing, is there a nicer way to
-        // avoid the allocation?
-        let mut old_prefix = PathBuf::new();
-        mem::swap(prefix, &mut old_prefix);
-        let mut old_prefix_str = old_prefix.into_os_string();
-        old_prefix_str.clear();
-        *prefix = old_prefix_str.into();
+    fn clear(&mut self) {
+        self.reset(iter::empty(), "", "")
+    }
+
+    fn reset(
+        &mut self,
+        paths_iter: impl Iterator<Item = PathBuf>,
+        filter: &str,
+        prefix_path: impl AsRef<Path>,
+    ) {
+        let Self {
+            ref mut paths,
+            ref mut prefix,
+            ..
+        } = *self;
+        paths.clear();
+        paths.extend(paths_iter);
+        utils::clear_path_buf(prefix);
         prefix.push(prefix_path);
+        self.set_filter(filter);
     }
 
     fn move_up(&mut self) {
@@ -423,11 +473,11 @@ impl FilePicker {
     }
 
     fn move_to_top(&mut self) {
-        self.selected = 0;
+        self.selected = self.filtered.len().saturating_sub(1);
     }
 
     fn move_to_bottom(&mut self) {
-        self.selected = self.filtered.len().saturating_sub(1);
+        self.selected = 0;
     }
 
     fn selected(&self) -> Option<&Path> {
@@ -452,7 +502,7 @@ impl FilePicker {
             Style::normal(theme.item_unfocused_background, theme.item_file_foreground),
         );
 
-        for (screen_index, path) in self
+        for (option_index, path) in self
             .filtered
             .iter()
             .skip(self.offset)
@@ -460,13 +510,11 @@ impl FilePicker {
             .map(|(path_index, _)| &self.paths[*path_index])
             .enumerate()
         {
-            let background = if self.offset + screen_index == self.selected {
+            let frame_y = context.frame.origin.y + height - option_index - 1;
+            let background = if self.offset + option_index == self.selected {
                 screen.clear_region(
                     Rect::new(
-                        Position::new(
-                            context.frame.origin.x,
-                            context.frame.origin.y + screen_index,
-                        ),
+                        Position::new(context.frame.origin.x, frame_y),
                         Size::new(context.frame.size.width, 1),
                     ),
                     Style::normal(theme.item_focused_background, theme.item_file_foreground),
@@ -482,7 +530,7 @@ impl FilePicker {
             };
             screen.draw_str(
                 context.frame.origin.x,
-                context.frame.origin.y + screen_index,
+                frame_y,
                 style,
                 &path.to_string_lossy()[self
                     .prefix
@@ -494,6 +542,39 @@ impl FilePicker {
     }
 }
 
+fn update_file_picker<FilesIterT>(
+    file_picker: &mut FilePicker,
+    path_str: String,
+    files_iter: impl FnOnce(String) -> Result<FilesIterT>,
+) -> Result<()>
+where
+    FilesIterT: Iterator<Item = PathBuf>,
+{
+    let prefix = Path::new(&path_str).parent().unwrap();
+    if file_picker.prefix() != prefix {
+        file_picker.reset(
+            files_iter(path_str.clone())?.take(MAX_FILES_IN_PICKER),
+            &path_str,
+            &prefix,
+        );
+    } else {
+        file_picker.set_filter(&path_str)
+    }
+    Ok(())
+}
+
+fn pick_from_directory(file_picker: &mut FilePicker, path_str: String) -> Result<()> {
+    update_file_picker(file_picker, path_str, |path| {
+        Ok(directory_files_iter(path)?.filter_map(|result_path| result_path.ok()))
+    })
+}
+
+fn pick_from_repository(file_picker: &mut FilePicker, path_str: String) -> Result<()> {
+    update_file_picker(file_picker, path_str, |path| {
+        Ok(repository_files_iter(path).filter_map(|result_path| result_path.ok()))
+    })
+}
+
 const PROMPT_INPUT_HEIGHT: usize = 1;
 const PROMPT_SELECT_HEIGHT: usize = 15;
-const MAX_FILES_IN_PICKER: usize = 8192;
+const MAX_FILES_IN_PICKER: usize = 65536;

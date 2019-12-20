@@ -1,8 +1,19 @@
 use ropey::{iter::Chunks, str_utils::byte_to_char_idx, Rope, RopeSlice};
+use std::{mem, path::PathBuf};
 use unicode_segmentation::{GraphemeCursor, GraphemeIncomplete};
 use unicode_width::UnicodeWidthStr;
 
 use super::smallstring::SmallString;
+
+pub fn clear_path_buf(path: &mut PathBuf) {
+    // PathBuf::clear() is a nightly only thing, is there a nicer way to
+    // avoid the allocation?
+    let mut old_path = PathBuf::new();
+    mem::swap(path, &mut old_path);
+    let mut old_path_str = old_path.into_os_string();
+    old_path_str.clear();
+    *path = old_path_str.into();
+}
 
 pub fn grapheme_width(slice: &RopeSlice) -> usize {
     if let Some(text) = slice.as_str() {

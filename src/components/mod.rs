@@ -6,7 +6,7 @@ pub mod theme;
 
 pub use buffer::{Buffer, BufferTask};
 pub use cursor::Cursor;
-pub use prompt::Prompt;
+pub use prompt::{Prompt, PromptTask};
 pub use splash::Splash;
 pub use theme::Theme;
 
@@ -25,6 +25,7 @@ pub type LaidComponentIds = SmallVec<[LaidComponentId; 16]>;
 
 pub enum TaskKind {
     Buffer(BufferTask),
+    Prompt(PromptTask),
 }
 
 pub type Scheduler<'pool> = task::Scheduler<'pool, Result<TaskKind>>;

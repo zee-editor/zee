@@ -169,7 +169,9 @@ impl Editor {
                     if let Err(err) = task_result.payload.as_ref() {
                         self.prompt.log_error(format!("{}", err));
                     }
-                    if let Some(component) = component_id.and_then(|component_id| self.components.get_mut(&component_id)) {
+                    if component_id == Some(PROMPT_ID) {
+                        self.prompt.task_done(task_result)?;
+                    } else if let Some(component) = component_id.and_then(|component_id| self.components.get_mut(&component_id)) {
                         component.task_done(task_result)?;
                     }
                     dirty = true; // notify_task_done should return whether we need to rerender
@@ -203,24 +205,21 @@ impl Editor {
 
     #[inline]
     fn draw(&mut self, screen: &mut Screen) {
+        let frame = Rect::new(Position::new(0, 0), screen.size());
+        self.lay_components(frame);
+
         let Self {
             ref mut components,
             ref mut task_owners,
             ref mut prompt,
-            ref mut laid_components,
             ref focus,
-            ref layout,
             ref themes,
             ref task_pool,
             ref current_path,
             theme_index,
             ..
         } = *self;
-        let frame = Rect::new(Position::new(0, 0), screen.size());
         let time = Instant::now();
-
-        laid_components.clear();
-        layout.compute(frame, &mut 1, laid_components);
         self.laid_components.iter().for_each(
             |&LaidComponentId {
                  id,
@@ -368,16 +367,15 @@ impl Editor {
             self.open_file(path)?;
         }
 
-        let mut layout = Layout::Component(PROMPT_ID);
-        mem::swap(&mut self.layout, &mut layout);
-        self.layout =
-            wrap_layout_with_prompt(self.prompt.height(), unwrap_prompt_from_layout(layout));
-
         Ok(())
     }
 
     #[inline]
     fn lay_components(&mut self, frame: Rect) {
+        let mut layout = Layout::Component(PROMPT_ID);
+        mem::swap(&mut self.layout, &mut layout);
+        self.layout =
+            wrap_layout_with_prompt(self.prompt.height(), unwrap_prompt_from_layout(layout));
         self.laid_components.clear();
         self.layout
             .compute(frame, &mut 1, &mut self.laid_components);
