@@ -73,6 +73,7 @@ impl HighlightRules {
                     continue;
                 }
 
+                // TODO: Are for loops over inclusive ranges slow?
                 for start in 0..=cmp::min(
                     node_stack.len().saturating_sub(selector_node_kinds.len()),
                     distance_to_match,

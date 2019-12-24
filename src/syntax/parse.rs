@@ -62,12 +62,17 @@ impl SyntaxTree {
         tree_fn: impl FnOnce() -> Rope,
     ) -> Result<()> {
         match (self.tree.as_ref(), self.current_parse_task.as_ref()) {
-            (None, None) => self.spawn_parse_task(scheduler, tree_fn()),
+            (None, None) => self.spawn_parse_task(scheduler, tree_fn(), true),
             _ => Ok(()),
         }
     }
 
-    pub fn spawn_parse_task(&mut self, scheduler: &mut Scheduler, text: Rope) -> Result<()> {
+    pub fn spawn_parse_task(
+        &mut self,
+        scheduler: &mut Scheduler,
+        text: Rope,
+        fresh: bool,
+    ) -> Result<()> {
         let mut parser =
             self.parsers
                 .pop()
@@ -80,17 +85,19 @@ impl SyntaxTree {
                     Ok(CancelableParser::new(parser))
                 })?;
 
-        let cancel_flag = parser.cancel_flag();
+        let cancel_flag = parser.cancel_flag().clone();
         let tree = self.tree.clone();
         let task_id = scheduler.spawn(move || {
             let maybe_tree = parser.parse_with(
                 &mut |byte_index, _| {
                     let (chunk, chunk_byte_idx, _, _) = text.chunk_at_byte(byte_index);
                     assert!(byte_index >= chunk_byte_idx);
+
                     &chunk.as_bytes()[byte_index - chunk_byte_idx..]
                 },
-                tree.as_ref(),
+                if fresh { None } else { tree.as_ref() },
             );
+            // Reset the parser for later reuse
             parser.reset();
             Ok(match maybe_tree {
                 Some(tree) => TaskKind::Buffer(BufferTask::ParseSyntax(ParserStatus {
@@ -113,8 +120,8 @@ impl SyntaxTree {
     pub fn handle_parse_syntax_done(&mut self, task_id: TaskId, status: ParserStatus) {
         let ParserStatus { parser, parsed } = status;
 
-        // Collect the parser for later use
-        parser.reset_cancel_flag();
+        // Collect the parser for later reuse
+        parser.cancel_flag().clear();
         self.parsers.push(parser);
 
         // If we weren't waiting for this task, return
@@ -130,7 +137,7 @@ impl SyntaxTree {
 
         // If the parser task hasn't been cancelled, store the new syntax tree
         if let Some(ParsedSyntax { tree, text }) = parsed {
-            assert!(tree.root_node().end_byte() <= text.len_bytes() + 1);
+            assert!(tree.root_node().end_byte() <= text.len_bytes());
             self.tree = Some(tree.clone());
         }
     }
@@ -173,7 +180,7 @@ impl OpaqueDiff {
     }
 
     #[inline]
-    pub fn no_diff() -> Self {
+    pub fn empty() -> Self {
         Self {
             byte_index: 0,
             old_length: 0,
@@ -184,6 +191,15 @@ impl OpaqueDiff {
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.byte_index == 0 && self.old_length == 0 && self.new_length == 0
+    }
+
+    #[inline]
+    pub fn reverse(&self) -> Self {
+        Self {
+            byte_index: self.byte_index,
+            old_length: self.new_length,
+            new_length: self.old_length,
+        }
     }
 }
 
@@ -253,6 +269,7 @@ impl<'a> SyntaxCursor<'a> {
     }
 }
 
+#[derive(Clone)]
 struct CancelFlag(Arc<AtomicUsize>);
 
 impl CancelFlag {
@@ -266,8 +283,10 @@ impl CancelFlag {
 }
 
 struct CancelableParser {
-    flag: CancelFlag,
     parser: Parser,
+    // `parser` should appear before `flag` as it holds a reference to the
+    // cancellation flag and should be destroyed first
+    flag: CancelFlag,
 }
 
 impl CancelableParser {
@@ -279,12 +298,8 @@ impl CancelableParser {
         Self { flag, parser }
     }
 
-    fn cancel_flag(&self) -> CancelFlag {
-        CancelFlag(Arc::clone(&self.flag.0))
-    }
-
-    fn reset_cancel_flag(&self) {
-        self.flag.clear();
+    fn cancel_flag(&self) -> &CancelFlag {
+        &self.flag
     }
 }
 

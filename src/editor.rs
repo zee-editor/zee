@@ -384,13 +384,16 @@ impl Editor {
     #[inline]
     fn cycle_focus(&mut self, frame: Rect, direction: CycleFocus) {
         self.lay_components(frame);
-        while let Some(index) = self.laid_components.iter().position(|laid| laid.id < 2) {
+        while let Some(index) = self
+            .laid_components
+            .iter()
+            .position(|laid| laid.id == SPLASH_ID || laid.id == PROMPT_ID)
+        {
             self.laid_components.swap_remove(index);
         }
         self.laid_components.sort_by_key(|laid| laid.frame_id);
 
-        let len_components = self.laid_components.len();
-        if len_components == 0 {
+        if self.laid_components.len() == 0 {
             self.focus = None
         } else {
             let index = self
@@ -405,7 +408,7 @@ impl Editor {
 
             let next_index = match direction {
                 CycleFocus::Next => index + 1,
-                CycleFocus::Previous => len_components + index - 1,
+                CycleFocus::Previous => self.laid_components.len() + index - 1,
             } % self.laid_components.len();
             self.focus = Some(self.laid_components[next_index].id);
         }

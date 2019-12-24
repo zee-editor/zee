@@ -1,5 +1,5 @@
 use crate::{
-    components::Cursor,
+    components::cursor::{CharIndex, Cursor},
     terminal::{Background, Style},
 };
 
@@ -29,13 +29,13 @@ pub struct Theme {
 pub fn text_style_at_char(
     theme: &Theme,
     cursor: &Cursor,
-    char_index: usize,
+    char_index: CharIndex,
     focused: bool,
     line_under_cursor: bool,
     scope: &str,
     is_error: bool,
 ) -> Style {
-    if cursor.range.contains(&char_index) {
+    if cursor.range().contains(&char_index) {
         if focused {
             theme.cursor_focused
         } else {

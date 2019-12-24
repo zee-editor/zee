@@ -8,6 +8,7 @@ mod smallstring;
 mod syntax;
 mod task;
 mod terminal;
+mod undo;
 mod utils;
 
 use clap;

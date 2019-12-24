@@ -8,7 +8,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use super::{Component, Context, Cursor, Position, Rect, Scheduler, Size, TaskKind, TaskResult};
+use super::{
+    cursor::{CharIndex, Cursor},
+    Component, Context, Position, Rect, Scheduler, Size, TaskKind, TaskResult,
+};
 use crate::{
     error::{Error, Result},
     task::TaskId,
@@ -221,11 +224,11 @@ impl Component for Prompt {
             &prefix,
         );
 
-        let mut char_index = 0;
+        let mut char_index = CharIndex(0);
         let mut screen_x = context.frame.origin.x + prefix_offset;
         let screen_y = context.frame.origin.y + self.height() - 1;
         for grapheme in RopeGraphemes::new(&self.input.slice(..)) {
-            let style = if self.is_active() && self.cursor.range.contains(&char_index) {
+            let style = if self.is_active() && self.cursor.range().contains(&char_index) {
                 theme.cursor
             } else {
                 theme.input
@@ -238,7 +241,7 @@ impl Component for Prompt {
                 screen.draw_rope_slice(screen_x, screen_y, style, &grapheme);
             }
 
-            char_index += grapheme.len_chars();
+            char_index.0 += grapheme.len_chars();
             screen_x += grapheme_width;
         }
     }
