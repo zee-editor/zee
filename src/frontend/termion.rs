@@ -1,25 +1,22 @@
 use crossbeam_channel::{self, Receiver};
 use std::{
     fmt::{self, Display, Formatter},
-    io::{self, BufWriter, Stdout, Write},
-};
-use std::{
-    io::Read,
+    io::{self, BufWriter, Read, Stdout, Write},
     thread::{self, JoinHandle},
 };
 use termion::{
     self,
     cursor::Goto,
+    event::Key as TermionKey,
+    input::TermRead,
     raw::{IntoRawMode, RawTerminal},
     screen::AlternateScreen,
 };
-use termion::{event::Key as TermionKey, input::TermRead};
 
-use super::Frontend;
-use crate::{
-    error::Result,
-    terminal::{screen::Textel, Colour, Key, Screen, Size, Style},
-};
+use super::{Frontend, Result};
+use crate::terminal::{screen::Textel, Colour, Key, Screen, Size, Style};
+
+pub type Error = std::io::Error;
 
 pub struct Termion {
     target: AlternateScreen<RawTerminal<BufWriter<Stdout>>>,
@@ -37,19 +34,16 @@ impl Termion {
             input: Input::from_reader(termion::get_tty()?),
         })
     }
-
-    #[inline]
-    pub fn goto(x: u16, y: u16) -> Goto {
-        Goto(x + 1, y + 1)
-    }
 }
 
 impl Frontend for Termion {
+    #[inline]
     fn size(&self) -> Result<Size> {
         let (width, height) = termion::terminal_size()?;
         Ok(Size::new(width as usize, height as usize))
     }
 
+    #[inline]
     fn present(&mut self, screen: &Screen) -> Result<()> {
         let Self { ref mut target, .. } = *self;
 
@@ -61,7 +55,9 @@ impl Frontend for Termion {
             .chunks(screen.size().width)
             .enumerate()
             .try_for_each(|(y, line)| {
-                write!(target, "{}", Self::goto(0, y as u16))?;
+                // Go to the begining of line (`Goto` uses 1-based indexing)
+                write!(target, "{}", Goto(1, (y + 1) as u16))?;
+
                 line.iter().try_for_each(|textel| -> Result<()> {
                     if let Some(Textel {
                         ref style,
@@ -82,6 +78,7 @@ impl Frontend for Termion {
         Ok(())
     }
 
+    #[inline]
     fn events(&self) -> &Receiver<Key> {
         &self.input.receiver
     }
@@ -178,6 +175,7 @@ impl Drop for Input {
     }
 }
 
+#[inline]
 fn map_key(key: TermionKey) -> Key {
     match key {
         TermionKey::Backspace => Key::Backspace,

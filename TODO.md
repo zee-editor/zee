@@ -1,0 +1,38 @@
+# TODO List
+ - [ ] Add frontend based on `crossterm`
+ - [ ] Comment / uncomment region
+ - [ ] Should pressing Enter in file picker open the file? (new files)
+ - [ ] Alt-f Alt-b (symbol left/right)
+ - [ ] Autoindent
+ - [ ] rustfmt on save
+ - [ ] flake8 errors on save
+ - [ ] Goto line
+ - [ ] search
+ - [ ] regex search
+ - [ ] Input controller (and more emacs-y key bindings)
+ - [ ] Undo / redo
+ - [ ] Intuitive change of focus when closing windows
+ - [ ] Copy / paste to X (behind feature flag?)
+ - [ ] Copy / paste between different buffers (clipboard in context)
+ - [x] Show current git branch in buffers
+ - [x] File picker looks at the whole repo (if in repo, otherwise current dir)
+ - [x] File name doesn't contain the full path
+ - [x] File finder (fuzzy matching, new files, list selection)
+ - [x] Re-use tree cursors when drawing text
+ - [x] Correctly sync up edits with the parse tree
+ - [x] Cancel running tree sitter parsers on further edits
+ - [x] Tree-sitter async syntax highlighting
+ - [x] Support for arrow keys (investigate termion issue)
+ - [x] Copy/paste and selection
+ - [x] Fix visual cursor at the end of buffer
+ - [x] Remove trailing whitespace on save
+ - [x] Highlight current line in a buffer
+ - [x] Ability to split / close buffers and change focus
+ - [x] Async save
+ - [x] Splash screen
+ - [x] Position in file indicator
+ - [x] Proper vertical cursor movement
+ - [x] Copy paste should be fast (only redraw if enough time has passed?)
+ - [x] Add `Component` trait
+ - [x] Command prompt
+ - [x] Multiple buffers (horizontal/vertical split)
