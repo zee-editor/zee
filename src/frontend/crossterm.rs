@@ -67,7 +67,7 @@ impl Frontend for Crossterm {
                 })
             })?;
 
-        target.flush()?;
+        target.flush().map_err(Error::from)?;
         Ok(())
     }
 
@@ -195,6 +195,5 @@ fn map_key(key: crossterm::event::KeyEvent) -> Key {
         KeyCode::Char(char) => Key::Char(char),
         KeyCode::Enter => Key::Char('\n'),
         KeyCode::Tab => Key::Char('\t'),
-        _ => panic!("Unknown termion key event: {:?}", key),
     }
 }
