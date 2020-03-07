@@ -164,7 +164,7 @@ impl Editor {
 
             select! {
                 recv(self.task_pool.receiver) -> task_result => {
-                    let task_result = task_result.unwrap();
+                    let task_result = task_result.map_err(anyhow::Error::from)?;
                     let component_id = self.task_owners.remove(&task_result.id);
                     if let Err(err) = task_result.payload.as_ref() {
                         self.prompt.log_error(format!("{}", err));
@@ -177,7 +177,7 @@ impl Editor {
                     dirty = true; // notify_task_done should return whether we need to rerender
                 }
                 recv(frontend.events()) -> event => {
-                    match event.unwrap() {
+                    match event.map_err(anyhow::Error::from)? {
                         Key::Ctrl('c') => {
                             return Ok(PollState::Exit);
                         }

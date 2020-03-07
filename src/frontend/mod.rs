@@ -1,12 +1,14 @@
 pub mod termion;
-pub use self::termion::Termion;
-use std::fmt::{self, Display};
 
 #[cfg(feature = "frontend-crossterm")]
 pub mod crossterm;
 
-use crate::terminal::{Key, Screen, Size};
 use crossbeam_channel::Receiver;
+use thiserror::Error;
+
+pub use self::termion::Termion;
+
+use crate::terminal::{Key, Screen, Size};
 
 pub trait Frontend {
     fn size(&self) -> Result<Size>;
@@ -18,28 +20,12 @@ pub trait Frontend {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum Error {
-    Termion(termion::Error),
+    #[error(transparent)]
+    Termion(#[from] termion::Error),
 
     #[cfg(feature = "frontend-crossterm")]
-    Crossterm(crossterm::Error),
-}
-
-impl Display for Error {
-    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        write!(formatter, "{:?}", self)
-    }
-}
-
-impl From<termion::Error> for Error {
-    fn from(error: termion::Error) -> Self {
-        Self::Termion(error)
-    }
-}
-
-impl From<crossterm::Error> for Error {
-    fn from(error: crossterm::Error) -> Self {
-        Self::Crossterm(error)
-    }
+    #[error(transparent)]
+    Crossterm(#[from] crossterm::Error),
 }

@@ -5,6 +5,7 @@ authors = ["Marius Cobzarenco <marius@reinfer.io>"]
 edition = "2018"
 
 [dependencies]
+anyhow = "1.0.26"
 clap = "2.33.0"
 crossbeam-channel = "0.4.0"
 dirs = "2.0.2"
@@ -20,6 +21,7 @@ size_format = "1.0.2"
 smallvec = "1.0.0"
 structopt = "0.3.4"
 termion = "1.5.3"
+thiserror = "1.0.11"
 tree-sitter = "0.5.0"
 unicode-segmentation = "1.6.0"
 unicode-width = "0.1.6"
