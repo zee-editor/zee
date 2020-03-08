@@ -10,14 +10,16 @@ use std::{
 
 use super::{
     cursor::{CharIndex, Cursor},
-    Component, Context, Position, Rect, Scheduler, Size, TaskKind, TaskResult,
+    Component, Context, Position, Rect, Size, TaskDone,
 };
 use crate::{
     error::{Error, Result},
-    task::TaskId,
+    task::{self, TaskId},
     terminal::{Background, Foreground, Key, Screen, Style},
     utils::{self, RopeGraphemes},
 };
+
+type Scheduler<'pool> = task::Scheduler<'pool, Result<PromptTask>>;
 
 #[derive(Clone, Debug)]
 pub struct Theme {
@@ -105,7 +107,7 @@ impl Prompt {
         let mut file_picker = self.file_picker.clone();
         self.file_picker_task = Some(scheduler.spawn(move || {
             pick_from_directory(&mut file_picker, path_str)?;
-            Ok(TaskKind::Prompt(PromptTask { file_picker }))
+            Ok(PromptTask { file_picker })
         })?);
         Ok(())
     }
@@ -115,7 +117,7 @@ impl Prompt {
         let mut file_picker = self.file_picker.clone();
         self.file_picker_task = Some(scheduler.spawn(move || {
             pick_from_repository(&mut file_picker, path_str)?;
-            Ok(TaskKind::Prompt(PromptTask { file_picker }))
+            Ok(PromptTask { file_picker })
         })?);
         Ok(())
     }
@@ -172,6 +174,8 @@ fn directory_files_iter(path: impl AsRef<Path>) -> Result<impl Iterator<Item = R
 }
 
 impl Component for Prompt {
+    type TaskPayload = Result<PromptTask>;
+
     #[inline]
     fn draw(&mut self, screen: &mut Screen, _: &mut Scheduler, context: &Context) {
         let theme = &context.theme.prompt;
@@ -367,11 +371,11 @@ impl Component for Prompt {
         Ok(())
     }
 
-    fn task_done(&mut self, task_result: TaskResult) -> Result<()> {
-        let task_id = task_result.id;
-        let payload = task_result.payload?;
+    fn task_done(&mut self, task: TaskDone<Self::TaskPayload>) -> Result<()> {
+        let task_id = task.id;
+        let payload = task.payload?;
         match payload {
-            TaskKind::Prompt(PromptTask { file_picker })
+            PromptTask { file_picker }
                 if self
                     .file_picker_task
                     .map(|expected| expected == task_id)
@@ -380,8 +384,7 @@ impl Component for Prompt {
                 self.file_picker_task = None;
                 self.file_picker = file_picker;
             }
-            TaskKind::Prompt(_) => {}
-            _ => unreachable!(),
+            _ => {}
         }
         Ok(())
     }

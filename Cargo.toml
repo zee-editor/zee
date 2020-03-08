@@ -24,6 +24,7 @@ smallvec = "1.0.0"
 structopt = "0.3.4"
 thiserror = "1.0.11"
 tree-sitter = "0.6.3"
+ttmap = "0.1.0"
 unicode-segmentation = "1.6.0"
 unicode-width = "0.1.6"
 

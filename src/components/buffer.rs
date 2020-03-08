@@ -16,7 +16,7 @@ use zee_highlight::SelectorNodeId;
 use super::{
     cursor::{CharIndex, Cursor},
     theme::Theme as EditorTheme,
-    Component, Context, Scheduler, TaskKind, TaskResult,
+    Component, Context, TaskDone,
 };
 use crate::{
     error::Result,
@@ -25,10 +25,13 @@ use crate::{
         highlight::{text_style_at_char, Theme as SyntaxTheme},
         parse::{NodeTrace, OpaqueDiff, ParserStatus, SyntaxCursor, SyntaxTree},
     },
+    task,
     terminal::{Key, Position, Rect, Screen, Size, Style},
     undo::UndoTree,
     utils::{self, strip_trailing_whitespace, RopeGraphemes, TAB_WIDTH},
 };
+
+pub type Scheduler<'pool> = task::Scheduler<'pool, Result<BufferTask>>;
 
 #[derive(Clone, Debug)]
 pub struct Theme {
@@ -107,7 +110,7 @@ impl Buffer {
             scheduler.spawn(move || {
                 let text = strip_trailing_whitespace(text);
                 text.write_to(BufWriter::new(File::create(&file_path)?))?;
-                Ok(TaskKind::Buffer(BufferTask::SaveFile { text }))
+                Ok(BufferTask::SaveFile { text })
             })?;
         }
 
@@ -464,6 +467,8 @@ impl Buffer {
 }
 
 impl Component for Buffer {
+    type TaskPayload = Result<BufferTask>;
+
     fn draw(&mut self, screen: &mut Screen, scheduler: &mut Scheduler, context: &Context) {
         {
             let Self {
@@ -624,25 +629,22 @@ impl Component for Buffer {
         Ok(())
     }
 
-    fn task_done(&mut self, task_result: TaskResult) -> Result<()> {
-        let task_id = task_result.id;
-        let payload = task_result.payload?;
-        match payload {
-            TaskKind::Buffer(BufferTask::SaveFile { text: new_text }) => {
+    fn task_done(&mut self, task: TaskDone<Self::TaskPayload>) -> Result<()> {
+        let task_id = task.id;
+        match task.payload? {
+            BufferTask::SaveFile { text: new_text } => {
                 self.cursor.sync(&self.text, &new_text);
                 self.text
                     .new_revision(OpaqueDiff::empty(), self.cursor.clone());
                 *self.text = new_text.clone();
                 self.has_unsaved_changes = ModifiedStatus::Unchanged;
             }
-            TaskKind::Buffer(BufferTask::ParseSyntax(parsed)) => {
+            BufferTask::ParseSyntax(parsed) => {
                 self.syntax
                     .as_mut()
                     .map(|syntax| syntax.handle_parse_syntax_done(task_id, parsed));
             }
-            _ => unreachable!(),
         }
-
         Ok(())
     }
 

@@ -15,7 +15,7 @@ use std::{cmp, path::Path, time::Instant};
 
 use crate::{
     error::Result,
-    task,
+    task::{self, TaskDone},
     terminal::{screen::Screen, Key, Position, Rect, Size},
 };
 
@@ -23,13 +23,7 @@ pub type ComponentId = usize;
 pub type FrameId = usize;
 pub type LaidComponentIds = SmallVec<[LaidComponentId; 16]>;
 
-pub enum TaskKind {
-    Buffer(BufferTask),
-    Prompt(PromptTask),
-}
-
-pub type Scheduler<'pool> = task::Scheduler<'pool, Result<TaskKind>>;
-pub type TaskResult = task::TaskResult<Result<TaskKind>>;
+pub use task::Scheduler;
 
 #[derive(Debug, Clone)]
 pub struct Context<'t> {
@@ -66,18 +60,26 @@ impl<'t> Context<'t> {
 }
 
 pub trait Component {
-    fn draw(&mut self, _screen: &mut Screen, _scheduler: &mut Scheduler, _context: &Context) {}
+    type TaskPayload;
+
+    fn draw(
+        &mut self,
+        _screen: &mut Screen,
+        _scheduler: &mut Scheduler<Self::TaskPayload>,
+        _context: &Context,
+    ) {
+    }
 
     fn handle_event(
         &mut self,
         _key: Key,
-        _scheduler: &mut Scheduler,
+        _scheduler: &mut Scheduler<Self::TaskPayload>,
         _context: &Context,
     ) -> Result<()> {
         Ok(())
     }
 
-    fn task_done(&mut self, _task: TaskResult) -> Result<()> {
+    fn task_done(&mut self, _task: TaskDone<Self::TaskPayload>) -> Result<()> {
         Ok(())
     }
 

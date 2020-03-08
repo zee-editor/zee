@@ -1,15 +1,3 @@
-use crate::{
-    components::{
-        prompt::Command,
-        theme::{Theme, THEMES},
-        Buffer, Component, ComponentId, Context, Flex, LaidComponentId, LaidComponentIds, Layout,
-        LayoutDirection, LayoutNode, LayoutNodeFlex, Prompt, Splash, TaskKind,
-    },
-    error::{Error, Result},
-    frontend::Frontend,
-    task::{TaskId, TaskPool},
-    terminal::{Key, Position, Rect, Screen},
-};
 use crossbeam_channel::select;
 use std::{
     cmp,
@@ -18,26 +6,48 @@ use std::{
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
+use ttmap::TypeMap;
 
-pub(crate) struct Editor {
-    components: HashMap<ComponentId, Box<dyn Component>>,
-    task_owners: HashMap<TaskId, ComponentId>,
+use crate::{
+    components::{
+        prompt::Command,
+        theme::{Theme, THEMES},
+        Buffer, Component, ComponentId, Context, Flex, LaidComponentId, LaidComponentIds, Layout,
+        LayoutDirection, LayoutNode, LayoutNodeFlex, Prompt, Splash,
+    },
+    error::{Error, Result},
+    frontend::Frontend,
+    task::{TaskId, TaskPool},
+    terminal::{Key, Position, Rect, Screen},
+};
+
+type Components<T> = HashMap<ComponentId, T>;
+type Buffers = Components<Buffer>;
+
+pub struct Editor {
+    // Components
+    components: TypeMap,
+    prompt: Prompt,
+
+    // Components book keeping
     layout: Layout,
     laid_components: LaidComponentIds,
-    next_component_id: ComponentId,
+    task_owners: HashMap<TaskId, ComponentId>,
     focus: Option<usize>,
-    prompt: Prompt,
-    task_pool: TaskPool<Result<TaskKind>>,
+    next_component_id: ComponentId,
+    task_pool: TaskPool,
+    current_path: PathBuf,
+
+    // Theme palettes and currently selected theme
     themes: &'static [(Theme, &'static str); 30],
     theme_index: usize,
-    current_path: PathBuf,
 }
 
 impl Editor {
-    pub fn new(current_path: PathBuf, task_pool: TaskPool<Result<TaskKind>>) -> Self {
+    pub fn new(current_path: PathBuf, task_pool: TaskPool) -> Self {
         let prompt = Prompt::new();
         Self {
-            components: HashMap::with_capacity(8),
+            components: TypeMap::new(),
             task_owners: HashMap::with_capacity(8),
             layout: wrap_layout_with_prompt(prompt.height(), None),
             laid_components: LaidComponentIds::new(),
@@ -51,12 +61,16 @@ impl Editor {
         }
     }
 
-    pub fn add_component(&mut self, component: impl Component + 'static) -> ComponentId {
+    fn add_component<ComponentT>(&mut self, component: ComponentT) -> ComponentId
+    where
+        ComponentT: Component + 'static,
+    {
         let component_id = self.next_component_id;
         self.next_component_id += 1;
 
         self.components
-            .insert(component_id, Box::new(component) as Box<dyn Component>);
+            .get_or_default::<Components<ComponentT>>()
+            .insert(component_id, component);
         self.focus.get_or_insert(component_id);
 
         let mut layout = Layout::Component(PROMPT_ID);
@@ -164,15 +178,23 @@ impl Editor {
 
             select! {
                 recv(self.task_pool.receiver) -> task_result => {
+                    let Self {
+                        ref mut components,
+                        ref mut task_owners,
+                        ref mut prompt,
+                        ..
+                    } = *self;
                     let task_result = task_result.map_err(anyhow::Error::from)?;
-                    let component_id = self.task_owners.remove(&task_result.id);
-                    if let Err(err) = task_result.payload.as_ref() {
-                        self.prompt.log_error(format!("{}", err));
-                    }
+                    let component_id = task_owners.remove(&task_result.id);
                     if component_id == Some(PROMPT_ID) {
-                        self.prompt.task_done(task_result)?;
-                    } else if let Some(component) = component_id.and_then(|component_id| self.components.get_mut(&component_id)) {
-                        component.task_done(task_result)?;
+                        if let Err(err) = prompt.task_done(task_result.unwrap_prompt()) {
+                            prompt.log_error(format!("{}", err));
+                        }
+                    } else if let Some(component) = component_id.and_then(
+                        |component_id| components.get_or_default::<Buffers>().get_mut(&component_id)) {
+                        if let Err(err) = component.task_done(task_result.unwrap_buffer()) {
+                            prompt.log_error(format!("{}", err));
+                        }
                     }
                     dirty = true; // notify_task_done should return whether we need to rerender
                 }
@@ -234,23 +256,29 @@ impl Editor {
                     theme: &themes[theme_index].0,
                     path: current_path.as_path(),
                 };
-                let mut scheduler = task_pool.scheduler();
 
                 if id == PROMPT_ID {
+                    let mut scheduler = task_pool.scheduler();
                     prompt.draw(screen, &mut scheduler, &context)
                 } else if id == SPLASH_ID {
+                    let mut scheduler = task_pool.scheduler();
                     Splash::default().draw(screen, &mut scheduler, &context)
                 } else {
-                    components.get_mut(&id).unwrap().draw(
-                        screen,
-                        &mut scheduler,
-                        &context.set_focused(
-                            focus
-                                .as_ref()
-                                .map(|focused_id| *focused_id == id && !prompt.is_active())
-                                .unwrap_or(false),
-                        ),
-                    );
+                    let mut scheduler = task_pool.scheduler();
+                    components
+                        .get_or_default::<Buffers>()
+                        .get_mut(&id)
+                        .unwrap()
+                        .draw(
+                            screen,
+                            &mut scheduler,
+                            &context.set_focused(
+                                focus
+                                    .as_ref()
+                                    .map(|focused_id| *focused_id == id && !prompt.is_active())
+                                    .unwrap_or(false),
+                            ),
+                        );
                     for task_id in scheduler.scheduled() {
                         task_owners.insert(task_id, id);
                     }
@@ -317,7 +345,8 @@ impl Editor {
                      -> Result<()> {
                         if id_with_focus == id {
                             let mut scheduler = task_pool.scheduler();
-                            let component = components.get_mut(&id).unwrap();
+                            let component =
+                                components.get_or_default::<Buffers>().get_mut(&id).unwrap();
                             if let Some(path) = component.path() {
                                 *current_path = path.canonicalize()?;
                             }

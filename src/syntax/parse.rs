@@ -13,7 +13,7 @@ use tree_sitter::{
 };
 
 use crate::{
-    components::{buffer::BufferTask, Scheduler, TaskKind},
+    components::buffer::{BufferTask, Scheduler},
     error::{Error, Result},
     smallstring::SmallString,
     task::TaskId,
@@ -100,14 +100,14 @@ impl SyntaxTree {
             // Reset the parser for later reuse
             parser.reset();
             Ok(match maybe_tree {
-                Some(tree) => TaskKind::Buffer(BufferTask::ParseSyntax(ParserStatus {
+                Some(tree) => BufferTask::ParseSyntax(ParserStatus {
                     parser,
                     parsed: Some(ParsedSyntax { tree, text }),
-                })),
-                None => TaskKind::Buffer(BufferTask::ParseSyntax(ParserStatus {
+                }),
+                None => BufferTask::ParseSyntax(ParserStatus {
                     parser,
                     parsed: None,
-                })),
+                }),
             })
         })?;
         if let Some((_, old_cancel_flag)) = self.current_parse_task.as_ref() {

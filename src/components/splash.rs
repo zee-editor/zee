@@ -1,8 +1,5 @@
 use super::{Component, Context, Scheduler};
-use crate::{
-    error::Result,
-    terminal::{Screen, Style},
-};
+use crate::terminal::{Screen, Style};
 
 #[derive(Clone, Debug)]
 pub struct Theme {
@@ -15,8 +12,15 @@ pub struct Theme {
 pub struct Splash;
 
 impl Component for Splash {
+    type TaskPayload = ();
+
     #[inline]
-    fn draw(&mut self, screen: &mut Screen, _: &mut Scheduler, context: &Context) {
+    fn draw(
+        &mut self,
+        screen: &mut Screen,
+        _: &mut Scheduler<Self::TaskPayload>,
+        context: &Context,
+    ) {
         let theme = &context.theme.splash;
 
         screen.clear_region(context.frame, theme.logo);
