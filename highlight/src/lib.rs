@@ -24,7 +24,7 @@ pub struct HighlightRules {
     rules: Vec<HighlightRule>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct HighlightRule {
     selectors: Vec<Selector>,
     scope: ScopePattern,
@@ -173,7 +173,9 @@ fn build_node_to_selector_id_maps(
     let node_id_range =
         0..u16::try_from(language.node_kind_count()).expect("node_kind_count() should fit in u16");
     for node_id in node_id_range {
-        let node_name = language.node_kind_for_id(node_id);
+        let node_name = language
+            .node_kind_for_id(node_id)
+            .expect("node kind available for node_id in range");
         let next_selector_id =
             SelectorNodeId(u16::try_from(node_name_to_selector_id.len()).unwrap());
         let selector_id = node_name_to_selector_id
@@ -182,11 +184,11 @@ fn build_node_to_selector_id_maps(
         node_id_to_selector_id.insert(node_id, *selector_id);
     }
 
-    // eprintln!(
+    // log::debug!(
     //     "NKC: {}, name->sid: {}, nid->sid: {}",
     //     language.node_kind_count(),
     //     node_name_to_selector_id.len(),
-    //     node_id_to_selector_id.len()
+    //     node_id_to_selector_id.len(),
     // );
 
     (node_name_to_selector_id, node_id_to_selector_id)
