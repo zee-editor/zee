@@ -2,6 +2,9 @@
 name = "zee-grammar"
 version = "0.1.0"
 authors = ["Marius Cobzarenco <marius@reinfer.io>"]
+description = "Wrappers for tree sitter grammars used by zee"
+homepage = "https://github.com/mcobzarenco/zee/tree/master/grammar"
+license = "Apache-2.0"
 edition = "2018"
 
 [dependencies]

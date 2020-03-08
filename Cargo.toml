@@ -2,6 +2,10 @@
 name = "zee"
 version = "0.1.0"
 authors = ["Marius Cobzarenco <marius@reinfer.io>"]
+description = "A modern editor for the terminal"
+readme = "README.md"
+homepage = "https://github.com/mcobzarenco/zee"
+license = "Apache-2.0"
 edition = "2018"
 
 [dependencies]
@@ -29,8 +33,8 @@ unicode-segmentation = "1.6.0"
 unicode-width = "0.1.6"
 
 # Local crates
-zee-grammar = { path = "grammar" }
-zee-highlight = { path = "highlight" }
+zee-grammar = { version = "0.1.0", path = "grammar" }
+zee-highlight = { version = "0.1.0", path = "highlight" }
 
 # Optional dependencies
 crossterm = { version = "0.14.2", optional = true}
