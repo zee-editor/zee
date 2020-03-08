@@ -33,6 +33,23 @@ extern "C" {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
-    fn it_works() {}
+    fn instantiate_all_languages() {
+        unsafe {
+            tree_sitter_bash();
+            tree_sitter_c();
+            tree_sitter_cpp();
+            tree_sitter_css();
+            tree_sitter_html();
+            tree_sitter_javascript();
+            tree_sitter_json();
+            tree_sitter_markdown();
+            tree_sitter_python();
+            tree_sitter_rust();
+            tree_sitter_typescript();
+            tree_sitter_tsx();
+        }
+    }
 }
