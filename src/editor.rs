@@ -122,7 +122,7 @@ impl Editor {
                     let now = Instant::now();
                     frontend.present(&screen)?;
                     last_drawn = Instant::now();
-                    eprintln!(
+                    log::debug!(
                         "Drawn in {:?} | Presented in {:?} | average drawn {:.2}",
                         drawn_time,
                         now.elapsed(),

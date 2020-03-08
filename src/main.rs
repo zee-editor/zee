@@ -12,6 +12,7 @@ mod undo;
 mod utils;
 
 use clap;
+use flexi_logger::{opt_format, Logger};
 use std::{env, path::PathBuf};
 use structopt::StructOpt;
 
@@ -56,7 +57,18 @@ fn run_editor_ui_loop(frontend_kind: &FrontendKind, mut editor: Editor) -> Resul
     }
 }
 
+fn configure_logging() -> Result<()> {
+    Logger::with_env_or_str("myprog=debug, mylib=debug")
+        .log_to_file()
+        .format(opt_format)
+        .suppress_timestamp()
+        .start()
+        .map_err(anyhow::Error::from)?;
+    Ok(())
+}
+
 fn main() -> Result<()> {
+    configure_logging()?;
     let args = Args::from_args();
     let current_dir = env::current_dir()?;
     let mut editor = Editor::new(current_dir, TaskPool::new()?);
