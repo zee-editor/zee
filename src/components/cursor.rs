@@ -42,14 +42,6 @@ impl Cursor {
         }
     }
 
-    pub fn start_of_buffer(text: &Rope) -> Self {
-        Self {
-            range: CharIndex(0)..next_grapheme_boundary(&text.slice(..), CharIndex(0)),
-            visual_horizontal_offset: None,
-            selection: None,
-        }
-    }
-
     pub fn end_of_buffer(text: &Rope) -> Self {
         Self {
             range: prev_grapheme_boundary(&text.slice(..), CharIndex(text.len_chars()))

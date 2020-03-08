@@ -1,8 +1,5 @@
 use ropey::Rope;
-use std::{
-    cmp,
-    ops::{Deref, DerefMut, Range},
-};
+use std::ops::{Deref, DerefMut};
 
 use crate::{components::cursor::Cursor, syntax::OpaqueDiff, utils};
 
@@ -52,7 +49,6 @@ impl UndoTree {
             }),
         });
         self.parent_revision_index = self.revisions.len() - 1;
-        // eprintln!("New revision: {:?}", self.head);
     }
 
     pub fn undo(&mut self) -> Option<(OpaqueDiff, Cursor)> {
