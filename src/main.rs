@@ -39,6 +39,10 @@ struct Args {
     /// What frontend to use. Depending on how features enabled at compile time,
     /// one of: termion, crossterm
     frontend_kind: FrontendKind,
+
+    #[structopt(long = "log")]
+    /// Enable debug logging to `zee.log` file
+    enable_logging: bool,
 }
 
 fn run_editor_ui_loop(frontend_kind: &FrontendKind, mut editor: Editor) -> Result<()> {
@@ -68,8 +72,10 @@ fn configure_logging() -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    configure_logging()?;
     let args = Args::from_args();
+    if args.enable_logging {
+        configure_logging()?;
+    }
     let current_dir = env::current_dir()?;
     let mut editor = Editor::new(current_dir, TaskPool::new()?);
     for file_path in args.files.iter() {
