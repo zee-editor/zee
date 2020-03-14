@@ -1,6 +1,6 @@
 [package]
 name = "zee-highlight"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Marius Cobzarenco <marius@reinfer.io>"]
 description = "Utility for highlighting source code with CSS-like rules used by zee"
 homepage = "https://github.com/mcobzarenco/zee/tree/master/highlight"

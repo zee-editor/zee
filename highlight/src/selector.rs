@@ -82,7 +82,7 @@ pub(crate) fn map_node_kind_names(
                                 .unwrap_or(NTH_CHILD_ANY),
                         );
                     })
-                    .ok_or(Error::NodeKindNotFound(node_kind.into()))
+                    .ok_or_else(|| Error::NodeKindNotFound(node_kind))
             },
         )
         .map(|_| Selector {
@@ -143,6 +143,7 @@ fn identifier(input: &str) -> IResult<&str, &str> {
     ))(input)
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
 

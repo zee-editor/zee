@@ -1253,7 +1253,7 @@ dependencies = [
  "unicode-segmentation 1.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "unicode-width 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "zee-grammar 0.1.0",
- "zee-highlight 0.1.0",
+ "zee-highlight 0.1.1",
 ]
 
 [[package]]
@@ -1267,7 +1267,7 @@ dependencies = [
 
 [[package]]
 name = "zee-highlight"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "fnv 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",

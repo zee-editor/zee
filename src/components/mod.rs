@@ -11,7 +11,12 @@ pub use splash::Splash;
 pub use theme::Theme;
 
 use smallvec::{smallvec, SmallVec};
-use std::{cmp, collections::hash_map::HashMap, path::Path, time::Instant};
+use std::{
+    cmp::{self, Ordering},
+    collections::hash_map::HashMap,
+    path::Path,
+    time::Instant,
+};
 
 use crate::{
     error::Result,
@@ -209,10 +214,10 @@ pub enum LayoutDirection {
 
 impl LayoutDirection {
     #[inline]
-    fn dimension(&self, size: Size) -> usize {
+    fn dimension(self, size: Size) -> usize {
         match self {
-            &LayoutDirection::Horizontal => size.width,
-            &LayoutDirection::Vertical => size.height,
+            LayoutDirection::Horizontal => size.width,
+            LayoutDirection::Vertical => size.height,
         }
     }
 }
@@ -351,10 +356,14 @@ impl<Action: Clone> Bindings<Action> for HashBindings<Action> {
                 .zip(pressed.iter())
                 .all(|(lhs, rhs)| *lhs == *rhs);
             if is_match {
-                if pressed.len() < binding.len() {
-                    return BindingMatch::Prefix;
-                } else if pressed.len() == binding.len() {
-                    return BindingMatch::Full(action.clone());
+                match pressed.len().cmp(&binding.len()) {
+                    Ordering::Less => {
+                        return BindingMatch::Prefix;
+                    }
+                    Ordering::Equal => {
+                        return BindingMatch::Full(action.clone());
+                    }
+                    _ => {}
                 }
             }
         }

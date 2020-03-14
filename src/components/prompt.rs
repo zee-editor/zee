@@ -236,7 +236,7 @@ fn repository_files_iter(path: impl AsRef<Path>) -> impl Iterator<Item = Result<
                 Some(
                     entry
                         .map(|entry| entry.path().to_path_buf())
-                        .map_err(|error| Error::FilePicker(error)),
+                        .map_err(Error::FilePicker),
                 )
             } else {
                 None
@@ -533,7 +533,7 @@ impl FilePicker {
                 .fuzzy_match(&file.to_string_lossy(), filter.trim())
                 .map(|score| (index, score))
         }));
-        &mut filtered.sort_unstable_by_key(|(_, score)| -score);
+        filtered.sort_unstable_by_key(|(_, score)| -score);
     }
 
     fn clear(&mut self) {
@@ -575,7 +575,7 @@ impl FilePicker {
     }
 
     fn selected(&self) -> Option<&Path> {
-        if self.filtered.len() > 0 {
+        if !self.filtered.is_empty() {
             Some(&self.paths[self.filtered[self.selected].0])
         } else {
             None

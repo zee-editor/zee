@@ -385,7 +385,8 @@ impl Editor {
                         let component =
                             components.get_or_default::<Buffers>().get_mut(&id).unwrap();
                         if let Some(path) = component.path() {
-                            *current_path = path.canonicalize().unwrap_or(path.to_path_buf());
+                            *current_path =
+                                path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
                         }
                         let binding_match = component
                             .bindings()
@@ -506,7 +507,7 @@ impl Editor {
         }
         self.laid_components.sort_by_key(|laid| laid.frame_id);
 
-        if self.laid_components.len() == 0 {
+        if self.laid_components.is_empty() {
             self.focus = None
         } else {
             let index = self

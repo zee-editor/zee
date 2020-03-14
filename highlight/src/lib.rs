@@ -35,10 +35,10 @@ impl HighlightRules {
     pub fn get_selector_node_id(&self, node_kind_id: u16) -> SelectorNodeId {
         self.node_id_to_selector_id
             .get(&node_kind_id)
-            .map(|value| *value)
-            .unwrap_or(SelectorNodeId(
-                u16::try_from(self.node_id_to_selector_id.len()).unwrap(),
-            ))
+            .copied()
+            .unwrap_or_else(|| {
+                SelectorNodeId(u16::try_from(self.node_id_to_selector_id.len()).unwrap())
+            })
     }
 
     #[inline]
@@ -68,7 +68,7 @@ impl HighlightRules {
                 // eprintln!("NST {:?} {:?}", node_stack, nth_children);
                 // eprintln!("SEL {:?} {:?}", selector_node_kinds, selector_nth_children);
 
-                assert!(selector_node_kinds.len() > 0);
+                assert!(!selector_node_kinds.is_empty());
                 if selector_node_kinds.len() > node_stack.len() {
                     continue;
                 }
@@ -135,7 +135,7 @@ pub struct RawHighlightRules {
 }
 
 impl RawHighlightRules {
-    fn compile(self, language: &Language) -> Result<HighlightRules> {
+    fn compile(self, language: Language) -> Result<HighlightRules> {
         let (node_name_to_selector_id, node_id_to_selector_id) =
             build_node_to_selector_id_maps(language);
         let RawHighlightRules { name, scopes } = self;
@@ -160,7 +160,7 @@ impl RawHighlightRules {
 }
 
 fn build_node_to_selector_id_maps(
-    language: &Language,
+    language: Language,
 ) -> (
     FnvHashMap<&'static str, SelectorNodeId>,
     FnvHashMap<u16, SelectorNodeId>,
@@ -214,6 +214,7 @@ pub enum ScopePattern {
 pub struct Regex(#[serde(with = "serde_regex")] regex::Regex);
 
 impl Regex {
+    #[cfg(test)]
     fn new(regex: &str) -> Result<Self> {
         Ok(Self(regex::Regex::new(regex)?))
     }
@@ -260,28 +261,28 @@ pub struct Scope(pub String);
 
 lazy_static! {
     pub static ref BASH_RULES: HighlightRules =
-        parse_rules_unwrap(&grammar::BASH, BASH_RULES_SOURCE);
-    pub static ref C_RULES: HighlightRules = parse_rules_unwrap(&grammar::C, C_RULES_SOURCE);
-    pub static ref CPP_RULES: HighlightRules = parse_rules_unwrap(&grammar::CPP, CPP_RULES_SOURCE);
-    pub static ref CSS_RULES: HighlightRules = parse_rules_unwrap(&grammar::CSS, CSS_RULES_SOURCE);
+        parse_rules_unwrap(*grammar::BASH, BASH_RULES_SOURCE);
+    pub static ref C_RULES: HighlightRules = parse_rules_unwrap(*grammar::C, C_RULES_SOURCE);
+    pub static ref CPP_RULES: HighlightRules = parse_rules_unwrap(*grammar::CPP, CPP_RULES_SOURCE);
+    pub static ref CSS_RULES: HighlightRules = parse_rules_unwrap(*grammar::CSS, CSS_RULES_SOURCE);
     pub static ref HTML_RULES: HighlightRules =
-        parse_rules_unwrap(&grammar::HTML, HTML_RULES_SOURCE);
+        parse_rules_unwrap(*grammar::HTML, HTML_RULES_SOURCE);
     pub static ref JAVASCRIPT_RULES: HighlightRules =
-        parse_rules_unwrap(&grammar::JAVASCRIPT, JAVASCRIPT_RULES_SOURCE);
+        parse_rules_unwrap(*grammar::JAVASCRIPT, JAVASCRIPT_RULES_SOURCE);
     pub static ref TYPESCRIPT_RULES: HighlightRules =
-        parse_rules_unwrap(&grammar::TYPESCRIPT, TYPESCRIPT_RULES_SOURCE);
-    pub static ref TSX_RULES: HighlightRules = parse_rules_unwrap(&grammar::TSX, TSX_RULES_SOURCE);
+        parse_rules_unwrap(*grammar::TYPESCRIPT, TYPESCRIPT_RULES_SOURCE);
+    pub static ref TSX_RULES: HighlightRules = parse_rules_unwrap(*grammar::TSX, TSX_RULES_SOURCE);
     pub static ref JSON_RULES: HighlightRules =
-        parse_rules_unwrap(&grammar::JSON, JSON_RULES_SOURCE);
+        parse_rules_unwrap(*grammar::JSON, JSON_RULES_SOURCE);
     pub static ref MARKDOWN_RULES: HighlightRules =
-        parse_rules_unwrap(&grammar::MARKDOWN, MARKDOWN_RULES_SOURCE);
+        parse_rules_unwrap(*grammar::MARKDOWN, MARKDOWN_RULES_SOURCE);
     pub static ref PYTHON_RULES: HighlightRules =
-        parse_rules_unwrap(&grammar::PYTHON, PYTHON_RULES_SOURCE);
+        parse_rules_unwrap(*grammar::PYTHON, PYTHON_RULES_SOURCE);
     pub static ref RUST_RULES: HighlightRules =
-        parse_rules_unwrap(&grammar::RUST, RUST_RULES_SOURCE);
+        parse_rules_unwrap(*grammar::RUST, RUST_RULES_SOURCE);
 }
 
-fn parse_rules_unwrap(language: &Language, source: &str) -> HighlightRules {
+fn parse_rules_unwrap(language: Language, source: &str) -> HighlightRules {
     let raw_rules =
         serde_json::from_str::<RawHighlightRules>(source).expect("valid json file for rules");
     let name = format!("valid rules for {}", raw_rules.name);

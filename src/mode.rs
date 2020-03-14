@@ -34,8 +34,7 @@ impl Mode {
     fn matches_by_filename(&self, filename: impl AsRef<Path>) -> bool {
         self.file
             .iter()
-            .find(|pattern| pattern.matches(filename.as_ref()))
-            .is_some()
+            .any(|pattern| pattern.matches(filename.as_ref()))
     }
 }
 
@@ -65,13 +64,13 @@ impl FilenamePattern {
 
     fn matches(&self, filename: impl AsRef<Path>) -> bool {
         match self {
-            &Self::Suffix(ref suffix) => filename
+            Self::Suffix(ref suffix) => filename
                 .as_ref()
                 .file_name()
                 .and_then(OsStr::to_str)
                 .map(|s| s.ends_with(suffix))
                 .unwrap_or(false),
-            &Self::Name(ref expected_name) => filename
+            Self::Name(ref expected_name) => filename
                 .as_ref()
                 .file_name()
                 .and_then(OsStr::to_str)

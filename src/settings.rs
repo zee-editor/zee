@@ -10,9 +10,9 @@ pub struct Paths {
 pub fn find(config: Option<PathBuf>) -> Result<Paths> {
     let config_path = config.map(Ok).unwrap_or_else(|| {
         dirs::config_dir()
-            .ok_or::<Error>(Error::Config(
-                "Could not get path to the user's config directory".into(),
-            ))
+            .ok_or_else(|| {
+                Error::Config("Could not get path to the user's config directory".into())
+            })
             .map(|mut config_dir| {
                 config_dir.push("zee");
                 config_dir

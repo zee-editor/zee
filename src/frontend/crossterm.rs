@@ -41,7 +41,7 @@ impl Frontend for Crossterm {
         let Self { ref mut target, .. } = *self;
 
         let mut last_style = Style::default();
-        queue_set_style(target, &last_style)?;
+        queue_set_style(target, last_style)?;
 
         screen
             .buffer()
@@ -58,7 +58,7 @@ impl Frontend for Crossterm {
                     }) = textel
                     {
                         if *style != last_style {
-                            queue_set_style(target, &style)?;
+                            queue_set_style(target, *style)?;
                             last_style = *style;
                         }
                         queue!(target, crossterm::style::Print(content))?;
@@ -93,7 +93,7 @@ impl Drop for Crossterm {
 }
 
 #[inline]
-fn queue_set_style(target: &mut impl Write, style: &Style) -> Result<()> {
+fn queue_set_style(target: &mut impl Write, style: Style) -> Result<()> {
     use crossterm::style::{
         Attribute, Color, SetAttribute, SetBackgroundColor, SetForegroundColor,
     };

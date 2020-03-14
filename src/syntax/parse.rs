@@ -73,17 +73,13 @@ impl SyntaxTree {
         text: Rope,
         fresh: bool,
     ) -> Result<()> {
-        let mut parser =
-            self.parsers
-                .pop()
-                .map(|parser| Ok(parser))
-                .unwrap_or_else(|| -> Result<_> {
-                    let mut parser = Parser::new();
-                    parser
-                        .set_language(self.language)
-                        .map_err(|error| Error::IncompatibleLanguageGrammar(error))?;
-                    Ok(CancelableParser::new(parser))
-                })?;
+        let mut parser = self.parsers.pop().map(Ok).unwrap_or_else(|| -> Result<_> {
+            let mut parser = Parser::new();
+            parser
+                .set_language(self.language)
+                .map_err(Error::IncompatibleLanguageGrammar)?;
+            Ok(CancelableParser::new(parser))
+        })?;
 
         let cancel_flag = parser.cancel_flag().clone();
         let tree = self.tree.clone();
@@ -138,7 +134,7 @@ impl SyntaxTree {
         // If the parser task hasn't been cancelled, store the new syntax tree
         if let Some(ParsedSyntax { tree, text }) = parsed {
             assert!(tree.root_node().end_byte() <= text.len_bytes());
-            self.tree = Some(tree.clone());
+            self.tree = Some(tree);
         }
     }
 

@@ -36,7 +36,7 @@ unicode-width = "0.1.6"
 
 # Local crates
 zee-grammar = { version = "0.1.0", path = "grammar" }
-zee-highlight = { version = "0.1.0", path = "highlight" }
+zee-highlight = { version = "0.1.1", path = "highlight" }
 
 # Optional dependencies
 crossterm = { version = "0.14.2", optional = true}

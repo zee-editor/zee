@@ -9,7 +9,7 @@ use crate::{
 };
 pub use base16::Base16Theme;
 
-pub const THEMES: [(Theme, &'static str); 30] = [
+pub const THEMES: [(Theme, &str); 30] = [
     (Theme::gruvbox(), "zee-gruvbox"),
     (
         Theme::from_base16(&base16::SOLARIZED_DARK),

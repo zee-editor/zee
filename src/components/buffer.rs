@@ -701,13 +701,13 @@ impl Component for Buffer {
                 self.cursor.sync(&self.text, &new_text);
                 self.text
                     .new_revision(OpaqueDiff::empty(), self.cursor.clone());
-                *self.text = new_text.clone();
+                *self.text = new_text;
                 self.has_unsaved_changes = ModifiedStatus::Unchanged;
             }
             BufferTask::ParseSyntax(parsed) => {
-                self.syntax
-                    .as_mut()
-                    .map(|syntax| syntax.handle_parse_syntax_done(task_id, parsed));
+                if let Some(syntax) = self.syntax.as_mut() {
+                    syntax.handle_parse_syntax_done(task_id, parsed);
+                }
             }
         }
         Ok(())

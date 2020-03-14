@@ -42,6 +42,7 @@ impl Cursor {
         }
     }
 
+    #[cfg(test)]
     pub fn end_of_buffer(text: &Rope) -> Self {
         Self {
             range: prev_grapheme_boundary(&text.slice(..), CharIndex(text.len_chars()))
@@ -360,7 +361,7 @@ pub fn prev_grapheme_boundary(slice: &RopeSlice, char_index: CharIndex) -> CharI
     debug_assert!(char_index.0 <= slice.len_chars());
 
     // We work with bytes for this, so convert.
-    let byte_index = slice.char_to_byte(char_index.0).into();
+    let byte_index = slice.char_to_byte(char_index.0);
 
     // Get the chunk with our byte index in it.
     let (mut chunk, mut chunk_byte_index, mut chunk_char_index, _) =

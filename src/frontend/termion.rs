@@ -153,8 +153,7 @@ impl Input {
     pub fn from_reader(reader: impl Read + Send + 'static) -> Self {
         let (sender, receiver) = crossbeam_channel::bounded(2048);
         let _handle = thread::spawn(move || {
-            let mut keys = reader.keys();
-            while let Some(event) = keys.next() {
+            for event in reader.keys() {
                 match event {
                     Ok(termion_key) => {
                         sender.send(map_key(termion_key)).unwrap();

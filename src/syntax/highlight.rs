@@ -84,11 +84,10 @@ pub fn text_style_at_char(
             theme.code_type
         } else if scope.starts_with("entity.attribute.name.punctuation") {
             theme.code_comment
-        } else if scope.starts_with("entity.attribute.name")
+        } else if scope.starts_with("entity.name.macro.call")
+            || scope.starts_with("entity.attribute.name")
             || scope.starts_with("entity.name.lifetime")
         {
-            theme.code_macro_call
-        } else if scope.starts_with("entity.name.macro.call") {
             theme.code_macro_call
         } else if scope.starts_with("entity.name.function") {
             theme.code_function_call
