@@ -79,12 +79,24 @@ impl Cursor {
         self.move_vertically(text, current_line_index, current_line_index - 1);
     }
 
+    pub fn move_up_n(&mut self, text: &Rope, n: usize) {
+        for _ in 0..n {
+            self.move_up(text);
+        }
+    }
+
     pub fn move_down(&mut self, text: &Rope) {
         let current_line_index = text.char_to_line(self.range.start.0);
         if current_line_index >= text.len_lines() {
             return;
         }
         self.move_vertically(text, current_line_index, current_line_index + 1);
+    }
+
+    pub fn move_down_n(&mut self, text: &Rope, n: usize) {
+        for _ in 0..n {
+            self.move_down(text);
+        }
     }
 
     pub fn move_left(&mut self, text: &Rope) {

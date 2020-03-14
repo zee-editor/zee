@@ -1,7 +1,10 @@
 use euclid::default::SideOffsets2D;
 use git2::Repository;
+use lazy_static::lazy_static;
+use maplit::hashmap;
 use ropey::{Rope, RopeSlice};
 use size_format::SizeFormatterBinary;
+use smallvec::smallvec;
 use std::{
     borrow::Cow,
     cmp,
@@ -16,7 +19,7 @@ use zee_highlight::SelectorNodeId;
 use super::{
     cursor::{CharIndex, Cursor},
     theme::Theme as EditorTheme,
-    Component, Context, TaskDone,
+    BindingMatch, Bindings, Component, Context, HashBindings, TaskDone,
 };
 use crate::{
     error::Result,
@@ -70,6 +73,7 @@ pub struct Buffer {
     first_line: usize,
     syntax: Option<SyntaxTree>,
     repo: Option<Repository>,
+    bindings: BufferBindings,
 }
 
 impl Buffer {
@@ -99,6 +103,7 @@ impl Buffer {
             syntax: mode.language().map(|language| SyntaxTree::new(*language)),
             mode,
             repo,
+            bindings: BufferBindings,
         })
     }
 
@@ -466,7 +471,100 @@ impl Buffer {
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum Action {
+    // Movement
+    Up,
+    Down,
+    Left,
+    Right,
+    PageDown,
+    PageUp,
+    StartOfLine,
+    EndOfLine,
+    StartOfBuffer,
+    EndOfBuffer,
+    CenterCursorVisually,
+
+    // Editing
+    BeginSelection,
+    ClearSelection,
+    DeleteForward,
+    DeleteBackward,
+    DeleteLine,
+    Yank,
+    CopySelection,
+    CutSelection,
+    InsertTab,
+    InsertNewLine,
+    InsertChar(char),
+    Undo,
+
+    // Buffer
+    SaveBuffer,
+}
+
+lazy_static! {
+    pub static ref HASH_BINDINGS: HashBindings<Action> = HashBindings::new(hashmap! {
+        // Movement
+        smallvec![Key::Ctrl('p')] => Action::Up,
+        smallvec![Key::Up] => Action::Up,
+        smallvec![Key::Ctrl('n')] => Action::Down,
+        smallvec![Key::Down] => Action::Down,
+        smallvec![Key::Ctrl('b')] => Action::Left,
+        smallvec![Key::Left] => Action::Left,
+        smallvec![Key::Ctrl('f')] => Action::Right,
+        smallvec![Key::Right] => Action::Right,
+        smallvec![Key::Ctrl('v')] => Action::PageDown,
+        smallvec![Key::PageDown] => Action::PageDown,
+        smallvec![Key::Alt('v')] => Action::PageUp,
+        smallvec![Key::PageUp] => Action::PageUp,
+        smallvec![Key::Ctrl('a')] => Action::StartOfLine,
+        smallvec![Key::Home] => Action::StartOfLine,
+        smallvec![Key::Ctrl('e')] => Action::EndOfLine,
+        smallvec![Key::End] => Action::EndOfLine,
+        smallvec![Key::Alt('<')] => Action::StartOfBuffer,
+        smallvec![Key::Alt('>')] => Action::EndOfBuffer,
+        smallvec![Key::Ctrl('l')] => Action::CenterCursorVisually,
+
+        // Editing
+        smallvec![Key::Null] => Action::BeginSelection,
+        smallvec![Key::Ctrl('g')] => Action::ClearSelection,
+        smallvec![Key::Alt('w')] => Action::CopySelection,
+        smallvec![Key::Ctrl('w')] => Action::CutSelection,
+        smallvec![Key::Ctrl('y')] => Action::Yank,
+        smallvec![Key::Ctrl('d')] => Action::DeleteForward,
+        smallvec![Key::Delete] => Action::DeleteForward,
+        smallvec![Key::Backspace] => Action::DeleteBackward,
+        smallvec![Key::Ctrl('k')] => Action::DeleteLine,
+        smallvec![Key::Char('\n')] => Action::InsertNewLine,
+        smallvec![Key::Char('\t')] => Action::InsertTab,
+        smallvec![Key::Ctrl('/')] => Action::Undo,
+        smallvec![Key::Ctrl('z')] => Action::Undo,
+
+        // Buffer
+        smallvec![Key::Ctrl('x'), Key::Ctrl('s')] => Action::SaveBuffer,
+    });
+}
+
+pub struct BufferBindings;
+
+impl Bindings<Action> for BufferBindings {
+    fn matches(&self, pressed: &[Key]) -> BindingMatch<Action> {
+        match pressed {
+            [Key::Char(character)]
+                if *character != '\n' && (!DISABLE_TABS || *character != '\t') =>
+            {
+                BindingMatch::Full(Action::InsertChar(*character))
+            }
+            pressed => HASH_BINDINGS.matches(pressed),
+        }
+    }
+}
+
 impl Component for Buffer {
+    type Action = Action;
+    type Bindings = BufferBindings;
     type TaskPayload = Result<BufferTask>;
 
     fn draw(&mut self, screen: &mut Screen, scheduler: &mut Scheduler, context: &Context) {
@@ -492,102 +590,63 @@ impl Component for Buffer {
         self.draw_status_bar(screen, context, visual_cursor_x);
     }
 
-    fn handle_event(
+    fn handle_action(
         &mut self,
-        key: Key,
+        action: Self::Action,
         scheduler: &mut Scheduler,
         context: &Context,
     ) -> Result<()> {
         // Stateless
-        match key {
-            Key::Ctrl('p') | Key::Up => {
-                self.cursor.move_up(&self.text);
-            }
-            Key::Ctrl('n') | Key::Down => {
-                self.cursor.move_down(&self.text);
-            }
-            Key::Ctrl('b') | Key::Left => {
-                self.cursor.move_left(&self.text);
-            }
-            Key::Ctrl('f') | Key::Right => {
-                self.cursor.move_right(&self.text);
-            }
-            Key::Ctrl('v') | Key::PageDown => {
-                for _ in 0..(context.frame.size.height - 1) {
-                    self.cursor.move_down(&self.text);
-                }
-            }
-            Key::Alt('v') | Key::PageUp => {
-                for _ in 0..(context.frame.size.height - 1) {
-                    self.cursor.move_up(&self.text);
-                }
-            }
-            Key::Ctrl('a') | Key::Home => {
-                self.cursor.move_to_start_of_line(&self.text);
-            }
-            Key::Ctrl('e') | Key::End => {
-                self.cursor.move_to_end_of_line(&self.text);
-            }
-            Key::Alt('<') => {
-                self.cursor.move_to_start_of_buffer(&self.text);
-            }
-            Key::Alt('>') => {
-                self.cursor.move_to_end_of_buffer(&self.text);
-            }
-            Key::Ctrl('l') => self.center_visual_cursor(&context.frame),
+        match action {
+            Action::Up => self.cursor.move_up(&self.text),
+            Action::Down => self.cursor.move_down(&self.text),
+            Action::Left => self.cursor.move_left(&self.text),
+            Action::Right => self.cursor.move_right(&self.text),
+            Action::PageDown => self
+                .cursor
+                .move_down_n(&self.text, context.frame.size.height - 1),
+            Action::PageUp => self
+                .cursor
+                .move_up_n(&self.text, context.frame.size.height - 1),
+            Action::StartOfLine => self.cursor.move_to_start_of_line(&self.text),
+            Action::EndOfLine => self.cursor.move_to_end_of_line(&self.text),
+            Action::StartOfBuffer => self.cursor.move_to_start_of_buffer(&self.text),
+            Action::EndOfBuffer => self.cursor.move_to_end_of_buffer(&self.text),
+            Action::CenterCursorVisually => self.center_visual_cursor(&context.frame),
 
-            Key::Null => self.cursor.begin_selection(),
-            Key::Ctrl('g') => self.cursor.clear_selection(),
-            Key::Alt('s') => {
-                self.spawn_save_file(scheduler, context)?;
-            }
+            Action::BeginSelection => self.cursor.begin_selection(),
+            Action::ClearSelection => self.cursor.clear_selection(),
+            Action::SaveBuffer => self.spawn_save_file(scheduler, context)?,
             _ => {}
         };
 
-        // eprintln!(
-        //     "0: self.text.len_bytes() == {}  |  end_byte == {:?}",
-        //     self.text.len_bytes(),
-        //     self.syntax
-        //         .as_ref()
-        //         .unwrap()
-        //         .tree
-        //         .as_ref()
-        //         .map(|t| t.root_node().end_byte())
-        // );
-
         let mut undoing = false;
-        let diff = match key {
-            Key::Ctrl('d') | Key::Delete => {
+        let diff = match action {
+            Action::DeleteForward => {
                 let operation = self.cursor.delete(&mut self.text);
                 self.clipboard = Some(operation.deleted);
                 operation.diff
             }
-            Key::Ctrl('k') => self.delete_line(),
-            Key::Ctrl('y') => self.yank_line(),
-            Key::Backspace => self.cursor.backspace(&mut self.text).diff,
-            Key::Alt('w') => self.copy_selection(),
-            Key::Ctrl('w') => self.cut_selection(),
-            Key::Char('\t') if DISABLE_TABS => {
+            Action::DeleteBackward => self.cursor.backspace(&mut self.text).diff,
+            Action::DeleteLine => self.delete_line(),
+            Action::Yank => self.yank_line(),
+            Action::CopySelection => self.copy_selection(),
+            Action::CutSelection => self.cut_selection(),
+            Action::InsertTab if DISABLE_TABS => {
                 let diff = self
                     .cursor
                     .insert_chars(&mut self.text, iter::repeat(' ').take(TAB_WIDTH));
                 self.cursor.move_right_n(&self.text, TAB_WIDTH);
                 diff
             }
-            Key::Char('\n') => {
+            Action::InsertNewLine => {
                 let diff = self.cursor.insert_char(&mut self.text, '\n');
                 // self.ensure_trailing_newline_with_content();
                 self.cursor.move_down(&self.text);
                 self.cursor.move_to_start_of_line(&self.text);
                 diff
             }
-            Key::Char(character) => {
-                let diff = self.cursor.insert_char(&mut self.text, character);
-                // self.ensure_trailing_newline_with_content();
-                self.cursor.move_right(&self.text);
-                diff
-            }
-            Key::Ctrl('z') | Key::Ctrl('/') => {
+            Action::Undo => {
                 if let Some((diff, cursor)) = self.text.undo() {
                     undoing = true;
                     self.cursor = cursor;
@@ -599,6 +658,12 @@ impl Component for Buffer {
                 } else {
                     OpaqueDiff::empty()
                 }
+            }
+            Action::InsertChar(character) => {
+                let diff = self.cursor.insert_char(&mut self.text, character);
+                // self.ensure_trailing_newline_with_content();
+                self.cursor.move_right(&self.text);
+                diff
             }
             _ => OpaqueDiff::empty(),
         };
@@ -646,6 +711,10 @@ impl Component for Buffer {
             }
         }
         Ok(())
+    }
+
+    fn bindings(&self) -> Option<&Self::Bindings> {
+        Some(&self.bindings)
     }
 
     fn path(&self) -> Option<&Path> {

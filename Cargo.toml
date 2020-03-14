@@ -1,6 +1,6 @@
 [package]
 name = "zee"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Marius Cobzarenco <marius@reinfer.io>"]
 description = "A modern editor for the terminal"
 readme = "README.md"
@@ -20,7 +20,9 @@ git2 = "0.11.0"
 ignore = "0.4.10"
 lazy_static = "1.4.0"
 log = "0.4.8"
+maplit = "1.0.2"
 num_cpus = "1.11.1"
+pkg-version = "1.0.0"
 rayon = "1.2.1"
 ropey = "1.1.0"
 size_format = "1.0.2"

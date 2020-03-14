@@ -1,7 +1,10 @@
 use euclid::default::SideOffsets2D;
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use ignore::WalkBuilder;
+use lazy_static::lazy_static;
+use maplit::hashmap;
 use ropey::Rope;
+use smallvec::smallvec;
 use std::{
     borrow::Cow,
     cmp, fs, iter, mem,
@@ -10,7 +13,7 @@ use std::{
 
 use super::{
     cursor::{CharIndex, Cursor},
-    Component, Context, Position, Rect, Size, TaskDone,
+    BindingMatch, Bindings, Component, Context, HashBindings, Position, Rect, Size, TaskDone,
 };
 use crate::{
     error::{Error, Result},
@@ -53,6 +56,82 @@ impl State {
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum Action {
+    // File pickers
+    Clear,
+    PickFileFromRepo,
+    PickFileFromDirectory,
+    OpenFile,
+
+    // Cursor movement
+    CursorLeft,
+    CursorRight,
+    CursorStartOfLine,
+    CursorEndOfLine,
+
+    // Path navigation
+    SelectParentDirectory,
+    AutocompletePath,
+    DeleteForward,
+    DeleteBackward,
+    InsertChar(char),
+
+    // Selection
+    SelectUp,
+    SelectDown,
+    SelectFirst,
+    SelectLast,
+}
+
+lazy_static! {
+    pub static ref HASH_BINDINGS: HashBindings<Action> = HashBindings::new(hashmap! {
+        // Path navigation
+        smallvec![Key::Ctrl('g')] => Action::Clear,
+        smallvec![Key::Ctrl('x'), Key::Ctrl('f')] => Action::PickFileFromDirectory,
+        smallvec![Key::Ctrl('x'), Key::Ctrl('v')] => Action::PickFileFromRepo,
+        smallvec![Key::Char('\n')] => Action::OpenFile,
+
+        // Cursor movement
+        smallvec![Key::Ctrl('b')] => Action::CursorLeft,
+        smallvec![Key::Left] => Action::CursorLeft,
+        smallvec![Key::Ctrl('f')] => Action::CursorRight,
+        smallvec![Key::Right] => Action::CursorRight,
+        smallvec![Key::Ctrl('a')] => Action::CursorStartOfLine,
+        smallvec![Key::Home] => Action::CursorStartOfLine,
+        smallvec![Key::Ctrl('e')] => Action::CursorEndOfLine,
+        smallvec![Key::End] => Action::CursorEndOfLine,
+
+        // Path navigation
+        smallvec![Key::Ctrl('l')] => Action::SelectParentDirectory,
+        smallvec![Key::Char('\t')] => Action::AutocompletePath,
+        smallvec![Key::Ctrl('d')] => Action::DeleteForward,
+        smallvec![Key::Backspace] => Action::DeleteBackward,
+
+        // Selection
+        smallvec![Key::Ctrl('p')] => Action::SelectUp,
+        smallvec![Key::Up] => Action::SelectUp,
+        smallvec![Key::Ctrl('n')] => Action::SelectDown,
+        smallvec![Key::Down] => Action::SelectDown,
+        smallvec![Key::Char('p')] => Action::SelectUp,
+        smallvec![Key::Alt('<')] => Action::SelectFirst,
+        smallvec![Key::Alt('>')] => Action::SelectLast,
+    });
+}
+
+pub struct PromptBindings;
+
+impl Bindings<Action> for PromptBindings {
+    fn matches(&self, pressed: &[Key]) -> BindingMatch<Action> {
+        match pressed {
+            [Key::Char(character)] if *character != '\n' && *character != '\t' => {
+                BindingMatch::Full(Action::InsertChar(*character))
+            }
+            pressed => HASH_BINDINGS.matches(pressed),
+        }
+    }
+}
+
 pub struct Prompt {
     input: Rope,
     cursor: Cursor,
@@ -60,6 +139,7 @@ pub struct Prompt {
     state: State,
     file_picker: FilePicker,
     file_picker_task: Option<TaskId>,
+    bindings: PromptBindings,
 }
 
 impl Prompt {
@@ -71,6 +151,7 @@ impl Prompt {
             state: State::Inactive,
             file_picker: FilePicker::new(),
             file_picker_task: None,
+            bindings: PromptBindings,
         }
     }
 
@@ -85,7 +166,9 @@ impl Prompt {
     }
 
     pub fn log_error(&mut self, message: String) {
-        self.input = Rope::from(message);
+        if !self.is_active() {
+            self.input = Rope::from(message);
+        }
     }
 
     pub fn clear_log(&mut self) {
@@ -174,6 +257,8 @@ fn directory_files_iter(path: impl AsRef<Path>) -> Result<impl Iterator<Item = R
 }
 
 impl Component for Prompt {
+    type Action = Action;
+    type Bindings = PromptBindings;
     type TaskPayload = Result<PromptTask>;
 
     #[inline]
@@ -251,14 +336,14 @@ impl Component for Prompt {
     }
 
     #[inline]
-    fn handle_event(
+    fn handle_action(
         &mut self,
-        key: Key,
+        action: Action,
         scheduler: &mut Scheduler,
         context: &Context,
     ) -> Result<()> {
-        match key {
-            Key::Ctrl('g') => {
+        match action {
+            Action::Clear => {
                 self.state = State::Inactive;
                 self.cursor = Cursor::new();
                 self.input.remove(..);
@@ -266,19 +351,19 @@ impl Component for Prompt {
                 self.file_picker_task = None;
                 return Ok(());
             }
-            Key::Alt('x') if !self.is_active() => {
+            Action::PickFileFromDirectory if !self.is_active() => {
                 self.state = State::PickingFileFromDirectory;
                 self.set_input_to_cwd(context);
                 self.pick_from_directory(scheduler)?;
                 return Ok(());
             }
-            Key::Alt('d') if !self.is_active() => {
+            Action::PickFileFromRepo if !self.is_active() => {
                 self.state = State::PickingFileFromRepo;
                 self.set_input_to_cwd(context);
                 self.pick_from_repository(scheduler)?;
                 return Ok(());
             }
-            Key::Char('\n') if self.is_active() => {
+            Action::OpenFile if self.is_active() => {
                 let path_str: Cow<str> = self.input.slice(..).into();
                 self.command = Some(Command::OpenFile(PathBuf::from(path_str.trim())));
                 self.input.remove(..);
@@ -289,24 +374,24 @@ impl Component for Prompt {
         }
 
         if self.is_active() {
-            let input_changed = match key {
-                Key::Ctrl('b') | Key::Left => {
+            let input_changed = match action {
+                Action::CursorLeft => {
                     self.cursor.move_left(&self.input);
                     false
                 }
-                Key::Ctrl('f') | Key::Right => {
+                Action::CursorRight => {
                     self.cursor.move_right(&self.input);
                     false
                 }
-                Key::Ctrl('a') | Key::Home => {
+                Action::CursorStartOfLine => {
                     self.cursor.move_to_start_of_line(&self.input);
                     false
                 }
-                Key::Ctrl('e') | Key::End => {
+                Action::CursorEndOfLine => {
                     self.cursor.move_to_end_of_line(&self.input);
                     false
                 }
-                Key::Ctrl('l') => {
+                Action::SelectParentDirectory => {
                     let path_str: String = self.input.slice(..).into();
                     self.input = Path::new(&path_str.trim())
                         .parent()
@@ -319,7 +404,7 @@ impl Component for Prompt {
                     self.cursor.move_right(&self.input);
                     true
                 }
-                Key::Char('\t') => {
+                Action::AutocompletePath => {
                     if let Some(path) = self.file_picker.selected() {
                         self.input = path.to_string_lossy().into();
                         utils::ensure_trailing_newline_with_content(&mut self.input);
@@ -333,25 +418,25 @@ impl Component for Prompt {
                         false
                     }
                 }
-                Key::Ctrl('n') | Key::Down => {
+                Action::SelectDown => {
                     self.file_picker.move_down();
                     false
                 }
-                Key::Ctrl('p') | Key::Up => {
+                Action::SelectUp => {
                     self.file_picker.move_up();
                     false
                 }
-                Key::Alt('<') => {
+                Action::SelectFirst => {
                     self.file_picker.move_to_top();
                     false
                 }
-                Key::Alt('>') => {
+                Action::SelectLast => {
                     self.file_picker.move_to_bottom();
                     false
                 }
-                Key::Backspace => !self.cursor.backspace(&mut self.input).is_empty(),
-                Key::Ctrl('d') => !self.cursor.delete(&mut self.input).is_empty(),
-                Key::Char(character) if character != '\t' => {
+                Action::DeleteBackward => !self.cursor.backspace(&mut self.input).is_empty(),
+                Action::DeleteForward => !self.cursor.delete(&mut self.input).is_empty(),
+                Action::InsertChar(character) if character != '\t' => {
                     let diff = self.cursor.insert_char(&mut self.input, character);
                     self.cursor.move_right(&self.input);
                     !diff.is_empty()
@@ -371,11 +456,14 @@ impl Component for Prompt {
         Ok(())
     }
 
+    fn bindings(&self) -> Option<&Self::Bindings> {
+        Some(&self.bindings)
+    }
+
     fn task_done(&mut self, task: TaskDone<Self::TaskPayload>) -> Result<()> {
         let task_id = task.id;
-        let payload = task.payload?;
-        match payload {
-            PromptTask { file_picker }
+        match task.payload {
+            Ok(PromptTask { file_picker })
                 if self
                     .file_picker_task
                     .map(|expected| expected == task_id)

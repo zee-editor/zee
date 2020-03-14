@@ -71,7 +71,7 @@ fn configure_logging() -> Result<()> {
     Ok(())
 }
 
-fn main() -> Result<()> {
+fn start_editor() -> Result<()> {
     let args = Args::from_args();
     if args.enable_logging {
         configure_logging()?;
@@ -82,4 +82,11 @@ fn main() -> Result<()> {
         editor.open_file(file_path)?;
     }
     run_editor_ui_loop(&args.frontend_kind, editor)
+}
+
+fn main() -> Result<()> {
+    start_editor().map_err(|error| {
+        log::error!("Zee exited with: {}", error);
+        error
+    })
 }

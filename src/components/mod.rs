@@ -11,7 +11,7 @@ pub use splash::Splash;
 pub use theme::Theme;
 
 use smallvec::{smallvec, SmallVec};
-use std::{cmp, path::Path, time::Instant};
+use std::{cmp, collections::hash_map::HashMap, path::Path, time::Instant};
 
 use crate::{
     error::Result,
@@ -60,6 +60,8 @@ impl<'t> Context<'t> {
 }
 
 pub trait Component {
+    type Action;
+    type Bindings: Bindings<Self::Action>;
     type TaskPayload;
 
     fn draw(
@@ -70,13 +72,17 @@ pub trait Component {
     ) {
     }
 
-    fn handle_event(
+    fn handle_action(
         &mut self,
-        _key: Key,
+        _action: Self::Action,
         _scheduler: &mut Scheduler<Self::TaskPayload>,
         _context: &Context,
     ) -> Result<()> {
         Ok(())
+    }
+
+    fn bindings(&self) -> Option<&Self::Bindings> {
+        None
     }
 
     fn task_done(&mut self, _task: TaskDone<Self::TaskPayload>) -> Result<()> {
@@ -86,8 +92,6 @@ pub trait Component {
     fn path(&self) -> Option<&Path> {
         None
     }
-
-    // fn handle_input(&mut self, controller: &Controller, context: &Context) {}
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -324,4 +328,129 @@ fn splits_iter<'a>(
                 Size::new(frame.size.width, size),
             ),
         })
+}
+
+pub trait Bindings<Action> {
+    fn matches(&self, pressed: &[Key]) -> BindingMatch<Action>;
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HashBindings<Action>(HashMap<SmallVec<[Key; 2]>, Action>);
+
+impl<Action> HashBindings<Action> {
+    pub fn new(map: HashMap<SmallVec<[Key; 2]>, Action>) -> Self {
+        Self(map)
+    }
+}
+
+impl<Action: Clone> Bindings<Action> for HashBindings<Action> {
+    fn matches(&self, pressed: &[Key]) -> BindingMatch<Action> {
+        for (binding, action) in self.0.iter() {
+            let is_match = binding
+                .iter()
+                .zip(pressed.iter())
+                .all(|(lhs, rhs)| *lhs == *rhs);
+            if is_match {
+                if pressed.len() < binding.len() {
+                    return BindingMatch::Prefix;
+                } else if pressed.len() == binding.len() {
+                    return BindingMatch::Full(action.clone());
+                }
+            }
+        }
+        BindingMatch::None
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BindingMatch<Action> {
+    None,
+    Prefix,
+    Full(Action),
+}
+
+impl<Action> BindingMatch<Action> {
+    pub fn is_prefix(&self) -> bool {
+        match self {
+            Self::Prefix => true,
+            _ => false,
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use maplit::hashmap;
+    use smallvec::smallvec;
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    enum TestAction {
+        A,
+        B,
+        C,
+        Fatality,
+    }
+
+    #[test]
+    fn test_empty_binding_matches() {
+        let bindings: HashBindings<TestAction> = HashBindings(HashMap::new());
+        assert_eq!(bindings.matches(&[Key::Delete]), BindingMatch::None);
+        assert_eq!(bindings.matches(&[Key::Ctrl('x')]), BindingMatch::None);
+        assert_eq!(bindings.matches(&[Key::Ctrl('a')]), BindingMatch::None);
+    }
+
+    #[test]
+    fn test_one_key_binding_matches() {
+        let bindings = HashBindings(hashmap! {
+            smallvec![Key::Ctrl('a')] => TestAction::A
+        });
+        assert_eq!(bindings.matches(&[Key::Delete]), BindingMatch::None);
+        assert_eq!(bindings.matches(&[Key::Ctrl('x')]), BindingMatch::None);
+        assert_eq!(
+            bindings.matches(&[Key::Ctrl('a')]),
+            BindingMatch::Full(TestAction::A)
+        );
+        assert_eq!(
+            bindings.matches(&[Key::Ctrl('a'), Key::Ctrl('a')]),
+            BindingMatch::None
+        );
+    }
+
+    #[test]
+    fn test_multiple_keys_binding_matches() {
+        let bindings = HashBindings(hashmap! {
+            smallvec![Key::Ctrl('a')] => TestAction::A,
+            smallvec![Key::Ctrl('b')] => TestAction::B,
+            smallvec![Key::Ctrl('x'), Key::Ctrl('a')] => TestAction::C,
+            smallvec![Key::Left, Key::Right, Key::Up, Key::Up, Key::Down] => TestAction::Fatality,
+        });
+        assert_eq!(bindings.matches(&[Key::Ctrl('z')]), BindingMatch::None);
+        assert_eq!(bindings.matches(&[Key::Ctrl('x')]), BindingMatch::Prefix);
+        assert_eq!(
+            bindings.matches(&[Key::Ctrl('a')]),
+            BindingMatch::Full(TestAction::A)
+        );
+        assert_eq!(
+            bindings.matches(&[Key::Ctrl('b')]),
+            BindingMatch::Full(TestAction::B)
+        );
+        assert_eq!(bindings.matches(&[Key::Left]), BindingMatch::Prefix);
+        assert_eq!(
+            bindings.matches(&[Key::Left, Key::Right, Key::Up]),
+            BindingMatch::Prefix
+        );
+        assert_eq!(
+            bindings.matches(&[Key::Left, Key::Right, Key::Up, Key::Up, Key::Down]),
+            BindingMatch::Full(TestAction::Fatality)
+        );
+        assert_eq!(
+            bindings.matches(&[Key::Left, Key::Right, Key::Up, Key::Up, Key::Up]),
+            BindingMatch::None
+        );
+        assert_eq!(
+            bindings.matches(&[Key::Left, Key::Right, Key::Up, Key::Up, Key::Down, Key::Up]),
+            BindingMatch::None
+        );
+    }
 }

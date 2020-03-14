@@ -45,17 +45,17 @@ The following keyboard bindings are available:
  - `C-y` paste (yank) selection
  - `C-g` clear the current selection
  - `C-z`, `C-/` undo
- - `A-s` save the buffer
+ - `C-x C-s` save the current buffer
 
 #### File Navigation
- - `A-x` choose a file to open using a directory-level picker
- - `A-d` search recursively for a file to open from the selected directory
+ - `C-x C-f` choose a file to open using a directory-level picker
+ - `C-x C-v` search recursively for a file to open from the selected directory
  - `C-l` while opening a file, go to the parent directory
  - `Tab` while opening a file, fills in the currently selected path
  - `C-g` cancel the current operation
 
 #### Global
- - `C-c` quit
- - `C-q` close the current buffer
- - `C-o` switch focus to the next buffer
+ - `C-x 0` close the current buffer
+ - `C-x o`, `C-x C-o` switch focus to the next buffer
+ - `C-x C-c` quit
  - `C-t` cycle through the available themes

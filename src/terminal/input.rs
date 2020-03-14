@@ -1,4 +1,4 @@
-#[derive(Debug, PartialOrd, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialOrd, PartialEq, Eq, Hash)]
 pub enum Key {
     /// Backspace.
     Backspace,

@@ -1,8 +1,12 @@
 use crossbeam_channel::select;
+use lazy_static::lazy_static;
+use maplit::hashmap;
+use smallvec::{smallvec, SmallVec};
 use std::{
     cmp,
     collections::HashMap,
     io, mem,
+    ops::Deref,
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
@@ -12,8 +16,9 @@ use crate::{
     components::{
         prompt::Command,
         theme::{Theme, THEMES},
-        Buffer, Component, ComponentId, Context, Flex, LaidComponentId, LaidComponentIds, Layout,
-        LayoutDirection, LayoutNode, LayoutNodeFlex, Prompt, Splash,
+        BindingMatch, Bindings, Buffer, Component, ComponentId, Context, Flex, HashBindings,
+        LaidComponentId, LaidComponentIds, Layout, LayoutDirection, LayoutNode, LayoutNodeFlex,
+        Prompt, Splash,
     },
     error::{Error, Result},
     frontend::Frontend,
@@ -37,10 +42,29 @@ pub struct Editor {
     next_component_id: ComponentId,
     task_pool: TaskPool,
     current_path: PathBuf,
+    controller: InputController,
 
     // Theme palettes and currently selected theme
     themes: &'static [(Theme, &'static str); 30],
     theme_index: usize,
+}
+
+#[derive(Clone, Debug)]
+pub enum EditorAction {
+    CycleFocus,
+    ClosePane,
+    ChangeTheme,
+    Quit,
+}
+
+lazy_static! {
+    pub static ref EDITOR_BINDINGS: HashBindings<EditorAction> = HashBindings::new(hashmap! {
+        smallvec![Key::Ctrl('x'), Key::Char('o')] => EditorAction::CycleFocus,
+        smallvec![Key::Ctrl('x'), Key::Ctrl('o')] => EditorAction::CycleFocus,
+        smallvec![Key::Ctrl('x'), Key::Char('0')] => EditorAction::ClosePane,
+        smallvec![Key::Ctrl('t')] => EditorAction::ChangeTheme,
+        smallvec![Key::Ctrl('x'), Key::Ctrl('c')] => EditorAction::Quit,
+    });
 }
 
 impl Editor {
@@ -48,16 +72,18 @@ impl Editor {
         let prompt = Prompt::new();
         Self {
             components: TypeMap::new(),
-            task_owners: HashMap::with_capacity(8),
             layout: wrap_layout_with_prompt(prompt.height(), None),
-            laid_components: LaidComponentIds::new(),
-            next_component_id: cmp::max(PROMPT_ID, SPLASH_ID) + 1,
-            focus: None,
             prompt,
+            laid_components: LaidComponentIds::new(),
+            task_owners: HashMap::with_capacity(8),
+            focus: None,
+            next_component_id: cmp::max(PROMPT_ID, SPLASH_ID) + 1,
             task_pool,
+            current_path,
+            controller: InputController::new(),
+
             themes: &THEMES,
             theme_index: 0,
-            current_path,
         }
     }
 
@@ -200,11 +226,10 @@ impl Editor {
                 }
                 recv(frontend.events()) -> event => {
                     match event.map_err(anyhow::Error::from)? {
-                        Key::Ctrl('c') => {
-                            return Ok(PollState::Exit);
-                        }
                         key => {
-                            self.handle_event(key, frame)?;
+                            if self.handle_event(key, frame)? {
+                                return Ok(PollState::Exit);
+                            }
                             dirty = true; // handle_event should return whether we need to rerender
                         }
                     };
@@ -288,16 +313,21 @@ impl Editor {
     }
 
     #[inline]
-    fn handle_event(&mut self, key: Key, frame: Rect) -> Result<()> {
+    fn handle_event(&mut self, key: Key, frame: Rect) -> Result<bool> {
         let time = Instant::now();
+        let mut is_prefix_to_binding = false;
+        self.controller.push(key);
         self.prompt.clear_log();
+
         if !self.prompt.is_active() {
-            match key {
-                Key::Ctrl('o') => {
+            let editor_binding_match = self.controller.matches(EDITOR_BINDINGS.deref());
+            is_prefix_to_binding = is_prefix_to_binding || editor_binding_match.is_prefix();
+            match editor_binding_match {
+                BindingMatch::Full(EditorAction::CycleFocus) => {
                     self.cycle_focus(frame, CycleFocus::Next);
-                    return Ok(());
+                    return Ok(false);
                 }
-                Key::Ctrl('q') => {
+                BindingMatch::Full(EditorAction::ClosePane) => {
                     if let Some(focus) = self.focus {
                         let mut layout = Layout::Component(PROMPT_ID);
                         mem::swap(&mut self.layout, &mut layout);
@@ -308,17 +338,20 @@ impl Editor {
                         );
                         self.cycle_focus(frame, CycleFocus::Previous);
                     }
-                    return Ok(());
+                    return Ok(false);
                 }
-                Key::Ctrl('t') => {
+                BindingMatch::Full(EditorAction::ChangeTheme) => {
                     self.theme_index = (self.theme_index + 1) % self.themes.len();
                     self.prompt.log_error(format!(
                         "Theme changed to {}",
                         self.themes[self.theme_index].1
                     ));
-                    return Ok(());
+                    return Ok(false);
                 }
-
+                BindingMatch::Full(EditorAction::Quit) => {
+                    log::info!("Exiting (user request)...");
+                    return Ok(true);
+                }
                 _ => {}
             };
 
@@ -327,13 +360,14 @@ impl Editor {
 
                 let Self {
                     ref mut components,
-                    ref mut task_owners,
                     ref mut prompt,
+                    ref mut task_owners,
+                    ref mut current_path,
+                    ref mut controller,
                     ref laid_components,
                     ref themes,
-                    theme_index,
                     ref task_pool,
-                    ref mut current_path,
+                    theme_index,
                     ..
                 } = *self;
                 laid_components.iter().try_for_each(
@@ -343,16 +377,30 @@ impl Editor {
                          frame_id,
                      }|
                      -> Result<()> {
-                        if id_with_focus == id {
-                            let mut scheduler = task_pool.scheduler();
-                            let component =
-                                components.get_or_default::<Buffers>().get_mut(&id).unwrap();
-                            if let Some(path) = component.path() {
-                                *current_path = path.canonicalize()?;
-                            }
+                        if id_with_focus != id {
+                            return Ok(());
+                        }
 
-                            if let Err(error) = component.handle_event(
-                                key,
+                        let mut scheduler = task_pool.scheduler();
+                        let component =
+                            components.get_or_default::<Buffers>().get_mut(&id).unwrap();
+                        if let Some(path) = component.path() {
+                            *current_path = path.canonicalize().unwrap_or(path.to_path_buf());
+                        }
+                        let binding_match = component
+                            .bindings()
+                            .map(|bindings| controller.matches(bindings));
+
+                        is_prefix_to_binding = is_prefix_to_binding
+                            || binding_match
+                                .as_ref()
+                                .map(|binding_match| binding_match.is_prefix())
+                                .unwrap_or(false);
+
+                        log::info!("m: {:?} {}", binding_match, is_prefix_to_binding);
+                        if let Some(BindingMatch::Full(action)) = binding_match {
+                            if let Err(error) = component.handle_action(
+                                action,
                                 &mut scheduler,
                                 &Context {
                                     time,
@@ -365,10 +413,11 @@ impl Editor {
                             ) {
                                 prompt.log_error(format!("{}", error));
                             }
-                            for task_id in scheduler.scheduled() {
-                                task_owners.insert(task_id, id);
-                            }
                         }
+                        for task_id in scheduler.scheduled() {
+                            task_owners.insert(task_id, id);
+                        }
+
                         Ok(())
                     },
                 )?;
@@ -376,27 +425,62 @@ impl Editor {
         }
 
         // Update prompt
-        let mut scheduler = self.task_pool.scheduler();
-        self.prompt.handle_event(
-            key,
-            &mut scheduler,
-            &Context {
-                time,
-                focused: false,
-                frame,
-                frame_id: 0,
-                theme: &self.themes[self.theme_index].0,
-                path: self.current_path.as_path(),
-            },
-        )?;
-        for task_id in scheduler.scheduled() {
-            self.task_owners.insert(task_id, PROMPT_ID);
+        {
+            let Self {
+                ref mut controller,
+                ref mut current_path,
+                ref mut prompt,
+                ref mut task_owners,
+                ref task_pool,
+                ref themes,
+                theme_index,
+                ..
+            } = *self;
+
+            let binding_match = prompt
+                .bindings()
+                .map(|bindings| controller.matches(bindings));
+
+            is_prefix_to_binding = is_prefix_to_binding
+                || binding_match
+                    .as_ref()
+                    .map(|binding_match| binding_match.is_prefix())
+                    .unwrap_or(false);
+
+            if let Some(BindingMatch::Full(action)) = binding_match {
+                let mut scheduler = task_pool.scheduler();
+                prompt.handle_action(
+                    action,
+                    &mut scheduler,
+                    &Context {
+                        time,
+                        focused: false,
+                        frame,
+                        frame_id: 0,
+                        theme: &themes[theme_index].0,
+                        path: current_path.as_path(),
+                    },
+                )?;
+                for task_id in scheduler.scheduled() {
+                    task_owners.insert(task_id, PROMPT_ID);
+                }
+            }
         }
         if let Some(Command::OpenFile(path)) = self.prompt.poll_and_clear() {
             self.open_file(path)?;
         }
 
-        Ok(())
+        if !self.controller.keys.is_empty() {
+            if !is_prefix_to_binding {
+                self.prompt
+                    .log_error(format!("{}is undefined", self.controller));
+                self.controller.keys.clear();
+            } else {
+                self.prompt.log_error(format!("{}", self.controller));
+            }
+        }
+
+        Ok(false)
     }
 
     #[inline]
@@ -489,3 +573,42 @@ const SPLASH_ID: ComponentId = 1;
 
 const REDRAW_LATENCY: Duration = Duration::from_millis(10);
 const SUSTAINED_IO_REDRAW_LATENCY: Duration = Duration::from_millis(100);
+
+struct InputController {
+    keys: SmallVec<[Key; 8]>,
+}
+
+impl InputController {
+    fn new() -> Self {
+        Self {
+            keys: SmallVec::new(),
+        }
+    }
+
+    fn push(&mut self, key: Key) {
+        self.keys.push(key);
+        log::info!("keys: {:?}", self.keys);
+    }
+
+    fn matches<Action: Clone>(&mut self, bindings: &impl Bindings<Action>) -> BindingMatch<Action> {
+        let binding_match = bindings.matches(&self.keys);
+        if let BindingMatch::Full(_) = binding_match {
+            self.keys.clear();
+        }
+        binding_match
+    }
+}
+
+impl std::fmt::Display for InputController {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
+        for key in self.keys.iter() {
+            match key {
+                Key::Char(char) => write!(formatter, "{} ", char)?,
+                Key::Ctrl(char) => write!(formatter, "C-{} ", char)?,
+                Key::Alt(char) => write!(formatter, "A-{} ", char)?,
+                key => write!(formatter, "{:?} ", key)?,
+            }
+        }
+        Ok(())
+    }
+}

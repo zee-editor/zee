@@ -1,5 +1,8 @@
-use super::{Component, Context, Scheduler};
+use super::{Component, Context, HashBindings, Scheduler};
 use crate::terminal::{Screen, Style};
+use lazy_static::lazy_static;
+use pkg_version::{pkg_version_major, pkg_version_minor, pkg_version_patch};
+use std::cmp;
 
 #[derive(Clone, Debug)]
 pub struct Theme {
@@ -12,6 +15,8 @@ pub struct Theme {
 pub struct Splash;
 
 impl Component for Splash {
+    type Action = ();
+    type Bindings = HashBindings<()>;
     type TaskPayload = ();
 
     #[inline]
@@ -27,7 +32,7 @@ impl Component for Splash {
 
         let middle_x = context.frame.origin.x + (context.frame.size.width / 2).saturating_sub(28);
         let mut middle_y =
-            context.frame.origin.y + (context.frame.size.height / 2).saturating_sub(12);
+            context.frame.origin.y + cmp::min(8, context.frame.size.height.saturating_sub(22));
         for line in SPLASH_LOGO.lines() {
             screen.draw_str(middle_x, middle_y, theme.logo, line);
             middle_y += 1;
@@ -61,10 +66,18 @@ const SPLASH_TAGLINE: &str = r#"
 
              a modern editor for the terminal
 
+"#;
 
-"#;
-const SPLASH_CREDITS: &str = r#"
-                       version 0.1
+lazy_static! {
+    pub static ref SPLASH_CREDITS: String = format!(
+        r#"
+                      version {}.{}.{}
                by Marius Cobzarenco et al.
-       zee is open source and freely distributable
-"#;
+       zee is open source and freely distributable"#,
+        MAJOR, MINOR, PATCH
+    );
+}
+
+const MAJOR: u32 = pkg_version_major!();
+const MINOR: u32 = pkg_version_minor!();
+const PATCH: u32 = pkg_version_patch!();
