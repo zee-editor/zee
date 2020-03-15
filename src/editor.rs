@@ -22,6 +22,7 @@ use crate::{
     },
     error::{Error, Result},
     frontend::Frontend,
+    settings::Settings,
     task::{TaskId, TaskPool},
     terminal::{Key, Position, Rect, Screen},
 };
@@ -47,6 +48,7 @@ pub struct Editor {
     // Theme palettes and currently selected theme
     themes: &'static [(Theme, &'static str); 30],
     theme_index: usize,
+    settings: Settings,
 }
 
 #[derive(Clone, Debug)]
@@ -68,7 +70,7 @@ lazy_static! {
 }
 
 impl Editor {
-    pub fn new(current_path: PathBuf, task_pool: TaskPool) -> Self {
+    pub fn new(settings: Settings, current_path: PathBuf, task_pool: TaskPool) -> Self {
         let prompt = Prompt::new();
         Self {
             components: TypeMap::new(),
@@ -83,7 +85,8 @@ impl Editor {
             controller: InputController::new(),
 
             themes: &THEMES,
-            theme_index: 0,
+            theme_index: settings.theme_index,
+            settings,
         }
     }
 
@@ -257,12 +260,13 @@ impl Editor {
 
         let Self {
             ref mut components,
-            ref mut task_owners,
             ref mut prompt,
-            ref focus,
-            ref themes,
-            ref task_pool,
+            ref mut task_owners,
             ref current_path,
+            ref focus,
+            ref settings,
+            ref task_pool,
+            ref themes,
             theme_index,
             ..
         } = *self;
@@ -280,6 +284,7 @@ impl Editor {
                     frame_id,
                     theme: &themes[theme_index].0,
                     path: current_path.as_path(),
+                    settings,
                 };
 
                 if id == PROMPT_ID {
@@ -367,6 +372,7 @@ impl Editor {
                     ref laid_components,
                     ref themes,
                     ref task_pool,
+                    ref settings,
                     theme_index,
                     ..
                 } = *self;
@@ -410,6 +416,7 @@ impl Editor {
                                     frame_id,
                                     theme: &themes[theme_index].0,
                                     path: current_path.as_path(),
+                                    settings,
                                 },
                             ) {
                                 prompt.log_error(format!("{}", error));
@@ -434,6 +441,7 @@ impl Editor {
                 ref mut task_owners,
                 ref task_pool,
                 ref themes,
+                ref settings,
                 theme_index,
                 ..
             } = *self;
@@ -460,6 +468,7 @@ impl Editor {
                         frame_id: 0,
                         theme: &themes[theme_index].0,
                         path: current_path.as_path(),
+                        settings,
                     },
                 )?;
                 for task_id in scheduler.scheduled() {

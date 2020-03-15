@@ -31,9 +31,13 @@ struct Args {
     /// Open file to edit
     files: Vec<PathBuf>,
 
-    #[structopt(long = "config-file", parse(from_os_str))]
-    /// Path to the configuration directory. It's usually ~/.config/zee on Linux.
-    config: Option<PathBuf>,
+    #[structopt(long = "settings-path", parse(from_os_str))]
+    /// Path to the configuration file. It's usually ~/.config/zee on Linux.
+    settings_path: Option<PathBuf>,
+
+    #[structopt(long = "create-settings")]
+    /// Writes the default configuration to file, if the file doesn't exist
+    create_settings: bool,
 
     #[structopt(long = "frontend", default_value = DEFAULT_FRONTEND_STR)]
     /// What frontend to use. Depending on how features enabled at compile time,
@@ -77,10 +81,34 @@ fn start_editor() -> Result<()> {
         configure_logging()?;
     }
     let current_dir = env::current_dir()?;
-    let mut editor = Editor::new(current_dir, TaskPool::new()?);
+
+    // Read the current settings. If we cannot for any reason, we'll use the
+    // default ones -- ensure the editor opens in any environment.
+    let settings = args
+        .settings_path
+        .or_else(|| settings::settings_path().map(Some).unwrap_or(None))
+        .map_or_else(Default::default, settings::read_settings);
+
+    // Create a default settings file if user requested it
+    if args.create_settings {
+        let settings_path = settings::settings_path()?;
+        if !settings_path.exists() {
+            settings::create_default_file(&settings_path)?;
+        } else {
+            log::warn!(
+                "Default settings file won't be created; a file already exists `{}`",
+                settings_path.display()
+            );
+        }
+    }
+
+    // Instantiate editor and open any files specified as arguments
+    let mut editor = Editor::new(settings, current_dir, TaskPool::new()?);
     for file_path in args.files.iter() {
         editor.open_file(file_path)?;
     }
+
+    // Start the UI loop
     run_editor_ui_loop(&args.frontend_kind, editor)
 }
 

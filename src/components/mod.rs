@@ -20,6 +20,7 @@ use std::{
 
 use crate::{
     error::Result,
+    settings::Settings,
     task::{self, TaskDone},
     terminal::{screen::Screen, Key, Position, Rect, Size},
 };
@@ -38,6 +39,7 @@ pub struct Context<'t> {
     pub frame_id: FrameId,
     pub theme: &'t Theme,
     pub path: &'t Path,
+    pub settings: &'t Settings,
 }
 
 impl<'t> Context<'t> {
@@ -49,6 +51,7 @@ impl<'t> Context<'t> {
             frame_id: self.frame_id,
             theme: self.theme,
             path: self.path,
+            settings: self.settings,
         }
     }
 
@@ -60,6 +63,7 @@ impl<'t> Context<'t> {
             frame_id: self.frame_id,
             theme: self.theme,
             path: self.path,
+            settings: self.settings,
         }
     }
 }
