@@ -544,6 +544,7 @@ lazy_static! {
 
         // Buffer
         smallvec![Key::Ctrl('x'), Key::Ctrl('s')] => Action::SaveBuffer,
+        smallvec![Key::Ctrl('x'), Key::Char('s')] => Action::SaveBuffer,
     });
 }
 
