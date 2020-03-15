@@ -480,7 +480,10 @@ impl Editor {
             self.open_file(path)?;
         }
 
-        if !self.controller.keys.is_empty() {
+        if key == Key::Ctrl('g') {
+            self.prompt.log_error("Cancel".into());
+            self.controller.keys.clear();
+        } else if !self.controller.keys.is_empty() {
             if !is_prefix_to_binding {
                 self.prompt
                     .log_error(format!("{}is undefined", self.controller));
