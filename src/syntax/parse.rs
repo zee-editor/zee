@@ -279,9 +279,9 @@ impl CancelFlag {
 }
 
 struct CancelableParser {
-    parser: Parser,
     // `parser` should appear before `flag` as it holds a reference to the
     // cancellation flag and should be destroyed first
+    parser: Parser,
     flag: CancelFlag,
 }
 
