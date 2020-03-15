@@ -489,6 +489,7 @@ pub enum Action {
     // Editing
     BeginSelection,
     ClearSelection,
+    SelectAll,
     DeleteForward,
     DeleteBackward,
     DeleteLine,
@@ -530,6 +531,7 @@ lazy_static! {
         // Editing
         smallvec![Key::Null] => Action::BeginSelection,
         smallvec![Key::Ctrl('g')] => Action::ClearSelection,
+        smallvec![Key::Ctrl('x'), Key::Char('h')] => Action::SelectAll,
         smallvec![Key::Alt('w')] => Action::CopySelection,
         smallvec![Key::Ctrl('w')] => Action::CutSelection,
         smallvec![Key::Ctrl('y')] => Action::Yank,
@@ -617,6 +619,7 @@ impl Component for Buffer {
 
             Action::BeginSelection => self.cursor.begin_selection(),
             Action::ClearSelection => self.cursor.clear_selection(),
+            Action::SelectAll => self.cursor.select_all(&self.text),
             Action::SaveBuffer => self.spawn_save_file(scheduler, context)?,
             _ => {}
         };

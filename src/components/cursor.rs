@@ -72,6 +72,11 @@ impl Cursor {
         self.selection = None;
     }
 
+    pub fn select_all(&mut self, text: &Rope) {
+        self.move_to_start_of_buffer(text);
+        self.selection = Some(CharIndex(text.len_chars()));
+    }
+
     pub fn move_up(&mut self, text: &Rope) {
         let current_line_index = text.char_to_line(self.range.start.0);
         if current_line_index == 0 {
