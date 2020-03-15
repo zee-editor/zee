@@ -1,8 +1,8 @@
 use euclid::default::SideOffsets2D;
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use ignore::WalkBuilder;
-use lazy_static::lazy_static;
 use maplit::hashmap;
+use once_cell::sync::Lazy;
 use ropey::Rope;
 use smallvec::smallvec;
 use std::{
@@ -13,16 +13,14 @@ use std::{
 
 use super::{
     cursor::{CharIndex, Cursor},
-    BindingMatch, Bindings, Component, Context, HashBindings, Position, Rect, Size, TaskDone,
+    BindingMatch, Bindings, Component, Context, HashBindings, Position, Rect, Size,
 };
 use crate::{
     error::{Error, Result},
-    task::{self, TaskId},
+    task::{Scheduler, TaskId},
     terminal::{Background, Foreground, Key, Screen, Style},
     utils::{self, RopeGraphemes},
 };
-
-type Scheduler<'pool> = task::Scheduler<'pool, Result<PromptTask>>;
 
 #[derive(Clone, Debug)]
 pub struct Theme {
@@ -39,7 +37,8 @@ pub enum Command {
     OpenFile(PathBuf),
 }
 
-pub struct PromptTask {
+pub struct AsyncAction {
+    task_id: TaskId,
     file_picker: FilePicker,
 }
 
@@ -57,7 +56,7 @@ impl State {
 }
 
 #[derive(Clone, Debug)]
-pub enum Action {
+pub enum SyncAction {
     // File pickers
     Clear,
     PickFileFromRepo,
@@ -84,40 +83,45 @@ pub enum Action {
     SelectLast,
 }
 
-lazy_static! {
-    pub static ref HASH_BINDINGS: HashBindings<Action> = HashBindings::new(hashmap! {
+pub enum Action {
+    Sync(SyncAction),
+    Async(Result<AsyncAction>),
+}
+
+static HASH_BINDINGS: Lazy<HashBindings<SyncAction>> = Lazy::new(|| {
+    HashBindings::new(hashmap! {
         // Path navigation
-        smallvec![Key::Ctrl('g')] => Action::Clear,
-        smallvec![Key::Ctrl('x'), Key::Ctrl('f')] => Action::PickFileFromDirectory,
-        smallvec![Key::Ctrl('x'), Key::Ctrl('v')] => Action::PickFileFromRepo,
-        smallvec![Key::Char('\n')] => Action::OpenFile,
+        smallvec![Key::Ctrl('g')] => SyncAction::Clear,
+        smallvec![Key::Ctrl('x'), Key::Ctrl('f')] => SyncAction::PickFileFromDirectory,
+        smallvec![Key::Ctrl('x'), Key::Ctrl('v')] => SyncAction::PickFileFromRepo,
+        smallvec![Key::Char('\n')] => SyncAction::OpenFile,
 
         // Cursor movement
-        smallvec![Key::Ctrl('b')] => Action::CursorLeft,
-        smallvec![Key::Left] => Action::CursorLeft,
-        smallvec![Key::Ctrl('f')] => Action::CursorRight,
-        smallvec![Key::Right] => Action::CursorRight,
-        smallvec![Key::Ctrl('a')] => Action::CursorStartOfLine,
-        smallvec![Key::Home] => Action::CursorStartOfLine,
-        smallvec![Key::Ctrl('e')] => Action::CursorEndOfLine,
-        smallvec![Key::End] => Action::CursorEndOfLine,
+        smallvec![Key::Ctrl('b')] => SyncAction::CursorLeft,
+        smallvec![Key::Left] => SyncAction::CursorLeft,
+        smallvec![Key::Ctrl('f')] => SyncAction::CursorRight,
+        smallvec![Key::Right] => SyncAction::CursorRight,
+        smallvec![Key::Ctrl('a')] => SyncAction::CursorStartOfLine,
+        smallvec![Key::Home] => SyncAction::CursorStartOfLine,
+        smallvec![Key::Ctrl('e')] => SyncAction::CursorEndOfLine,
+        smallvec![Key::End] => SyncAction::CursorEndOfLine,
 
         // Path navigation
-        smallvec![Key::Ctrl('l')] => Action::SelectParentDirectory,
-        smallvec![Key::Char('\t')] => Action::AutocompletePath,
-        smallvec![Key::Ctrl('d')] => Action::DeleteForward,
-        smallvec![Key::Backspace] => Action::DeleteBackward,
+        smallvec![Key::Ctrl('l')] => SyncAction::SelectParentDirectory,
+        smallvec![Key::Char('\t')] => SyncAction::AutocompletePath,
+        smallvec![Key::Ctrl('d')] => SyncAction::DeleteForward,
+        smallvec![Key::Backspace] => SyncAction::DeleteBackward,
 
         // Selection
-        smallvec![Key::Ctrl('p')] => Action::SelectUp,
-        smallvec![Key::Up] => Action::SelectUp,
-        smallvec![Key::Ctrl('n')] => Action::SelectDown,
-        smallvec![Key::Down] => Action::SelectDown,
-        smallvec![Key::Char('p')] => Action::SelectUp,
-        smallvec![Key::Alt('<')] => Action::SelectFirst,
-        smallvec![Key::Alt('>')] => Action::SelectLast,
-    });
-}
+        smallvec![Key::Ctrl('p')] => SyncAction::SelectUp,
+        smallvec![Key::Up] => SyncAction::SelectUp,
+        smallvec![Key::Ctrl('n')] => SyncAction::SelectDown,
+        smallvec![Key::Down] => SyncAction::SelectDown,
+        smallvec![Key::Char('p')] => SyncAction::SelectUp,
+        smallvec![Key::Alt('<')] => SyncAction::SelectFirst,
+        smallvec![Key::Alt('>')] => SyncAction::SelectLast,
+    })
+});
 
 pub struct PromptBindings;
 
@@ -125,9 +129,9 @@ impl Bindings<Action> for PromptBindings {
     fn matches(&self, pressed: &[Key]) -> BindingMatch<Action> {
         match pressed {
             [Key::Char(character)] if *character != '\n' && *character != '\t' => {
-                BindingMatch::Full(Action::InsertChar(*character))
+                BindingMatch::Full(Action::Sync(SyncAction::InsertChar(*character)))
             }
-            pressed => HASH_BINDINGS.matches(pressed),
+            pressed => HASH_BINDINGS.matches(pressed).map_action(Action::Sync),
         }
     }
 }
@@ -185,22 +189,178 @@ impl Prompt {
         }
     }
 
-    fn pick_from_directory(&mut self, scheduler: &mut Scheduler) -> Result<()> {
+    fn reduce_sync(
+        &mut self,
+        action: SyncAction,
+        scheduler: &mut Scheduler<<Self as Component>::Action>,
+        context: &Context,
+    ) -> Result<()> {
+        match action {
+            SyncAction::Clear => {
+                self.state = State::Inactive;
+                self.cursor = Cursor::new();
+                self.input.remove(..);
+                self.file_picker.clear();
+                self.file_picker_task = None;
+                return Ok(());
+            }
+            SyncAction::PickFileFromDirectory if !self.is_active() => {
+                self.state = State::PickingFileFromDirectory;
+                self.set_input_to_cwd(context);
+                self.pick_from_directory(scheduler)?;
+                return Ok(());
+            }
+            SyncAction::PickFileFromRepo if !self.is_active() => {
+                self.state = State::PickingFileFromRepo;
+                self.set_input_to_cwd(context);
+                self.pick_from_repository(scheduler)?;
+                return Ok(());
+            }
+            SyncAction::OpenFile if self.is_active() => {
+                let path_str: Cow<str> = self.input.slice(..).into();
+                self.command = Some(Command::OpenFile(PathBuf::from(path_str.trim())));
+                self.input.remove(..);
+                self.cursor = Cursor::new();
+                self.state = State::Inactive;
+            }
+            _ => {}
+        }
+
+        if self.is_active() {
+            let input_changed = match action {
+                SyncAction::CursorLeft => {
+                    self.cursor.move_left(&self.input);
+                    false
+                }
+                SyncAction::CursorRight => {
+                    self.cursor.move_right(&self.input);
+                    false
+                }
+                SyncAction::CursorStartOfLine => {
+                    self.cursor.move_to_start_of_line(&self.input);
+                    false
+                }
+                SyncAction::CursorEndOfLine => {
+                    self.cursor.move_to_end_of_line(&self.input);
+                    false
+                }
+                SyncAction::SelectParentDirectory => {
+                    let path_str: String = self.input.slice(..).into();
+                    self.input = Path::new(&path_str.trim())
+                        .parent()
+                        .map(|parent| parent.to_string_lossy())
+                        .unwrap_or_else(|| "".into())
+                        .into();
+                    utils::ensure_trailing_newline_with_content(&mut self.input);
+                    self.cursor.move_to_end_of_line(&self.input);
+                    self.cursor.insert_char(&mut self.input, '/');
+                    self.cursor.move_right(&self.input);
+                    true
+                }
+                SyncAction::AutocompletePath => {
+                    if let Some(path) = self.file_picker.selected() {
+                        self.input = path.to_string_lossy().into();
+                        utils::ensure_trailing_newline_with_content(&mut self.input);
+                        self.cursor.move_to_end_of_line(&self.input);
+                        if path.is_dir() {
+                            self.cursor.insert_char(&mut self.input, '/');
+                            self.cursor.move_right(&self.input);
+                        }
+                        true
+                    } else {
+                        false
+                    }
+                }
+                SyncAction::SelectDown => {
+                    self.file_picker.move_down();
+                    false
+                }
+                SyncAction::SelectUp => {
+                    self.file_picker.move_up();
+                    false
+                }
+                SyncAction::SelectFirst => {
+                    self.file_picker.move_to_top();
+                    false
+                }
+                SyncAction::SelectLast => {
+                    self.file_picker.move_to_bottom();
+                    false
+                }
+                SyncAction::DeleteBackward => !self.cursor.backspace(&mut self.input).is_empty(),
+                SyncAction::DeleteForward => !self.cursor.delete(&mut self.input).is_empty(),
+                SyncAction::InsertChar(character) if character != '\t' => {
+                    let diff = self.cursor.insert_char(&mut self.input, character);
+                    self.cursor.move_right(&self.input);
+                    !diff.is_empty()
+                }
+                _ => false,
+            };
+
+            if input_changed {
+                match self.state {
+                    State::PickingFileFromDirectory => self.pick_from_directory(scheduler)?,
+                    State::PickingFileFromRepo => self.pick_from_repository(scheduler)?,
+                    State::Inactive => {}
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn reduce_async(&mut self, action: Result<AsyncAction>) -> Result<()> {
+        match action {
+            Ok(AsyncAction {
+                task_id,
+                file_picker,
+            }) if self
+                .file_picker_task
+                .map(|expected| expected == task_id)
+                .unwrap_or(false) =>
+            {
+                self.file_picker_task = None;
+                self.file_picker = file_picker;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn pick_from_directory(
+        &mut self,
+        scheduler: &mut Scheduler<<Self as Component>::Action>,
+    ) -> Result<()> {
         let path_str = self.input.to_string();
         let mut file_picker = self.file_picker.clone();
-        self.file_picker_task = Some(scheduler.spawn(move || {
-            pick_from_directory(&mut file_picker, path_str)?;
-            Ok(PromptTask { file_picker })
+        self.file_picker_task = Some(scheduler.spawn(move |task_id| {
+            Action::Async(
+                pick_from_directory(&mut file_picker, path_str)
+                    .map(|_| AsyncAction {
+                        task_id,
+                        file_picker,
+                    })
+                    .map_err(|error| error.into()),
+            )
         })?);
         Ok(())
     }
 
-    fn pick_from_repository(&mut self, scheduler: &mut Scheduler) -> Result<()> {
+    fn pick_from_repository(
+        &mut self,
+        scheduler: &mut Scheduler<<Self as Component>::Action>,
+    ) -> Result<()> {
         let path_str = self.input.to_string();
         let mut file_picker = self.file_picker.clone();
-        self.file_picker_task = Some(scheduler.spawn(move || {
-            pick_from_repository(&mut file_picker, path_str)?;
-            Ok(PromptTask { file_picker })
+        self.file_picker_task = Some(scheduler.spawn(move |task_id| {
+            Action::Async(
+                pick_from_repository(&mut file_picker, path_str)
+                    .map(|_| AsyncAction {
+                        task_id,
+                        file_picker,
+                    })
+                    .map_err(|error| error.into()),
+            )
         })?);
         Ok(())
     }
@@ -259,10 +419,9 @@ fn directory_files_iter(path: impl AsRef<Path>) -> Result<impl Iterator<Item = R
 impl Component for Prompt {
     type Action = Action;
     type Bindings = PromptBindings;
-    type TaskPayload = Result<PromptTask>;
 
     #[inline]
-    fn draw(&mut self, screen: &mut Screen, _: &mut Scheduler, context: &Context) {
+    fn draw(&mut self, screen: &mut Screen, _: &mut Scheduler<Self::Action>, context: &Context) {
         let theme = &context.theme.prompt;
 
         if self.is_active() {
@@ -336,145 +495,20 @@ impl Component for Prompt {
     }
 
     #[inline]
-    fn handle_action(
+    fn reduce(
         &mut self,
-        action: Action,
-        scheduler: &mut Scheduler,
+        action: Self::Action,
+        scheduler: &mut Scheduler<Self::Action>,
         context: &Context,
     ) -> Result<()> {
         match action {
-            Action::Clear => {
-                self.state = State::Inactive;
-                self.cursor = Cursor::new();
-                self.input.remove(..);
-                self.file_picker.clear();
-                self.file_picker_task = None;
-                return Ok(());
-            }
-            Action::PickFileFromDirectory if !self.is_active() => {
-                self.state = State::PickingFileFromDirectory;
-                self.set_input_to_cwd(context);
-                self.pick_from_directory(scheduler)?;
-                return Ok(());
-            }
-            Action::PickFileFromRepo if !self.is_active() => {
-                self.state = State::PickingFileFromRepo;
-                self.set_input_to_cwd(context);
-                self.pick_from_repository(scheduler)?;
-                return Ok(());
-            }
-            Action::OpenFile if self.is_active() => {
-                let path_str: Cow<str> = self.input.slice(..).into();
-                self.command = Some(Command::OpenFile(PathBuf::from(path_str.trim())));
-                self.input.remove(..);
-                self.cursor = Cursor::new();
-                self.state = State::Inactive;
-            }
-            _ => {}
+            Self::Action::Sync(action) => self.reduce_sync(action, scheduler, context),
+            Self::Action::Async(action) => self.reduce_async(action),
         }
-
-        if self.is_active() {
-            let input_changed = match action {
-                Action::CursorLeft => {
-                    self.cursor.move_left(&self.input);
-                    false
-                }
-                Action::CursorRight => {
-                    self.cursor.move_right(&self.input);
-                    false
-                }
-                Action::CursorStartOfLine => {
-                    self.cursor.move_to_start_of_line(&self.input);
-                    false
-                }
-                Action::CursorEndOfLine => {
-                    self.cursor.move_to_end_of_line(&self.input);
-                    false
-                }
-                Action::SelectParentDirectory => {
-                    let path_str: String = self.input.slice(..).into();
-                    self.input = Path::new(&path_str.trim())
-                        .parent()
-                        .map(|parent| parent.to_string_lossy())
-                        .unwrap_or_else(|| "".into())
-                        .into();
-                    utils::ensure_trailing_newline_with_content(&mut self.input);
-                    self.cursor.move_to_end_of_line(&self.input);
-                    self.cursor.insert_char(&mut self.input, '/');
-                    self.cursor.move_right(&self.input);
-                    true
-                }
-                Action::AutocompletePath => {
-                    if let Some(path) = self.file_picker.selected() {
-                        self.input = path.to_string_lossy().into();
-                        utils::ensure_trailing_newline_with_content(&mut self.input);
-                        self.cursor.move_to_end_of_line(&self.input);
-                        if path.is_dir() {
-                            self.cursor.insert_char(&mut self.input, '/');
-                            self.cursor.move_right(&self.input);
-                        }
-                        true
-                    } else {
-                        false
-                    }
-                }
-                Action::SelectDown => {
-                    self.file_picker.move_down();
-                    false
-                }
-                Action::SelectUp => {
-                    self.file_picker.move_up();
-                    false
-                }
-                Action::SelectFirst => {
-                    self.file_picker.move_to_top();
-                    false
-                }
-                Action::SelectLast => {
-                    self.file_picker.move_to_bottom();
-                    false
-                }
-                Action::DeleteBackward => !self.cursor.backspace(&mut self.input).is_empty(),
-                Action::DeleteForward => !self.cursor.delete(&mut self.input).is_empty(),
-                Action::InsertChar(character) if character != '\t' => {
-                    let diff = self.cursor.insert_char(&mut self.input, character);
-                    self.cursor.move_right(&self.input);
-                    !diff.is_empty()
-                }
-                _ => false,
-            };
-
-            if input_changed {
-                match self.state {
-                    State::PickingFileFromDirectory => self.pick_from_directory(scheduler)?,
-                    State::PickingFileFromRepo => self.pick_from_repository(scheduler)?,
-                    State::Inactive => {}
-                }
-            }
-        }
-
-        Ok(())
     }
 
     fn bindings(&self) -> Option<&Self::Bindings> {
         Some(&self.bindings)
-    }
-
-    fn task_done(&mut self, task: TaskDone<Self::TaskPayload>) -> Result<()> {
-        let task_id = task.id;
-        match task.payload {
-            Ok(PromptTask { file_picker })
-                if self
-                    .file_picker_task
-                    .map(|expected| expected == task_id)
-                    .unwrap_or(false) =>
-            {
-                self.file_picker_task = None;
-                self.file_picker = file_picker;
-            }
-            _ => {}
-        }
-        Ok(())
     }
 }
 

@@ -4,9 +4,9 @@ pub mod prompt;
 pub mod splash;
 pub mod theme;
 
-pub use buffer::{Buffer, BufferTask};
+pub use buffer::Buffer;
 pub use cursor::Cursor;
-pub use prompt::{Prompt, PromptTask};
+pub use prompt::Prompt;
 pub use splash::Splash;
 pub use theme::Theme;
 
@@ -21,7 +21,7 @@ use std::{
 use crate::{
     error::Result,
     settings::Settings,
-    task::{self, TaskDone},
+    task,
     terminal::{screen::Screen, Key, Position, Rect, Size},
 };
 
@@ -71,20 +71,19 @@ impl<'t> Context<'t> {
 pub trait Component {
     type Action;
     type Bindings: Bindings<Self::Action>;
-    type TaskPayload;
 
     fn draw(
         &mut self,
         _screen: &mut Screen,
-        _scheduler: &mut Scheduler<Self::TaskPayload>,
+        _scheduler: &mut Scheduler<Self::Action>,
         _context: &Context,
     ) {
     }
 
-    fn handle_action(
+    fn reduce(
         &mut self,
         _action: Self::Action,
-        _scheduler: &mut Scheduler<Self::TaskPayload>,
+        _scheduler: &mut Scheduler<Self::Action>,
         _context: &Context,
     ) -> Result<()> {
         Ok(())
@@ -92,10 +91,6 @@ pub trait Component {
 
     fn bindings(&self) -> Option<&Self::Bindings> {
         None
-    }
-
-    fn task_done(&mut self, _task: TaskDone<Self::TaskPayload>) -> Result<()> {
-        Ok(())
     }
 
     fn path(&self) -> Option<&Path> {
@@ -387,6 +382,14 @@ impl<Action> BindingMatch<Action> {
         match self {
             Self::Prefix => true,
             _ => false,
+        }
+    }
+
+    pub fn map_action<MappedT>(self, f: impl FnOnce(Action) -> MappedT) -> BindingMatch<MappedT> {
+        match self {
+            Self::None => BindingMatch::None,
+            Self::Prefix => BindingMatch::Prefix,
+            Self::Full(action) => BindingMatch::Full(f(action)),
         }
     }
 }

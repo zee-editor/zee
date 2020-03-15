@@ -1,7 +1,7 @@
 use euclid::default::SideOffsets2D;
 use git2::Repository;
-use lazy_static::lazy_static;
 use maplit::hashmap;
+use once_cell::sync::Lazy;
 use ropey::{Rope, RopeSlice};
 use size_format::SizeFormatterBinary;
 use smallvec::smallvec;
@@ -19,7 +19,7 @@ use zee_highlight::SelectorNodeId;
 use super::{
     cursor::{CharIndex, Cursor},
     theme::Theme as EditorTheme,
-    BindingMatch, Bindings, Component, Context, HashBindings, TaskDone,
+    BindingMatch, Bindings, Component, Context, HashBindings,
 };
 use crate::{
     error::Result,
@@ -28,13 +28,11 @@ use crate::{
         highlight::{text_style_at_char, Theme as SyntaxTheme},
         parse::{NodeTrace, OpaqueDiff, ParserStatus, SyntaxCursor, SyntaxTree},
     },
-    task,
+    task::Scheduler,
     terminal::{Key, Position, Rect, Screen, Size, Style},
     undo::UndoTree,
     utils::{self, strip_trailing_whitespace, RopeGraphemes, TAB_WIDTH},
 };
-
-pub type Scheduler<'pool> = task::Scheduler<'pool, Result<BufferTask>>;
 
 #[derive(Clone, Debug)]
 pub struct Theme {
@@ -56,11 +54,6 @@ enum ModifiedStatus {
     Changed,
     Unchanged,
     Saving(Instant),
-}
-
-pub enum BufferTask {
-    SaveFile { text: Rope },
-    ParseSyntax(ParserStatus),
 }
 
 pub struct Buffer {
@@ -107,18 +100,152 @@ impl Buffer {
         })
     }
 
-    pub fn spawn_save_file(&mut self, scheduler: &mut Scheduler, context: &Context) -> Result<()> {
+    pub fn spawn_save_file(
+        &mut self,
+        scheduler: &mut Scheduler<<Self as Component>::Action>,
+        context: &Context,
+    ) -> Result<()> {
         self.has_unsaved_changes = ModifiedStatus::Saving(context.time);
         if let Some(ref file_path) = self.file_path {
             let text = self.text.clone();
             let file_path = file_path.clone();
-            scheduler.spawn(move || {
-                let text = strip_trailing_whitespace(text);
-                text.write_to(BufWriter::new(File::create(&file_path)?))?;
-                Ok(BufferTask::SaveFile { text })
+            scheduler.spawn(move |_| {
+                Action::Async(
+                    File::create(&file_path)
+                        .map(BufWriter::new)
+                        .and_then(|writer| {
+                            let text = strip_trailing_whitespace(text);
+                            text.write_to(writer)?;
+                            Ok(text)
+                        })
+                        .map(|text| AsyncAction::SaveFile { text })
+                        .map_err(|error| error.into()),
+                )
             })?;
         }
+        Ok(())
+    }
 
+    fn reduce_sync(
+        &mut self,
+        action: SyncAction,
+        scheduler: &mut Scheduler<<Self as Component>::Action>,
+        context: &Context,
+    ) -> Result<()> {
+        // Stateless
+        match action {
+            SyncAction::Up => self.cursor.move_up(&self.text),
+            SyncAction::Down => self.cursor.move_down(&self.text),
+            SyncAction::Left => self.cursor.move_left(&self.text),
+            SyncAction::Right => self.cursor.move_right(&self.text),
+            SyncAction::PageDown => self
+                .cursor
+                .move_down_n(&self.text, context.frame.size.height - 1),
+            SyncAction::PageUp => self
+                .cursor
+                .move_up_n(&self.text, context.frame.size.height - 1),
+            SyncAction::StartOfLine => self.cursor.move_to_start_of_line(&self.text),
+            SyncAction::EndOfLine => self.cursor.move_to_end_of_line(&self.text),
+            SyncAction::StartOfBuffer => self.cursor.move_to_start_of_buffer(&self.text),
+            SyncAction::EndOfBuffer => self.cursor.move_to_end_of_buffer(&self.text),
+            SyncAction::CenterCursorVisually => self.center_visual_cursor(&context.frame),
+
+            SyncAction::BeginSelection => self.cursor.begin_selection(),
+            SyncAction::ClearSelection => self.cursor.clear_selection(),
+            SyncAction::SelectAll => self.cursor.select_all(&self.text),
+            SyncAction::SaveBuffer => self.spawn_save_file(scheduler, context)?,
+            _ => {}
+        };
+
+        let mut undoing = false;
+        let diff = match action {
+            SyncAction::DeleteForward => {
+                let operation = self.cursor.delete(&mut self.text);
+                self.clipboard = Some(operation.deleted);
+                operation.diff
+            }
+            SyncAction::DeleteBackward => self.cursor.backspace(&mut self.text).diff,
+            SyncAction::DeleteLine => self.delete_line(),
+            SyncAction::Yank => self.yank_line(),
+            SyncAction::CopySelection => self.copy_selection(),
+            SyncAction::CutSelection => self.cut_selection(),
+            SyncAction::InsertTab if DISABLE_TABS => {
+                let diff = self
+                    .cursor
+                    .insert_chars(&mut self.text, iter::repeat(' ').take(TAB_WIDTH));
+                self.cursor.move_right_n(&self.text, TAB_WIDTH);
+                diff
+            }
+            SyncAction::InsertNewLine => {
+                let diff = self.cursor.insert_char(&mut self.text, '\n');
+                // self.ensure_trailing_newline_with_content();
+                self.cursor.move_down(&self.text);
+                self.cursor.move_to_start_of_line(&self.text);
+                diff
+            }
+            SyncAction::Undo => {
+                if let Some((diff, cursor)) = self.text.undo() {
+                    undoing = true;
+                    self.cursor = cursor;
+                    if let Some(syntax) = self.syntax.as_mut() {
+                        syntax.edit(&diff);
+                        syntax.spawn_parse_task(scheduler, self.text.head().clone(), true)?;
+                    }
+                    diff
+                } else {
+                    OpaqueDiff::empty()
+                }
+            }
+            SyncAction::InsertChar(character) => {
+                let diff = self.cursor.insert_char(&mut self.text, character);
+                // self.ensure_trailing_newline_with_content();
+                self.cursor.move_right(&self.text);
+                diff
+            }
+            _ => OpaqueDiff::empty(),
+        };
+
+        if !diff.is_empty() && !undoing {
+            self.has_unsaved_changes = ModifiedStatus::Changed;
+            self.text.new_revision(diff.clone(), self.cursor.clone());
+        }
+
+        match self.syntax.as_mut() {
+            Some(syntax) if !diff.is_empty() && !undoing => {
+                // eprintln!(
+                //     "1: self.text.len_bytes() == {}  |  end_byte == {:?}  |  diff == {:?}",
+                //     self.text.len_bytes(),
+                //     syntax.tree.as_ref().map(|t| t.root_node().end_byte()),
+                //     diff,
+                // );
+                syntax.edit(&diff);
+                // eprintln!(
+                //     "2: end_byte == {:?}",
+                //     syntax.tree.as_ref().map(|t| t.root_node().end_byte()),
+                // );
+                syntax.spawn_parse_task(scheduler, self.text.head().clone(), false)?;
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    fn reduce_async(&mut self, action: Result<AsyncAction>) -> Result<()> {
+        match action? {
+            AsyncAction::SaveFile { text: new_text } => {
+                self.cursor.sync(&self.text, &new_text);
+                self.text
+                    .new_revision(OpaqueDiff::empty(), self.cursor.clone());
+                *self.text = new_text;
+                self.has_unsaved_changes = ModifiedStatus::Unchanged;
+            }
+            AsyncAction::ParseSyntax(parsed) => {
+                if let Some(syntax) = self.syntax.as_mut() {
+                    syntax.handle_parse_syntax_done(parsed);
+                }
+            }
+        }
         Ok(())
     }
 
@@ -471,8 +598,13 @@ impl Buffer {
     }
 }
 
-#[derive(Clone, Debug)]
 pub enum Action {
+    Sync(SyncAction),
+    Async(Result<AsyncAction>),
+}
+
+#[derive(Clone, Debug)]
+pub enum SyncAction {
     // Movement
     Up,
     Down,
@@ -505,50 +637,55 @@ pub enum Action {
     SaveBuffer,
 }
 
-lazy_static! {
-    pub static ref HASH_BINDINGS: HashBindings<Action> = HashBindings::new(hashmap! {
+pub enum AsyncAction {
+    SaveFile { text: Rope },
+    ParseSyntax(ParserStatus),
+}
+
+static HASH_BINDINGS: Lazy<HashBindings<SyncAction>> = Lazy::new(|| {
+    HashBindings::new(hashmap! {
         // Movement
-        smallvec![Key::Ctrl('p')] => Action::Up,
-        smallvec![Key::Up] => Action::Up,
-        smallvec![Key::Ctrl('n')] => Action::Down,
-        smallvec![Key::Down] => Action::Down,
-        smallvec![Key::Ctrl('b')] => Action::Left,
-        smallvec![Key::Left] => Action::Left,
-        smallvec![Key::Ctrl('f')] => Action::Right,
-        smallvec![Key::Right] => Action::Right,
-        smallvec![Key::Ctrl('v')] => Action::PageDown,
-        smallvec![Key::PageDown] => Action::PageDown,
-        smallvec![Key::Alt('v')] => Action::PageUp,
-        smallvec![Key::PageUp] => Action::PageUp,
-        smallvec![Key::Ctrl('a')] => Action::StartOfLine,
-        smallvec![Key::Home] => Action::StartOfLine,
-        smallvec![Key::Ctrl('e')] => Action::EndOfLine,
-        smallvec![Key::End] => Action::EndOfLine,
-        smallvec![Key::Alt('<')] => Action::StartOfBuffer,
-        smallvec![Key::Alt('>')] => Action::EndOfBuffer,
-        smallvec![Key::Ctrl('l')] => Action::CenterCursorVisually,
+        smallvec![Key::Ctrl('p')] => SyncAction::Up,
+        smallvec![Key::Up] => SyncAction::Up,
+        smallvec![Key::Ctrl('n')] => SyncAction::Down,
+        smallvec![Key::Down] => SyncAction::Down,
+        smallvec![Key::Ctrl('b')] => SyncAction::Left,
+        smallvec![Key::Left] => SyncAction::Left,
+        smallvec![Key::Ctrl('f')] => SyncAction::Right,
+        smallvec![Key::Right] => SyncAction::Right,
+        smallvec![Key::Ctrl('v')] => SyncAction::PageDown,
+        smallvec![Key::PageDown] => SyncAction::PageDown,
+        smallvec![Key::Alt('v')] => SyncAction::PageUp,
+        smallvec![Key::PageUp] => SyncAction::PageUp,
+        smallvec![Key::Ctrl('a')] => SyncAction::StartOfLine,
+        smallvec![Key::Home] => SyncAction::StartOfLine,
+        smallvec![Key::Ctrl('e')] => SyncAction::EndOfLine,
+        smallvec![Key::End] => SyncAction::EndOfLine,
+        smallvec![Key::Alt('<')] => SyncAction::StartOfBuffer,
+        smallvec![Key::Alt('>')] => SyncAction::EndOfBuffer,
+        smallvec![Key::Ctrl('l')] => SyncAction::CenterCursorVisually,
 
         // Editing
-        smallvec![Key::Null] => Action::BeginSelection,
-        smallvec![Key::Ctrl('g')] => Action::ClearSelection,
-        smallvec![Key::Ctrl('x'), Key::Char('h')] => Action::SelectAll,
-        smallvec![Key::Alt('w')] => Action::CopySelection,
-        smallvec![Key::Ctrl('w')] => Action::CutSelection,
-        smallvec![Key::Ctrl('y')] => Action::Yank,
-        smallvec![Key::Ctrl('d')] => Action::DeleteForward,
-        smallvec![Key::Delete] => Action::DeleteForward,
-        smallvec![Key::Backspace] => Action::DeleteBackward,
-        smallvec![Key::Ctrl('k')] => Action::DeleteLine,
-        smallvec![Key::Char('\n')] => Action::InsertNewLine,
-        smallvec![Key::Char('\t')] => Action::InsertTab,
-        smallvec![Key::Ctrl('/')] => Action::Undo,
-        smallvec![Key::Ctrl('z')] => Action::Undo,
+        smallvec![Key::Null] => SyncAction::BeginSelection,
+        smallvec![Key::Ctrl('g')] => SyncAction::ClearSelection,
+        smallvec![Key::Ctrl('x'), Key::Char('h')] => SyncAction::SelectAll,
+        smallvec![Key::Alt('w')] => SyncAction::CopySelection,
+        smallvec![Key::Ctrl('w')] => SyncAction::CutSelection,
+        smallvec![Key::Ctrl('y')] => SyncAction::Yank,
+        smallvec![Key::Ctrl('d')] => SyncAction::DeleteForward,
+        smallvec![Key::Delete] => SyncAction::DeleteForward,
+        smallvec![Key::Backspace] => SyncAction::DeleteBackward,
+        smallvec![Key::Ctrl('k')] => SyncAction::DeleteLine,
+        smallvec![Key::Char('\n')] => SyncAction::InsertNewLine,
+        smallvec![Key::Char('\t')] => SyncAction::InsertTab,
+        smallvec![Key::Ctrl('/')] => SyncAction::Undo,
+        smallvec![Key::Ctrl('z')] => SyncAction::Undo,
 
         // Buffer
-        smallvec![Key::Ctrl('x'), Key::Ctrl('s')] => Action::SaveBuffer,
-        smallvec![Key::Ctrl('x'), Key::Char('s')] => Action::SaveBuffer,
-    });
-}
+        smallvec![Key::Ctrl('x'), Key::Ctrl('s')] => SyncAction::SaveBuffer,
+        smallvec![Key::Ctrl('x'), Key::Char('s')] => SyncAction::SaveBuffer,
+    })
+});
 
 pub struct BufferBindings;
 
@@ -558,9 +695,9 @@ impl Bindings<Action> for BufferBindings {
             [Key::Char(character)]
                 if *character != '\n' && (!DISABLE_TABS || *character != '\t') =>
             {
-                BindingMatch::Full(Action::InsertChar(*character))
+                BindingMatch::Full(Action::Sync(SyncAction::InsertChar(*character)))
             }
-            pressed => HASH_BINDINGS.matches(pressed),
+            pressed => HASH_BINDINGS.matches(pressed).map_action(Action::Sync),
         }
     }
 }
@@ -568,9 +705,13 @@ impl Bindings<Action> for BufferBindings {
 impl Component for Buffer {
     type Action = Action;
     type Bindings = BufferBindings;
-    type TaskPayload = Result<BufferTask>;
 
-    fn draw(&mut self, screen: &mut Screen, scheduler: &mut Scheduler, context: &Context) {
+    fn draw(
+        &mut self,
+        screen: &mut Screen,
+        scheduler: &mut Scheduler<Self::Action>,
+        context: &Context,
+    ) {
         {
             let Self {
                 ref mut syntax,
@@ -593,128 +734,16 @@ impl Component for Buffer {
         self.draw_status_bar(screen, context, visual_cursor_x);
     }
 
-    fn handle_action(
+    fn reduce(
         &mut self,
         action: Self::Action,
-        scheduler: &mut Scheduler,
+        scheduler: &mut Scheduler<Self::Action>,
         context: &Context,
     ) -> Result<()> {
-        // Stateless
         match action {
-            Action::Up => self.cursor.move_up(&self.text),
-            Action::Down => self.cursor.move_down(&self.text),
-            Action::Left => self.cursor.move_left(&self.text),
-            Action::Right => self.cursor.move_right(&self.text),
-            Action::PageDown => self
-                .cursor
-                .move_down_n(&self.text, context.frame.size.height - 1),
-            Action::PageUp => self
-                .cursor
-                .move_up_n(&self.text, context.frame.size.height - 1),
-            Action::StartOfLine => self.cursor.move_to_start_of_line(&self.text),
-            Action::EndOfLine => self.cursor.move_to_end_of_line(&self.text),
-            Action::StartOfBuffer => self.cursor.move_to_start_of_buffer(&self.text),
-            Action::EndOfBuffer => self.cursor.move_to_end_of_buffer(&self.text),
-            Action::CenterCursorVisually => self.center_visual_cursor(&context.frame),
-
-            Action::BeginSelection => self.cursor.begin_selection(),
-            Action::ClearSelection => self.cursor.clear_selection(),
-            Action::SelectAll => self.cursor.select_all(&self.text),
-            Action::SaveBuffer => self.spawn_save_file(scheduler, context)?,
-            _ => {}
-        };
-
-        let mut undoing = false;
-        let diff = match action {
-            Action::DeleteForward => {
-                let operation = self.cursor.delete(&mut self.text);
-                self.clipboard = Some(operation.deleted);
-                operation.diff
-            }
-            Action::DeleteBackward => self.cursor.backspace(&mut self.text).diff,
-            Action::DeleteLine => self.delete_line(),
-            Action::Yank => self.yank_line(),
-            Action::CopySelection => self.copy_selection(),
-            Action::CutSelection => self.cut_selection(),
-            Action::InsertTab if DISABLE_TABS => {
-                let diff = self
-                    .cursor
-                    .insert_chars(&mut self.text, iter::repeat(' ').take(TAB_WIDTH));
-                self.cursor.move_right_n(&self.text, TAB_WIDTH);
-                diff
-            }
-            Action::InsertNewLine => {
-                let diff = self.cursor.insert_char(&mut self.text, '\n');
-                // self.ensure_trailing_newline_with_content();
-                self.cursor.move_down(&self.text);
-                self.cursor.move_to_start_of_line(&self.text);
-                diff
-            }
-            Action::Undo => {
-                if let Some((diff, cursor)) = self.text.undo() {
-                    undoing = true;
-                    self.cursor = cursor;
-                    if let Some(syntax) = self.syntax.as_mut() {
-                        syntax.edit(&diff);
-                        syntax.spawn_parse_task(scheduler, self.text.head().clone(), true)?;
-                    }
-                    diff
-                } else {
-                    OpaqueDiff::empty()
-                }
-            }
-            Action::InsertChar(character) => {
-                let diff = self.cursor.insert_char(&mut self.text, character);
-                // self.ensure_trailing_newline_with_content();
-                self.cursor.move_right(&self.text);
-                diff
-            }
-            _ => OpaqueDiff::empty(),
-        };
-
-        if !diff.is_empty() && !undoing {
-            self.has_unsaved_changes = ModifiedStatus::Changed;
-            self.text.new_revision(diff.clone(), self.cursor.clone());
+            Action::Sync(action) => self.reduce_sync(action, scheduler, context),
+            Action::Async(action) => self.reduce_async(action),
         }
-
-        match self.syntax.as_mut() {
-            Some(syntax) if !diff.is_empty() && !undoing => {
-                // eprintln!(
-                //     "1: self.text.len_bytes() == {}  |  end_byte == {:?}  |  diff == {:?}",
-                //     self.text.len_bytes(),
-                //     syntax.tree.as_ref().map(|t| t.root_node().end_byte()),
-                //     diff,
-                // );
-                syntax.edit(&diff);
-                // eprintln!(
-                //     "2: end_byte == {:?}",
-                //     syntax.tree.as_ref().map(|t| t.root_node().end_byte()),
-                // );
-                syntax.spawn_parse_task(scheduler, self.text.head().clone(), false)?;
-            }
-            _ => {}
-        }
-
-        Ok(())
-    }
-
-    fn task_done(&mut self, task: TaskDone<Self::TaskPayload>) -> Result<()> {
-        let task_id = task.id;
-        match task.payload? {
-            BufferTask::SaveFile { text: new_text } => {
-                self.cursor.sync(&self.text, &new_text);
-                self.text
-                    .new_revision(OpaqueDiff::empty(), self.cursor.clone());
-                *self.text = new_text;
-                self.has_unsaved_changes = ModifiedStatus::Unchanged;
-            }
-            BufferTask::ParseSyntax(parsed) => {
-                if let Some(syntax) = self.syntax.as_mut() {
-                    syntax.handle_parse_syntax_done(task_id, parsed);
-                }
-            }
-        }
-        Ok(())
     }
 
     fn bindings(&self) -> Option<&Self::Bindings> {

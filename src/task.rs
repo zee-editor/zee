@@ -44,7 +44,7 @@ impl TaskPool {
 
     pub fn spawn<TaskFnT, PayloadT>(&self, task: TaskFnT) -> Result<TaskId>
     where
-        TaskFnT: FnOnce() -> PayloadT + Send + 'static,
+        TaskFnT: FnOnce(TaskId) -> PayloadT + Send + 'static,
         PayloadT: Into<TaskPayload>,
     {
         let id = TaskId(self.next_task_id.fetch_add(1, Ordering::SeqCst));
@@ -53,7 +53,7 @@ impl TaskPool {
             sender
                 .send(TaskDone {
                     id,
-                    payload: task().into(),
+                    payload: task(id).into(),
                 })
                 .unwrap()
         });
@@ -79,7 +79,7 @@ pub struct Scheduler<'a, PayloadT> {
 impl<'a, PayloadT: Into<TaskPayload> + Send + 'static> Scheduler<'a, PayloadT> {
     pub fn spawn<TaskFn>(&mut self, task_fn: TaskFn) -> Result<TaskId>
     where
-        TaskFn: FnOnce() -> PayloadT + Send + 'static,
+        TaskFn: FnOnce(TaskId) -> PayloadT + Send + 'static,
     {
         let task_id = self.pool.spawn(task_fn);
         if let Ok(task_id) = task_id.as_ref() {
@@ -93,8 +93,8 @@ impl<'a, PayloadT: Into<TaskPayload> + Send + 'static> Scheduler<'a, PayloadT> {
     }
 }
 
-type BufferTaskPayload = <Buffer as Component>::TaskPayload;
-type PromptTaskPayload = <Prompt as Component>::TaskPayload;
+type BufferTaskPayload = <Buffer as Component>::Action;
+type PromptTaskPayload = <Prompt as Component>::Action;
 
 pub enum TaskPayload {
     Buffer(BufferTaskPayload),

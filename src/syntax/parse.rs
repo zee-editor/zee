@@ -13,13 +13,14 @@ use tree_sitter::{
 };
 
 use crate::{
-    components::buffer::{BufferTask, Scheduler},
+    components::buffer::{Action, AsyncAction},
     error::{Error, Result},
     smallstring::SmallString,
-    task::TaskId,
+    task::{Scheduler, TaskId},
 };
 
 pub struct ParserStatus {
+    task_id: TaskId,
     parser: CancelableParser,
     parsed: Option<ParsedSyntax>, // None if the parsing operation has been cancelled
 }
@@ -58,7 +59,7 @@ impl SyntaxTree {
 
     pub fn ensure_tree(
         &mut self,
-        scheduler: &mut Scheduler,
+        scheduler: &mut Scheduler<Action>,
         tree_fn: impl FnOnce() -> Rope,
     ) -> Result<()> {
         match (self.tree.as_ref(), self.current_parse_task.as_ref()) {
@@ -69,7 +70,7 @@ impl SyntaxTree {
 
     pub fn spawn_parse_task(
         &mut self,
-        scheduler: &mut Scheduler,
+        scheduler: &mut Scheduler<Action>,
         text: Rope,
         fresh: bool,
     ) -> Result<()> {
@@ -83,7 +84,7 @@ impl SyntaxTree {
 
         let cancel_flag = parser.cancel_flag().clone();
         let tree = self.tree.clone();
-        let task_id = scheduler.spawn(move || {
+        let task_id = scheduler.spawn(move |task_id| {
             let maybe_tree = parser.parse_with(
                 &mut |byte_index, _| {
                     let (chunk, chunk_byte_idx, _, _) = text.chunk_at_byte(byte_index);
@@ -95,16 +96,18 @@ impl SyntaxTree {
             );
             // Reset the parser for later reuse
             parser.reset();
-            Ok(match maybe_tree {
-                Some(tree) => BufferTask::ParseSyntax(ParserStatus {
+            Action::Async(Ok(match maybe_tree {
+                Some(tree) => AsyncAction::ParseSyntax(ParserStatus {
+                    task_id,
                     parser,
                     parsed: Some(ParsedSyntax { tree, text }),
                 }),
-                None => BufferTask::ParseSyntax(ParserStatus {
+                None => AsyncAction::ParseSyntax(ParserStatus {
+                    task_id,
                     parser,
                     parsed: None,
                 }),
-            })
+            }))
         })?;
         if let Some((_, old_cancel_flag)) = self.current_parse_task.as_ref() {
             old_cancel_flag.set();
@@ -113,8 +116,12 @@ impl SyntaxTree {
         Ok(())
     }
 
-    pub fn handle_parse_syntax_done(&mut self, task_id: TaskId, status: ParserStatus) {
-        let ParserStatus { parser, parsed } = status;
+    pub fn handle_parse_syntax_done(&mut self, status: ParserStatus) {
+        let ParserStatus {
+            task_id,
+            parser,
+            parsed,
+        } = status;
 
         // Collect the parser for later reuse
         parser.cancel_flag().clear();

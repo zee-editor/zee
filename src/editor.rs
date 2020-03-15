@@ -1,6 +1,6 @@
 use crossbeam_channel::select;
-use lazy_static::lazy_static;
 use maplit::hashmap;
+use once_cell::sync::Lazy;
 use smallvec::{smallvec, SmallVec};
 use std::{
     cmp,
@@ -59,15 +59,15 @@ pub enum EditorAction {
     Quit,
 }
 
-lazy_static! {
-    pub static ref EDITOR_BINDINGS: HashBindings<EditorAction> = HashBindings::new(hashmap! {
+static EDITOR_BINDINGS: Lazy<HashBindings<EditorAction>> = Lazy::new(|| {
+    HashBindings::new(hashmap! {
         smallvec![Key::Ctrl('x'), Key::Char('o')] => EditorAction::CycleFocus,
         smallvec![Key::Ctrl('x'), Key::Ctrl('o')] => EditorAction::CycleFocus,
         smallvec![Key::Ctrl('x'), Key::Char('0')] => EditorAction::ClosePane,
         smallvec![Key::Ctrl('t')] => EditorAction::ChangeTheme,
         smallvec![Key::Ctrl('x'), Key::Ctrl('c')] => EditorAction::Quit,
-    });
-}
+    })
+});
 
 impl Editor {
     pub fn new(settings: Settings, current_path: PathBuf, task_pool: TaskPool) -> Self {
@@ -209,19 +209,37 @@ impl Editor {
                 recv(self.task_pool.receiver) -> task_result => {
                     let Self {
                         ref mut components,
-                        ref mut task_owners,
                         ref mut prompt,
+                        ref mut task_owners,
+                        ref current_path,
+                        ref settings,
+                        ref task_pool,
+                        ref themes,
+                        ref focus,
+                        theme_index,
                         ..
                     } = *self;
                     let task_result = task_result.map_err(anyhow::Error::from)?;
                     let component_id = task_owners.remove(&task_result.id);
+                    let time = Instant::now();
+                    let context = Context {
+                        time,
+                        focused: *focus == component_id,
+                        frame,
+                        frame_id: 0,  // TODO: refactor out context computation and see what to do about missing frame id
+                        theme: &themes[theme_index].0,
+                        path: current_path.as_path(),
+                        settings,
+                    };
                     if component_id == Some(PROMPT_ID) {
-                        if let Err(err) = prompt.task_done(task_result.unwrap_prompt()) {
+                        let mut scheduler = task_pool.scheduler();
+                        if let Err(err) = prompt.reduce(task_result.unwrap_prompt().payload, &mut scheduler, &context) {
                             prompt.log_error(format!("{}", err));
                         }
                     } else if let Some(component) = component_id.and_then(
                         |component_id| components.get_or_default::<Buffers>().get_mut(&component_id)) {
-                        if let Err(err) = component.task_done(task_result.unwrap_buffer()) {
+                        let mut scheduler = task_pool.scheduler();
+                        if let Err(err) = component.reduce(task_result.unwrap_buffer().payload, &mut scheduler, &context) {
                             prompt.log_error(format!("{}", err));
                         }
                     }
@@ -404,9 +422,9 @@ impl Editor {
                                 .map(|binding_match| binding_match.is_prefix())
                                 .unwrap_or(false);
 
-                        log::info!("m: {:?} {}", binding_match, is_prefix_to_binding);
+                        // log::info!("m: {:?} {}", binding_match, is_prefix_to_binding);
                         if let Some(BindingMatch::Full(action)) = binding_match {
-                            if let Err(error) = component.handle_action(
+                            if let Err(error) = component.reduce(
                                 action,
                                 &mut scheduler,
                                 &Context {
@@ -458,7 +476,7 @@ impl Editor {
 
             if let Some(BindingMatch::Full(action)) = binding_match {
                 let mut scheduler = task_pool.scheduler();
-                prompt.handle_action(
+                prompt.reduce(
                     action,
                     &mut scheduler,
                     &Context {
@@ -603,7 +621,7 @@ impl InputController {
         log::info!("keys: {:?}", self.keys);
     }
 
-    fn matches<Action: Clone>(&mut self, bindings: &impl Bindings<Action>) -> BindingMatch<Action> {
+    fn matches<Action>(&mut self, bindings: &impl Bindings<Action>) -> BindingMatch<Action> {
         let binding_match = bindings.matches(&self.keys);
         if let BindingMatch::Full(_) = binding_match {
             self.keys.clear();

@@ -1,6 +1,6 @@
 use super::{Component, Context, HashBindings, Scheduler};
 use crate::terminal::{Screen, Style};
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use pkg_version::{pkg_version_major, pkg_version_minor, pkg_version_patch};
 use std::cmp;
 
@@ -17,15 +17,9 @@ pub struct Splash;
 impl Component for Splash {
     type Action = ();
     type Bindings = HashBindings<()>;
-    type TaskPayload = ();
 
     #[inline]
-    fn draw(
-        &mut self,
-        screen: &mut Screen,
-        _: &mut Scheduler<Self::TaskPayload>,
-        context: &Context,
-    ) {
+    fn draw(&mut self, screen: &mut Screen, _: &mut Scheduler<Self::Action>, context: &Context) {
         let theme = &context.theme.splash;
 
         screen.clear_region(context.frame, theme.logo);
@@ -68,15 +62,15 @@ const SPLASH_TAGLINE: &str = r#"
 
 "#;
 
-lazy_static! {
-    pub static ref SPLASH_CREDITS: String = format!(
+static SPLASH_CREDITS: Lazy<String> = Lazy::new(|| {
+    format!(
         r#"
                       version {}.{}.{}
                by Marius Cobzarenco et al.
        zee is open source and freely distributable"#,
         MAJOR, MINOR, PATCH
-    );
-}
+    )
+});
 
 const MAJOR: u32 = pkg_version_major!();
 const MINOR: u32 = pkg_version_minor!();

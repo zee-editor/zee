@@ -1,4 +1,4 @@
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use std::{ffi::OsStr, path::Path};
 use tree_sitter::Language;
 use zee_grammar as grammar;
@@ -87,14 +87,14 @@ pub fn find_by_filename(filename: impl AsRef<Path>) -> &'static Mode {
         .unwrap_or(&PLAIN_TEXT_MODE)
 }
 
-lazy_static! {
-    pub static ref LANGUAGE_MODES: [Mode; 13] = [
+static LANGUAGE_MODES: Lazy<[Mode; 13]> = Lazy::new(|| {
+    [
         Mode {
             name: "Shell Script".into(),
             file: vec![FilenamePattern::suffix(".sh")],
             parser: Some(SyntaxParser {
                 language: *grammar::BASH,
-                highlights: BASH_RULES.clone()
+                highlights: BASH_RULES.clone(),
             }),
         },
         Mode {
@@ -102,7 +102,7 @@ lazy_static! {
             file: vec![FilenamePattern::suffix(".rs")],
             parser: Some(SyntaxParser {
                 language: *grammar::RUST,
-                highlights: RUST_RULES.clone()
+                highlights: RUST_RULES.clone(),
             }),
         },
         Mode {
@@ -123,7 +123,7 @@ lazy_static! {
             ],
             parser: Some(SyntaxParser {
                 language: *grammar::PYTHON,
-                highlights: PYTHON_RULES.clone()
+                highlights: PYTHON_RULES.clone(),
             }),
         },
         Mode {
@@ -131,7 +131,7 @@ lazy_static! {
             file: vec![FilenamePattern::suffix(".js")],
             parser: Some(SyntaxParser {
                 language: *grammar::JAVASCRIPT,
-                highlights: JAVASCRIPT_RULES.clone()
+                highlights: JAVASCRIPT_RULES.clone(),
             }),
         },
         Mode {
@@ -144,7 +144,7 @@ lazy_static! {
             ],
             parser: Some(SyntaxParser {
                 language: *grammar::HTML,
-                highlights: HTML_RULES.clone()
+                highlights: HTML_RULES.clone(),
             }),
         },
         Mode {
@@ -155,7 +155,7 @@ lazy_static! {
             ],
             parser: Some(SyntaxParser {
                 language: *grammar::JSON,
-                highlights: JSON_RULES.clone()
+                highlights: JSON_RULES.clone(),
             }),
         },
         Mode {
@@ -163,7 +163,7 @@ lazy_static! {
             file: vec![FilenamePattern::suffix(".c"), FilenamePattern::suffix(".h")],
             parser: Some(SyntaxParser {
                 language: *grammar::C,
-                highlights: C_RULES.clone()
+                highlights: C_RULES.clone(),
             }),
         },
         Mode {
@@ -185,39 +185,39 @@ lazy_static! {
             ],
             parser: Some(SyntaxParser {
                 language: *grammar::CPP,
-                highlights: CPP_RULES.clone()
+                highlights: CPP_RULES.clone(),
             }),
         },
         Mode {
             name: "CSS".into(),
-            file: vec![FilenamePattern::suffix(".css"),],
+            file: vec![FilenamePattern::suffix(".css")],
             parser: Some(SyntaxParser {
                 language: *grammar::CSS,
-                highlights: CSS_RULES.clone()
+                highlights: CSS_RULES.clone(),
             }),
         },
         Mode {
             name: "Markdown".into(),
-            file: vec![FilenamePattern::suffix(".md"),],
+            file: vec![FilenamePattern::suffix(".md")],
             parser: Some(SyntaxParser {
                 language: *grammar::MARKDOWN,
-                highlights: MARKDOWN_RULES.clone()
+                highlights: MARKDOWN_RULES.clone(),
             }),
         },
         Mode {
             name: "Typescript".into(),
-            file: vec![FilenamePattern::suffix(".ts"),],
+            file: vec![FilenamePattern::suffix(".ts")],
             parser: Some(SyntaxParser {
                 language: *grammar::TYPESCRIPT,
-                highlights: TYPESCRIPT_RULES.clone()
+                highlights: TYPESCRIPT_RULES.clone(),
             }),
         },
         Mode {
             name: "Typescript TSX".into(),
-            file: vec![FilenamePattern::suffix(".tsx"),],
+            file: vec![FilenamePattern::suffix(".tsx")],
             parser: Some(SyntaxParser {
                 language: *grammar::TSX,
-                highlights: TSX_RULES.clone()
+                highlights: TSX_RULES.clone(),
             }),
         },
         Mode {
@@ -225,6 +225,7 @@ lazy_static! {
             file: vec![FilenamePattern::name("Dockerfile")],
             parser: None,
         },
-    ];
-    pub static ref PLAIN_TEXT_MODE: Mode = Default::default();
-}
+    ]
+});
+
+pub static PLAIN_TEXT_MODE: Lazy<Mode> = Lazy::new(Default::default);
