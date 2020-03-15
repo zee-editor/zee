@@ -59,7 +59,7 @@ impl FilenamePattern {
     }
 
     fn name(suffix: impl Into<String>) -> Self {
-        Self::Suffix(suffix.into())
+        Self::Name(suffix.into())
     }
 
     fn matches(&self, filename: impl AsRef<Path>) -> bool {
@@ -88,7 +88,7 @@ pub fn find_by_filename(filename: impl AsRef<Path>) -> &'static Mode {
 }
 
 lazy_static! {
-    pub static ref LANGUAGE_MODES: [Mode; 12] = [
+    pub static ref LANGUAGE_MODES: [Mode; 13] = [
         Mode {
             name: "Shell Script".into(),
             file: vec![FilenamePattern::suffix(".sh")],
@@ -219,7 +219,12 @@ lazy_static! {
                 language: *grammar::TSX,
                 highlights: TSX_RULES.clone()
             }),
-        }
+        },
+        Mode {
+            name: "Dockerfile".into(),
+            file: vec![FilenamePattern::name("Dockerfile")],
+            parser: None,
+        },
     ];
     pub static ref PLAIN_TEXT_MODE: Mode = Default::default();
 }
