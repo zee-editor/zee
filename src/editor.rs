@@ -53,7 +53,8 @@ pub struct Editor {
 
 #[derive(Clone, Debug)]
 pub enum EditorAction {
-    CycleFocus,
+    FocusNextComponent,
+    FocusPreviousComponent,
     ClosePane,
     ChangeTheme,
     Quit,
@@ -61,8 +62,10 @@ pub enum EditorAction {
 
 static EDITOR_BINDINGS: Lazy<HashBindings<EditorAction>> = Lazy::new(|| {
     HashBindings::new(hashmap! {
-        smallvec![Key::Ctrl('x'), Key::Char('o')] => EditorAction::CycleFocus,
-        smallvec![Key::Ctrl('x'), Key::Ctrl('o')] => EditorAction::CycleFocus,
+        smallvec![Key::Ctrl('x'), Key::Char('o')] => EditorAction::FocusNextComponent,
+        smallvec![Key::Ctrl('x'), Key::Ctrl('o')] => EditorAction::FocusNextComponent,
+        smallvec![Key::Ctrl('x'), Key::Char('O')] => EditorAction::FocusPreviousComponent,
+        smallvec![Key::Ctrl('x'), Key::Ctrl('O')] => EditorAction::FocusPreviousComponent,
         smallvec![Key::Ctrl('x'), Key::Char('0')] => EditorAction::ClosePane,
         smallvec![Key::Ctrl('t')] => EditorAction::ChangeTheme,
         smallvec![Key::Ctrl('x'), Key::Ctrl('c')] => EditorAction::Quit,
@@ -346,8 +349,12 @@ impl Editor {
             let editor_binding_match = self.controller.matches(EDITOR_BINDINGS.deref());
             is_prefix_to_binding = is_prefix_to_binding || editor_binding_match.is_prefix();
             match editor_binding_match {
-                BindingMatch::Full(EditorAction::CycleFocus) => {
+                BindingMatch::Full(EditorAction::FocusNextComponent) => {
                     self.cycle_focus(frame, CycleFocus::Next);
+                    return Ok(false);
+                }
+                BindingMatch::Full(EditorAction::FocusPreviousComponent) => {
+                    self.cycle_focus(frame, CycleFocus::Previous);
                     return Ok(false);
                 }
                 BindingMatch::Full(EditorAction::ClosePane) => {
@@ -634,9 +641,14 @@ impl std::fmt::Display for InputController {
     fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
         for key in self.keys.iter() {
             match key {
+                Key::Char(' ') => write!(formatter, "SPC ")?,
+                Key::Char('\n') => write!(formatter, "RET ")?,
+                Key::Char('\t') => write!(formatter, "TAB ")?,
                 Key::Char(char) => write!(formatter, "{} ", char)?,
                 Key::Ctrl(char) => write!(formatter, "C-{} ", char)?,
                 Key::Alt(char) => write!(formatter, "A-{} ", char)?,
+                Key::F(number) => write!(formatter, "F{} ", number)?,
+                Key::Esc => write!(formatter, "ESC ")?,
                 key => write!(formatter, "{:?} ", key)?,
             }
         }
