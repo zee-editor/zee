@@ -24,6 +24,15 @@ $ cargo install zee
  - local file picker with directory navigation
  - a pragmatic editor, not a research endeavour into CRDTs
 
+## building from source
+
+The editor depends on a bunch of tree sitter parsers, one for each supported language. These are included as git submodules in `grammar/languages/tree-sitter-*`.
+After cloning the repository, you have to run
+```
+git submodule update --init --recursive
+```
+then you should be able to build normally with cargo.
+
 ## usage
 
 To start the editor run `zee`. As expected, you can pass in one or multiple files to be opened, e.g. `zee file1 file2`.
