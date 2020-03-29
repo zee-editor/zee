@@ -338,6 +338,30 @@ pub trait Bindings<Action> {
     fn matches(&self, pressed: &[Key]) -> BindingMatch<Action>;
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BindingMatch<Action> {
+    None,
+    Prefix,
+    Full(Action),
+}
+
+impl<Action> BindingMatch<Action> {
+    pub fn is_prefix(&self) -> bool {
+        match self {
+            Self::Prefix => true,
+            _ => false,
+        }
+    }
+
+    pub fn map_action<MappedT>(self, f: impl FnOnce(Action) -> MappedT) -> BindingMatch<MappedT> {
+        match self {
+            Self::None => BindingMatch::None,
+            Self::Prefix => BindingMatch::Prefix,
+            Self::Full(action) => BindingMatch::Full(f(action)),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HashBindings<Action>(HashMap<SmallVec<[Key; 2]>, Action>);
 
@@ -367,30 +391,6 @@ impl<Action: Clone> Bindings<Action> for HashBindings<Action> {
             }
         }
         BindingMatch::None
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum BindingMatch<Action> {
-    None,
-    Prefix,
-    Full(Action),
-}
-
-impl<Action> BindingMatch<Action> {
-    pub fn is_prefix(&self) -> bool {
-        match self {
-            Self::Prefix => true,
-            _ => false,
-        }
-    }
-
-    pub fn map_action<MappedT>(self, f: impl FnOnce(Action) -> MappedT) -> BindingMatch<MappedT> {
-        match self {
-            Self::None => BindingMatch::None,
-            Self::Prefix => BindingMatch::Prefix,
-            Self::Full(action) => BindingMatch::Full(f(action)),
-        }
     }
 }
 
