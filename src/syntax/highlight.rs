@@ -35,11 +35,73 @@ pub fn text_style_at_char(
     scope: &str,
     is_error: bool,
 ) -> Style {
+    let style = if is_error {
+        theme.code_invalid
+    } else if scope.starts_with("constant") {
+        theme.code_constant
+    } else if scope.starts_with("string.quoted.double.dictionary.key.json")
+        || scope.starts_with("support.property-name")
+    {
+        theme.code_keyword_light
+    } else if scope.starts_with("string.quoted.double") {
+        theme.code_string
+    } else if scope.starts_with("string.quoted.single") {
+        theme.code_char
+    } else if scope.starts_with("string") {
+        theme.code_string
+    } else if scope.starts_with("keyword.operator") {
+        theme.code_operator
+    } else if scope.starts_with("storage")
+        || scope.starts_with("keyword")
+        || scope.starts_with("tag_name")
+        || scope.ends_with("variable.self")
+    {
+        theme.code_keyword
+    } else if scope.starts_with("variable.parameter.function")
+        || scope.starts_with("identifier")
+        || scope.starts_with("field_identifier")
+    {
+        theme.code_keyword_light
+    } else if scope.starts_with("entity.name.enum")
+        || scope.starts_with("support")
+        || scope.starts_with("primitive_type")
+    {
+        theme.code_type
+    } else if scope.starts_with("entity.attribute.name.punctuation") {
+        theme.code_comment
+    } else if scope.starts_with("entity.name.macro.call")
+        || scope.starts_with("entity.attribute.name")
+        || scope.starts_with("entity.name.lifetime")
+    {
+        theme.code_macro_call
+    } else if scope.starts_with("entity.name.function") {
+        theme.code_function_call
+    } else if scope.starts_with("comment.block.line.docstr") {
+        theme.code_comment_doc
+    } else if scope.starts_with("comment") {
+        theme.code_comment
+    } else if ["<", ">", "/>", "</", "misc.other"]
+        .iter()
+        .any(|tag| scope.starts_with(tag))
+    {
+        theme.code_operator
+    } else if scope.starts_with("markup.underline.link") {
+        theme.code_link
+    } else {
+        theme.text
+    };
+
     if cursor.range().contains(&char_index) {
-        if focused {
+        let cursor_style = if focused {
             theme.cursor_focused
         } else {
             theme.cursor_unfocused
+        };
+        Style {
+            background: cursor_style.background,
+            foreground: cursor_style.foreground,
+            bold: style.bold,
+            underline: style.underline,
         }
     } else {
         let background = if cursor.selection().contains(&char_index) {
@@ -49,63 +111,6 @@ pub fn text_style_at_char(
         } else {
             theme.text.background
         };
-
-        let style = if is_error {
-            theme.code_invalid
-        } else if scope.starts_with("constant") {
-            theme.code_constant
-        } else if scope.starts_with("string.quoted.double.dictionary.key.json")
-            || scope.starts_with("support.property-name")
-        {
-            theme.code_keyword_light
-        } else if scope.starts_with("string.quoted.double") {
-            theme.code_string
-        } else if scope.starts_with("string.quoted.single") {
-            theme.code_char
-        } else if scope.starts_with("string") {
-            theme.code_string
-        } else if scope.starts_with("keyword.operator") {
-            theme.code_operator
-        } else if scope.starts_with("storage")
-            || scope.starts_with("keyword")
-            || scope.starts_with("tag_name")
-            || scope.ends_with("variable.self")
-        {
-            theme.code_keyword
-        } else if scope.starts_with("variable.parameter.function")
-            || scope.starts_with("identifier")
-            || scope.starts_with("field_identifier")
-        {
-            theme.code_keyword_light
-        } else if scope.starts_with("entity.name.enum")
-            || scope.starts_with("support")
-            || scope.starts_with("primitive_type")
-        {
-            theme.code_type
-        } else if scope.starts_with("entity.attribute.name.punctuation") {
-            theme.code_comment
-        } else if scope.starts_with("entity.name.macro.call")
-            || scope.starts_with("entity.attribute.name")
-            || scope.starts_with("entity.name.lifetime")
-        {
-            theme.code_macro_call
-        } else if scope.starts_with("entity.name.function") {
-            theme.code_function_call
-        } else if scope.starts_with("comment.block.line.docstr") {
-            theme.code_comment_doc
-        } else if scope.starts_with("comment") {
-            theme.code_comment
-        } else if ["<", ">", "/>", "</", "misc.other"]
-            .iter()
-            .any(|tag| scope.starts_with(tag))
-        {
-            theme.code_operator
-        } else if scope.starts_with("markup.underline.link") {
-            theme.code_link
-        } else {
-            theme.text
-        };
-
         Style {
             background,
             foreground: style.foreground,

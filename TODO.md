@@ -1,19 +1,24 @@
 # TODO List
- - [ ] Unify handle_action and task_done
+ - [ ] Undo / redo
+ - [ ] Display a prompt message when saving a buffer
+ - [ ] Copy / paste between different buffers (clipboard in context)
+ - [ ] Copy / paste to system clipboard (behind feature flag?)
+ - [ ] Intuitive change of focus when closing windows
+ - [ ] Decouple frames from buffers and add a buffer switcher
+ - [ ] Show possible commands with the entered prefix after an interval
+ - [ ] C-?
+ - [ ] Ability to split a frame vertically
+ - [ ] Alt-f Alt-b Alt-d (move symbol left/right, delete symbol)
+ - [ ] Goto line
  - [ ] File picker looks at the whole repo (if in repo, otherwise current dir)
  - [ ] Comment / uncomment region
  - [ ] Should pressing Enter in file picker open the file? (new files)
- - [ ] Alt-f Alt-b (symbol left/right)
  - [ ] Autoindent
  - [ ] rustfmt on save
  - [ ] flake8 errors on save
- - [ ] Goto line
  - [ ] search
  - [ ] regex search
- - [ ] Undo / redo
- - [ ] Intuitive change of focus when closing windows
- - [ ] Copy / paste to X (behind feature flag?)
- - [ ] Copy / paste between different buffers (clipboard in context)
+ - [x] Unify handle_action and task_done
  - [x] Input controller (and more emacs-y key bindings)
  - [x] Add frontend based on `crossterm`
  - [x] Show current git branch in buffers
