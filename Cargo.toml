@@ -1,12 +1,15 @@
 [package]
 name = "zee"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Marius Cobzarenco <marius@reinfer.io>"]
 description = "A modern editor for the terminal"
 readme = "README.md"
 homepage = "https://github.com/mcobzarenco/zee"
 license = "Apache-2.0"
 edition = "2018"
+
+[badges]
+travis-ci = { repository = "mcobzarenco/zee", branch = "master" }
 
 [dependencies]
 anyhow = "1.0.26"
@@ -38,11 +41,11 @@ unicode-segmentation = "1.6.0"
 unicode-width = "0.1.6"
 
 # Local crates
-zee-grammar = { version = "0.1.0", path = "grammar" }
+zee-grammar = { version = "0.1.2", path = "grammar" }
 zee-highlight = { version = "0.1.1", path = "highlight" }
 
 # Optional dependencies
-crossterm = { version = "0.14.2", optional = true}
+crossterm = { version = "0.17.1", optional = true }
 termion = { version = "1.5.3", optional = true}
 
 [features]

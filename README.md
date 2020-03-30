@@ -1,6 +1,9 @@
 # zee
 A modern editor for the terminal (written in Rust). It is highly experimental code.
 
+[![Build Status](https://travis-ci.com/mcobzarenco/zee.svg?branch=master)](https://travis-ci.com/mcobzarenco/zee)
+[![Crate](https://meritbadge.herokuapp.com/zee)](https://crates.io/crates/zee)
+
 ![image](https://user-images.githubusercontent.com/797170/76172978-08909000-6193-11ea-9ed3-4c40d3a4c74b.png)
 
 Here's what it looks like at the moment
