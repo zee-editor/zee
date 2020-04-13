@@ -18,6 +18,7 @@ use zee_highlight::SelectorNodeId;
 
 use super::{
     cursor::{CharIndex, Cursor},
+    edit_tree_viewer::{EditTreeViewer, Theme as EditTreeViewerTheme},
     theme::Theme as EditorTheme,
     BindingMatch, Bindings, Component, Context, HashBindings,
 };
@@ -30,13 +31,14 @@ use crate::{
     },
     task::Scheduler,
     terminal::{Key, Position, Rect, Screen, Size, Style},
-    undo::UndoTree,
+    undo::EditTree,
     utils::{self, strip_trailing_whitespace, RopeGraphemes, TAB_WIDTH},
 };
 
 #[derive(Clone, Debug)]
 pub struct Theme {
     pub syntax: SyntaxTheme,
+    pub edit_tree_viewer: EditTreeViewerTheme,
     pub border: Style,
     pub status_base: Style,
     pub status_frame_id_focused: Style,
@@ -58,7 +60,7 @@ enum ModifiedStatus {
 
 pub struct Buffer {
     mode: &'static Mode,
-    text: UndoTree,
+    text: EditTree,
     clipboard: Option<Rope>,
     has_unsaved_changes: ModifiedStatus,
     file_path: Option<PathBuf>,
@@ -67,6 +69,7 @@ pub struct Buffer {
     syntax: Option<SyntaxTree>,
     repo: Option<Repository>,
     bindings: BufferBindings,
+    viewing_edit_tree: bool,
 }
 
 impl Buffer {
@@ -87,7 +90,7 @@ impl Buffer {
             Rope::new()
         };
         Ok(Buffer {
-            text: UndoTree::new(text),
+            text: EditTree::new(text),
             clipboard: None,
             has_unsaved_changes: ModifiedStatus::Unchanged,
             file_path: Some(file_path),
@@ -97,6 +100,7 @@ impl Buffer {
             mode,
             repo,
             bindings: BufferBindings,
+            viewing_edit_tree: false,
         })
     }
 
@@ -134,10 +138,10 @@ impl Buffer {
     ) -> Result<()> {
         // Stateless
         match action {
-            SyncAction::Up => self.cursor.move_up(&self.text),
-            SyncAction::Down => self.cursor.move_down(&self.text),
-            SyncAction::Left => self.cursor.move_left(&self.text),
-            SyncAction::Right => self.cursor.move_right(&self.text),
+            SyncAction::Up if !self.viewing_edit_tree => self.cursor.move_up(&self.text),
+            SyncAction::Down if !self.viewing_edit_tree => self.cursor.move_down(&self.text),
+            SyncAction::Left if !self.viewing_edit_tree => self.cursor.move_left(&self.text),
+            SyncAction::Right if !self.viewing_edit_tree => self.cursor.move_right(&self.text),
             SyncAction::PageDown => self
                 .cursor
                 .move_down_n(&self.text, context.frame.size.height - 1),
@@ -151,9 +155,17 @@ impl Buffer {
             SyncAction::CenterCursorVisually => self.center_visual_cursor(&context.frame),
 
             SyncAction::BeginSelection => self.cursor.begin_selection(),
-            SyncAction::ClearSelection => self.cursor.clear_selection(),
+            SyncAction::ClearSelection => {
+                if self.viewing_edit_tree {
+                    self.viewing_edit_tree = false;
+                } else {
+                    self.cursor.clear_selection();
+                }
+            }
             SyncAction::SelectAll => self.cursor.select_all(&self.text),
             SyncAction::SaveBuffer => self.spawn_save_file(scheduler, context)?,
+            SyncAction::Left if self.viewing_edit_tree => self.text.previous_child(),
+            SyncAction::Right if self.viewing_edit_tree => self.text.next_child(),
             _ => {}
         };
 
@@ -183,19 +195,38 @@ impl Buffer {
                 self.cursor.move_to_start_of_line(&self.text);
                 diff
             }
-            SyncAction::Undo => {
-                if let Some((diff, cursor)) = self.text.undo() {
-                    undoing = true;
-                    self.cursor = cursor;
-                    if let Some(syntax) = self.syntax.as_mut() {
-                        syntax.edit(&diff);
-                        syntax.spawn_parse_task(scheduler, self.text.head().clone(), true)?;
-                    }
-                    diff
-                } else {
-                    OpaqueDiff::empty()
-                }
+            SyncAction::ToggleEditTree => {
+                self.viewing_edit_tree = !self.viewing_edit_tree;
+                OpaqueDiff::empty()
             }
+            SyncAction::Undo => self
+                .undo(scheduler)?
+                .map(|diff| {
+                    undoing = true;
+                    diff
+                })
+                .unwrap_or_else(OpaqueDiff::empty),
+            SyncAction::Up if self.viewing_edit_tree => self
+                .undo(scheduler)?
+                .map(|diff| {
+                    undoing = true;
+                    diff
+                })
+                .unwrap_or_else(OpaqueDiff::empty),
+            SyncAction::Redo => self
+                .redo(scheduler)?
+                .map(|diff| {
+                    undoing = true;
+                    diff
+                })
+                .unwrap_or_else(OpaqueDiff::empty),
+            SyncAction::Down if self.viewing_edit_tree => self
+                .redo(scheduler)?
+                .map(|diff| {
+                    undoing = true;
+                    diff
+                })
+                .unwrap_or_else(OpaqueDiff::empty),
             SyncAction::InsertChar(character) => {
                 let diff = self.cursor.insert_char(&mut self.text, character);
                 // self.ensure_trailing_newline_with_content();
@@ -256,6 +287,38 @@ impl Buffer {
             self.first_line = new_line;
         } else if new_line - self.first_line > frame.size.height - 1 {
             self.first_line = new_line - frame.size.height + 1;
+        }
+    }
+
+    fn undo(
+        &mut self,
+        scheduler: &mut Scheduler<<Self as Component>::Action>,
+    ) -> Result<Option<OpaqueDiff>> {
+        if let Some((diff, cursor)) = self.text.undo() {
+            self.cursor = cursor;
+            if let Some(syntax) = self.syntax.as_mut() {
+                syntax.edit(&diff);
+                syntax.spawn_parse_task(scheduler, self.text.head().clone(), true)?;
+            }
+            Ok(Some(diff))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn redo(
+        &mut self,
+        scheduler: &mut Scheduler<<Self as Component>::Action>,
+    ) -> Result<Option<OpaqueDiff>> {
+        if let Some((diff, cursor)) = self.text.redo() {
+            self.cursor = cursor;
+            if let Some(syntax) = self.syntax.as_mut() {
+                syntax.edit(&diff);
+                syntax.spawn_parse_task(scheduler, self.text.head().clone(), true)?;
+            }
+            Ok(Some(diff))
+        } else {
+            Ok(None)
         }
     }
 
@@ -631,7 +694,11 @@ pub enum SyncAction {
     InsertTab,
     InsertNewLine,
     InsertChar(char),
+
+    // Undo / Redo
     Undo,
+    Redo,
+    ToggleEditTree,
 
     // Buffer
     SaveBuffer,
@@ -678,8 +745,13 @@ static HASH_BINDINGS: Lazy<HashBindings<SyncAction>> = Lazy::new(|| {
         smallvec![Key::Ctrl('k')] => SyncAction::DeleteLine,
         smallvec![Key::Char('\n')] => SyncAction::InsertNewLine,
         smallvec![Key::Char('\t')] => SyncAction::InsertTab,
+
+        // Undo / Redo
+        smallvec![Key::Ctrl('x'), Key::Char('u')] => SyncAction::ToggleEditTree,
+        smallvec![Key::Ctrl('x'), Key::Ctrl('u')] => SyncAction::ToggleEditTree,
         smallvec![Key::Ctrl('/')] => SyncAction::Undo,
         smallvec![Key::Ctrl('z')] => SyncAction::Undo,
+        smallvec![Key::Ctrl('q')] => SyncAction::Redo,
 
         // Buffer
         smallvec![Key::Ctrl('x'), Key::Ctrl('s')] => SyncAction::SaveBuffer,
@@ -710,6 +782,7 @@ impl Component for Buffer {
         &mut self,
         screen: &mut Screen,
         scheduler: &mut Scheduler<Self::Action>,
+
         context: &Context,
     ) {
         {
@@ -724,13 +797,37 @@ impl Component for Buffer {
                     .unwrap();
             };
         }
-
         screen.clear_region(context.frame, context.theme.buffer.syntax.text);
-        self.draw_line_info(screen, context);
+        self.draw_line_info(
+            screen,
+            &context.set_frame(context.frame.inner_rect(SideOffsets2D::new(
+                0,
+                0,
+                0,
+                if self.viewing_edit_tree { 31 } else { 0 },
+            ))),
+        );
         let visual_cursor_x = self.draw_text(
             screen,
-            &context.set_frame(context.frame.inner_rect(SideOffsets2D::new(0, 0, 1, 1))),
+            &context.set_frame(context.frame.inner_rect(SideOffsets2D::new(
+                0,
+                0,
+                1,
+                if self.viewing_edit_tree { 32 } else { 1 },
+            ))),
         );
+        if self.viewing_edit_tree {
+            EditTreeViewer.draw(
+                screen,
+                &self.text,
+                &context.set_frame(context.frame.inner_rect(SideOffsets2D::new(
+                    0,
+                    context.frame.size.width.saturating_sub(31),
+                    1,
+                    0,
+                ))),
+            );
+        }
         self.draw_status_bar(screen, context, visual_cursor_x);
     }
 

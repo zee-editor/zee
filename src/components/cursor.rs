@@ -22,7 +22,7 @@ pub struct ByteIndex(pub usize);
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Eq, Ord)]
 pub struct LineIndex(pub usize);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Cursor {
     /// Char range under cursor, aligned to extended grapheme clusters.
     range: Range<CharIndex>,

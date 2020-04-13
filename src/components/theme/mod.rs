@@ -1,7 +1,8 @@
 pub mod base16;
 
 use super::{
-    buffer::Theme as BufferTheme, prompt::Theme as PromptTheme, splash::Theme as SplashTheme,
+    buffer::Theme as BufferTheme, edit_tree_viewer::Theme as EditTreeViewerTheme,
+    prompt::Theme as PromptTheme, splash::Theme as SplashTheme,
 };
 use crate::{
     syntax::highlight::Theme as SyntaxTheme,
@@ -133,6 +134,13 @@ impl Theme {
                     code_link: underline(DARK0_SOFT, LIGHT3),
                     code_type: normal(DARK0_SOFT, BRIGHT_YELLOW),
                 },
+                edit_tree_viewer: EditTreeViewerTheme {
+                    current_revision: bold(DARK0, BRIGHT_RED),
+                    master_revision: bold(DARK0, LIGHT1),
+                    master_connector: bold(DARK0, LIGHT1),
+                    alternate_revision: normal(DARK0, DARK4),
+                    alternate_connector: normal(DARK0, DARK4),
+                },
                 border: normal(DARK0_HARD, GRAY_245),
                 status_base: normal(DARK0_SOFT, DARK0),
                 status_frame_id_focused: normal(BRIGHT_BLUE, DARK0_HARD),
@@ -218,6 +226,13 @@ impl Theme {
                     code_comment_doc: bold(default_background, comments),
                     code_link: underline(default_background, constants),
                     code_type: normal(default_background, classes),
+                },
+                edit_tree_viewer: EditTreeViewerTheme {
+                    current_revision: bold(default_background, embedded),
+                    master_revision: bold(default_background, variables),
+                    master_connector: bold(default_background, default_foreground),
+                    alternate_revision: normal(default_background, default_foreground),
+                    alternate_connector: normal(default_background, comments),
                 },
                 border: normal(lighter_background, dark_foreground),
                 status_base: normal(lighter_background, default_background),
