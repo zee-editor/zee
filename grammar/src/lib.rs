@@ -1,20 +1,18 @@
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use tree_sitter::Language;
 
-lazy_static! {
-    pub static ref BASH: Language = unsafe { tree_sitter_bash() };
-    pub static ref C: Language = unsafe { tree_sitter_c() };
-    pub static ref CPP: Language = unsafe { tree_sitter_cpp() };
-    pub static ref CSS: Language = unsafe { tree_sitter_css() };
-    pub static ref HTML: Language = unsafe { tree_sitter_html() };
-    pub static ref JAVASCRIPT: Language = unsafe { tree_sitter_javascript() };
-    pub static ref JSON: Language = unsafe { tree_sitter_json() };
-    pub static ref MARKDOWN: Language = unsafe { tree_sitter_markdown() };
-    pub static ref PYTHON: Language = unsafe { tree_sitter_python() };
-    pub static ref RUST: Language = unsafe { tree_sitter_rust() };
-    pub static ref TYPESCRIPT: Language = unsafe { tree_sitter_typescript() };
-    pub static ref TSX: Language = unsafe { tree_sitter_tsx() };
-}
+pub static BASH: Lazy<Language> = Lazy::new(|| unsafe { tree_sitter_bash() });
+pub static C: Lazy<Language> = Lazy::new(|| unsafe { tree_sitter_c() });
+pub static CPP: Lazy<Language> = Lazy::new(|| unsafe { tree_sitter_cpp() });
+pub static CSS: Lazy<Language> = Lazy::new(|| unsafe { tree_sitter_css() });
+pub static HTML: Lazy<Language> = Lazy::new(|| unsafe { tree_sitter_html() });
+pub static JAVASCRIPT: Lazy<Language> = Lazy::new(|| unsafe { tree_sitter_javascript() });
+pub static JSON: Lazy<Language> = Lazy::new(|| unsafe { tree_sitter_json() });
+pub static MARKDOWN: Lazy<Language> = Lazy::new(|| unsafe { tree_sitter_markdown() });
+pub static PYTHON: Lazy<Language> = Lazy::new(|| unsafe { tree_sitter_python() });
+pub static RUST: Lazy<Language> = Lazy::new(|| unsafe { tree_sitter_rust() });
+pub static TYPESCRIPT: Lazy<Language> = Lazy::new(|| unsafe { tree_sitter_typescript() });
+pub static TSX: Lazy<Language> = Lazy::new(|| unsafe { tree_sitter_tsx() });
 
 extern "C" {
     fn tree_sitter_bash() -> Language;
@@ -37,19 +35,17 @@ mod tests {
 
     #[test]
     fn instantiate_all_languages() {
-        unsafe {
-            tree_sitter_bash();
-            tree_sitter_c();
-            tree_sitter_cpp();
-            tree_sitter_css();
-            tree_sitter_html();
-            tree_sitter_javascript();
-            tree_sitter_json();
-            tree_sitter_markdown();
-            tree_sitter_python();
-            tree_sitter_rust();
-            tree_sitter_typescript();
-            tree_sitter_tsx();
-        }
+        assert!(BASH.node_kind_count() > 0);
+        assert!(C.node_kind_count() > 0);
+        assert!(CPP.node_kind_count() > 0);
+        assert!(CSS.node_kind_count() > 0);
+        assert!(HTML.node_kind_count() > 0);
+        assert!(JAVASCRIPT.node_kind_count() > 0);
+        assert!(JSON.node_kind_count() > 0);
+        assert!(MARKDOWN.node_kind_count() > 0);
+        assert!(PYTHON.node_kind_count() > 0);
+        assert!(RUST.node_kind_count() > 0);
+        assert!(TYPESCRIPT.node_kind_count() > 0);
+        assert!(TSX.node_kind_count() > 0);
     }
 }
