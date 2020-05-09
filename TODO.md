@@ -18,6 +18,9 @@
  - [ ] flake8 errors on save
  - [ ] search
  - [ ] regex search
+ - [ ] zi: auto generated ids
+ - [ ] zi: garbage collect unmounted components
+ - [ ] zi: unique focus controller
  - [x] Unify handle_action and task_done
  - [x] Input controller (and more emacs-y key bindings)
  - [x] Add frontend based on `crossterm`
