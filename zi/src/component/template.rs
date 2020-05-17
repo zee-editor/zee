@@ -1,49 +1,65 @@
 use crossbeam_channel::{self, Sender};
-use smallvec::SmallVec;
 use std::{
     any::{Any, TypeId},
-    hash::Hash,
-    marker::PhantomData,
+    hash::{Hash, Hasher},
+    sync::Arc,
 };
 
-pub use super::{layout::Layout, BindingMatch, Component, ComponentLink, ShouldRender};
-use crate::{
-    task::{TaskId, TaskPool},
-    terminal::{Key, Rect},
+use super::{
+    layout::{ComponentKey, Layout},
+    BindingMatch, Component, ComponentLink, LinkMessage, ShouldRender,
 };
+use crate::terminal::{Key, Rect};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct ComponentId {
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ComponentId {
     type_id: TypeId,
     id: u64,
+
+    // The `type_name` field is used only for debugging -- in particular
+    // note that it's not a valid unique id for a type. See
+    // https://doc.rust-lang.org/std/any/fn.type_name.html
+    type_name: &'static str,
 }
 
-impl ComponentId {
-    pub fn new<T: 'static>(id: u64) -> Self {
-        Self {
-            type_id: TypeId::of::<T>(),
-            id,
-        }
+impl PartialEq for ComponentId {
+    fn eq(&self, other: &Self) -> bool {
+        self.type_id == other.type_id && self.id == other.id
     }
 }
 
-impl<ComponentT: Component> ComponentLink<ComponentT> {
-    pub(crate) fn new(
-        sender: Sender<(ComponentId, DynamicMessage)>,
-        component_id: ComponentId,
-    ) -> Self {
-        assert_eq!(TypeId::of::<ComponentT>(), component_id.type_id);
+impl Eq for ComponentId {}
+
+impl Hash for ComponentId {
+    fn hash<HasherT: Hasher>(&self, hasher: &mut HasherT) {
+        self.type_id.hash(hasher);
+        self.id.hash(hasher);
+    }
+}
+
+impl ComponentId {
+    #[inline]
+    pub(crate) fn new<T: 'static>(id: u64) -> Self {
         Self {
-            sender,
-            component_id,
-            _component: PhantomData,
+            type_id: TypeId::of::<T>(),
+            type_name: std::any::type_name::<T>(),
+            id,
         }
+    }
+
+    #[inline]
+    pub(crate) fn type_id(&self) -> TypeId {
+        self.type_id
+    }
+
+    pub(crate) fn type_name(&self) -> &'static str {
+        self.type_name
     }
 }
 
 impl std::fmt::Display for ComponentId {
     fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(formatter, "{:?}.{}", self.type_id, self.id)
+        write!(formatter, "{} / {:x}", self.type_name, self.id >> 32)
     }
 }
 
@@ -51,67 +67,104 @@ pub(crate) struct DynamicMessage(pub(crate) Box<dyn Any + Send + 'static>);
 pub(crate) struct DynamicProperties(Box<dyn Any + 'static>);
 pub struct DynamicTemplate(pub(crate) Box<dyn Template>);
 
-pub(crate) trait Renderable {
-    fn update(&mut self, message: DynamicMessage, pool: &TaskPool) -> ComponentUpdate;
+impl Clone for DynamicTemplate {
+    fn clone(&self) -> Self {
+        self.0.clone()
+    }
+}
 
-    fn change(
+impl Template for DynamicTemplate {
+    #[inline]
+    fn key(&self) -> Option<ComponentKey> {
+        self.0.key()
+    }
+
+    #[inline]
+    fn component_type_id(&self) -> TypeId {
+        self.0.component_type_id()
+    }
+
+    #[inline]
+    fn generate_id(&self, id: u64) -> ComponentId {
+        self.0.generate_id(id)
+    }
+
+    #[inline]
+    fn create(
         &mut self,
-        properties: DynamicProperties,
-        pool: &TaskPool,
-    ) -> ComponentChangeProperties;
+        id: ComponentId,
+        frame: Rect,
+        sender: Arc<Sender<LinkMessage>>,
+    ) -> Box<dyn Renderable + 'static> {
+        self.0.create(id, frame, sender)
+    }
 
-    fn view(&self, frame: Rect) -> Layout;
+    #[inline]
+    fn dynamic_properties(&mut self) -> DynamicProperties {
+        self.0.dynamic_properties()
+    }
+
+    #[inline]
+    fn clone(&self) -> DynamicTemplate {
+        self.0.clone()
+    }
+}
+
+pub(crate) trait Renderable {
+    fn change(&mut self, properties: DynamicProperties) -> ShouldRender;
+
+    fn resize(&mut self, frame: Rect) -> ShouldRender;
+
+    fn update(&mut self, message: DynamicMessage) -> ShouldRender;
+
+    fn view(&self) -> Layout;
 
     fn has_focus(&self) -> bool;
 
     fn input_binding(&self, pressed: &[Key]) -> BindingMatch<DynamicMessage>;
+
+    fn tick(&self) -> Option<DynamicMessage>;
 }
 
 impl<ComponentT: Component> Renderable for ComponentT {
-    fn update(&mut self, message: DynamicMessage, pool: &TaskPool) -> ComponentUpdate {
-        let mut scheduler = pool.scheduler::<ComponentT::Message>();
-        let should_render = <Self as Component>::update(
+    #[inline]
+    fn update(&mut self, message: DynamicMessage) -> ShouldRender {
+        <Self as Component>::update(
             self,
             *message
                 .0
                 .downcast()
                 .expect("Incorrect `Message` type when downcasting"),
-            &mut scheduler,
-        );
-        ComponentUpdate {
-            should_render,
-            scheduled: scheduler.into_scheduled(),
-        }
+        )
     }
 
-    fn change(
-        &mut self,
-        properties: DynamicProperties,
-        pool: &TaskPool,
-    ) -> ComponentChangeProperties {
-        let mut scheduler = pool.scheduler::<ComponentT::Message>();
-        let should_render = <Self as Component>::change(
+    #[inline]
+    fn change(&mut self, properties: DynamicProperties) -> ShouldRender {
+        <Self as Component>::change(
             self,
             *properties
                 .0
                 .downcast()
-                .expect("Incorrect `Properties`` type when downcasting"),
-            &mut scheduler,
-        );
-        ComponentChangeProperties {
-            should_render,
-            scheduled: scheduler.into_scheduled(),
-        }
+                .expect("Incorrect `Properties` type when downcasting"),
+        )
     }
 
-    fn view(&self, frame: Rect) -> Layout {
-        <Self as Component>::view(self, frame)
+    #[inline]
+    fn resize(&mut self, frame: Rect) -> ShouldRender {
+        <Self as Component>::resize(self, frame)
     }
 
+    #[inline]
+    fn view(&self) -> Layout {
+        <Self as Component>::view(self)
+    }
+
+    #[inline]
     fn has_focus(&self) -> bool {
         <Self as Component>::has_focus(self)
     }
 
+    #[inline]
     fn input_binding(&self, pressed: &[Key]) -> BindingMatch<DynamicMessage> {
         let binding_match = <Self as Component>::input_binding(self, pressed);
         BindingMatch {
@@ -121,84 +174,95 @@ impl<ComponentT: Component> Renderable for ComponentT {
                 .map(|message| DynamicMessage(Box::new(message))),
         }
     }
+
+    #[inline]
+    fn tick(&self) -> Option<DynamicMessage> {
+        <Self as Component>::tick(self).map(|message| DynamicMessage(Box::new(message)))
+    }
 }
 
 pub(crate) trait Template {
-    fn key(&self) -> Option<usize>;
+    fn key(&self) -> Option<ComponentKey>;
 
     fn component_type_id(&self) -> TypeId;
 
     fn generate_id(&self, id: u64) -> ComponentId;
 
     fn create(
-        &self,
+        &mut self,
         id: ComponentId,
-        sender: Sender<(ComponentId, DynamicMessage)>,
-        pool: &TaskPool,
-    ) -> ComponentCreation;
+        frame: Rect,
+        sender: Arc<Sender<LinkMessage>>,
+    ) -> Box<dyn Renderable + 'static>;
 
-    fn dynamic_properties(&self) -> DynamicProperties;
-}
+    fn dynamic_properties(&mut self) -> DynamicProperties;
 
-pub(crate) struct ComponentCreation {
-    pub(crate) component: Box<dyn Renderable>,
-    pub(crate) scheduled: SmallVec<[TaskId; 2]>,
-}
-
-pub(crate) struct ComponentUpdate {
-    pub(crate) should_render: ShouldRender,
-    pub(crate) scheduled: SmallVec<[TaskId; 2]>,
-}
-
-pub(crate) struct ComponentChangeProperties {
-    pub(crate) should_render: ShouldRender,
-    pub(crate) scheduled: SmallVec<[TaskId; 2]>,
+    fn clone(&self) -> DynamicTemplate;
 }
 
 pub(crate) struct ComponentDef<ComponentT: Component> {
-    pub key: Option<usize>,
-    pub properties: ComponentT::Properties,
+    pub key: Option<ComponentKey>,
+    pub properties: Option<ComponentT::Properties>,
+}
+
+impl<ComponentT: Component> Clone for ComponentDef<ComponentT> {
+    fn clone(&self) -> Self {
+        Self {
+            key: self.key.clone(),
+            properties: self.properties.clone(),
+        }
+    }
 }
 
 impl<ComponentT: Component> ComponentDef<ComponentT> {
-    pub(crate) fn new(key: Option<usize>, properties: ComponentT::Properties) -> Self {
-        Self { key, properties }
+    pub(crate) fn new(key: Option<ComponentKey>, properties: ComponentT::Properties) -> Self {
+        Self {
+            key,
+            properties: properties.into(),
+        }
+    }
+
+    fn properties_unwrap(&mut self) -> ComponentT::Properties {
+        let mut properties = None;
+        std::mem::swap(&mut properties, &mut self.properties);
+        properties.expect("Already called a method that used the `Properties` value")
     }
 }
 
 impl<ComponentT: Component> Template for ComponentDef<ComponentT> {
-    fn key(&self) -> Option<usize> {
+    #[inline]
+    fn key(&self) -> Option<ComponentKey> {
         self.key
     }
 
+    #[inline]
     fn component_type_id(&self) -> TypeId {
         TypeId::of::<ComponentT>()
     }
 
+    #[inline]
     fn generate_id(&self, position_hash: u64) -> ComponentId {
         ComponentId::new::<ComponentT>(position_hash)
     }
 
+    #[inline]
     fn create(
-        &self,
+        &mut self,
         component_id: ComponentId,
-        sender: Sender<(ComponentId, DynamicMessage)>,
-        pool: &TaskPool,
-    ) -> ComponentCreation {
+        frame: Rect,
+        sender: Arc<Sender<LinkMessage>>,
+    ) -> Box<dyn Renderable> {
         let link = ComponentLink::new(sender, component_id);
-        let mut scheduler = pool.scheduler::<ComponentT::Message>();
-        let component = Box::new(ComponentT::create(
-            self.properties.clone(),
-            link,
-            &mut scheduler,
-        ));
-        ComponentCreation {
-            component,
-            scheduled: scheduler.into_scheduled(),
-        }
+        Box::new(ComponentT::create(self.properties_unwrap(), frame, link))
     }
 
-    fn dynamic_properties(&self) -> DynamicProperties {
-        DynamicProperties(Box::new(self.properties.clone()))
+    #[inline]
+    fn dynamic_properties(&mut self) -> DynamicProperties {
+        DynamicProperties(Box::new(self.properties_unwrap()))
+    }
+
+    #[inline]
+    fn clone(&self) -> DynamicTemplate {
+        DynamicTemplate(Box::new(Clone::clone(self)))
     }
 }

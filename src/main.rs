@@ -1,27 +1,27 @@
 mod components;
-mod editor;
+mod editor2;
 mod error;
-mod frontend;
 mod mode;
 mod settings;
 mod smallstring;
 mod syntax;
 mod task;
-mod terminal;
 mod undo;
 mod utils;
 
 use clap;
 use flexi_logger::{opt_format, Logger};
-use std::{env, path::PathBuf};
+use std::{env, path::PathBuf, rc::Rc};
 use structopt::StructOpt;
+use zi::{
+    frontend::{FrontendKind, DEFAULT_FRONTEND_STR},
+    layout, App,
+};
 
 use crate::{
-    editor::Editor,
+    editor2::{Context, Editor},
     error::Result,
-    frontend::{Frontend, FrontendKind, DEFAULT_FRONTEND_STR},
     task::TaskPool,
-    terminal::Screen,
 };
 
 #[derive(Debug, StructOpt)]
@@ -49,20 +49,23 @@ struct Args {
     enable_logging: bool,
 }
 
-fn run_editor_ui_loop(frontend_kind: &FrontendKind, mut editor: Editor) -> Result<()> {
+fn run_event_loop(frontend_kind: &FrontendKind, mut editor: App) -> Result<()> {
     match frontend_kind {
         #[cfg(feature = "frontend-termion")]
         FrontendKind::Termion => {
-            let frontend = frontend::termion::Termion::new()?;
-            editor.ui_loop(Screen::new(frontend.size()?), frontend)
+            let frontend =
+                zi::frontend::termion::incremental().map_err(|err| -> zi::Error { err.into() })?;
+            editor.run_event_loop(frontend)?;
         }
 
         #[cfg(feature = "frontend-crossterm")]
         FrontendKind::Crossterm => {
-            let frontend = frontend::crossterm::Crossterm::new()?;
-            editor.ui_loop(Screen::new(frontend.size()?), frontend)
+            let frontend = zi::frontend::crossterm::incremental()
+                .map_err(|err| -> zi::Error { err.into() })?;
+            editor.run_event_loop(frontend)?;
         }
     }
+    Ok(())
 }
 
 fn configure_logging() -> Result<()> {
@@ -89,7 +92,7 @@ fn start_editor() -> Result<()> {
         .or_else(|| settings::settings_path().map(Some).unwrap_or(None))
         .map_or_else(Default::default, settings::read_settings);
 
-    // Create a default settings file if user requested it
+    // Create a default settings file if requested by the user
     if args.create_settings {
         let settings_path = settings::settings_path()?;
         if !settings_path.exists() {
@@ -103,13 +106,16 @@ fn start_editor() -> Result<()> {
     }
 
     // Instantiate editor and open any files specified as arguments
-    let mut editor = Editor::new(settings, current_dir, TaskPool::new()?);
-    for file_path in args.files.iter() {
-        editor.open_file(file_path)?;
-    }
+    let context = Rc::new(Context {
+        args_files: args.files,
+        current_working_dir: current_dir,
+        settings,
+        task_pool: TaskPool::new()?,
+    });
+    let app = App::new(layout::component::<Editor>(context));
 
     // Start the UI loop
-    run_editor_ui_loop(&args.frontend_kind, editor)
+    run_event_loop(&args.frontend_kind, app)
 }
 
 fn main() -> Result<()> {

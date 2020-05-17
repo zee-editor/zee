@@ -21,6 +21,8 @@ impl<'a> TextStorage<'a> for Rope {
     }
 
     fn len_graphemes(&self) -> usize {
+        // TODO: Should this be number of graphemes rather than width? If not,
+        // change the name of the function; check usage.
         grapheme_width(&self.slice(..))
     }
 

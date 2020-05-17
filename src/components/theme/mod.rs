@@ -1,14 +1,13 @@
 pub mod base16;
+pub use self::base16::Base16Theme;
+
+use zi::terminal::{Colour, Style};
 
 use super::{
     buffer::Theme as BufferTheme, edit_tree_viewer::Theme as EditTreeViewerTheme,
     prompt::Theme as PromptTheme, splash::Theme as SplashTheme,
 };
-use crate::{
-    syntax::highlight::Theme as SyntaxTheme,
-    terminal::{Background, Colour, Foreground, Style},
-};
-pub use base16::Base16Theme;
+use crate::syntax::highlight::Theme as SyntaxTheme;
 
 pub const THEMES: [(Theme, &str); 30] = [
     (Theme::gruvbox(), "zee-gruvbox"),
@@ -119,7 +118,7 @@ impl Theme {
                     text_current_line: normal(DARK0_HARD, LIGHT1),
                     cursor_focused: normal(LIGHT0, DARK0),
                     cursor_unfocused: normal(GRAY_245, DARK0_HARD),
-                    selection_background: Background(DARK0_HARD),
+                    selection_background: DARK0_HARD,
                     code_invalid: underline(DARK0_SOFT, BRIGHT_RED),
                     code_constant: normal(DARK0_SOFT, BRIGHT_GREEN),
                     code_keyword: bold(DARK0_SOFT, BRIGHT_RED),
@@ -161,10 +160,10 @@ impl Theme {
                 input: normal(DARK0_HARD, NEUTRAL_YELLOW),
                 action: normal(BRIGHT_BLUE, DARK0_HARD),
                 cursor: normal(LIGHT0, DARK0),
-                item_focused_background: Background(DARK0_HARD),
-                item_unfocused_background: Background(DARK0),
-                item_file_foreground: Foreground(LIGHT1),
-                item_directory_foreground: Foreground(BRIGHT_RED),
+                item_focused_background: DARK0_HARD,
+                item_unfocused_background: DARK0,
+                item_file_foreground: LIGHT1,
+                item_directory_foreground: BRIGHT_RED,
             },
         }
     }
@@ -212,7 +211,7 @@ impl Theme {
                     text_current_line: normal(lighter_background, default_foreground),
                     cursor_focused: normal(light_foreground, default_background),
                     cursor_unfocused: normal(comments, default_background),
-                    selection_background: Background(selection_background),
+                    selection_background: selection_background,
                     code_invalid: underline(default_background, variables),
                     code_constant: normal(default_background, strings),
                     code_keyword: normal(default_background, variables),
@@ -254,10 +253,10 @@ impl Theme {
                 input: normal(default_background, classes),
                 action: normal(functions, default_background),
                 cursor: normal(light_foreground, default_background),
-                item_focused_background: Background(default_background),
-                item_unfocused_background: Background(lighter_background),
-                item_file_foreground: Foreground(default_foreground),
-                item_directory_foreground: Foreground(keywords),
+                item_focused_background: default_background,
+                item_unfocused_background: lighter_background,
+                item_file_foreground: default_foreground,
+                item_directory_foreground: keywords,
             },
         }
     }
@@ -265,7 +264,7 @@ impl Theme {
 
 #[allow(dead_code)]
 pub mod gruvbox {
-    use crate::terminal::Colour;
+    use zi::Colour;
 
     // Gruvbox colours
     pub const DARK0_HARD: Colour = Colour::rgb(29, 32, 33);
@@ -314,15 +313,15 @@ pub mod gruvbox {
 
 #[inline]
 const fn normal(background: Colour, foreground: Colour) -> Style {
-    Style::normal(Background(background), Foreground(foreground))
+    Style::normal(background, foreground)
 }
 
 #[inline]
 const fn bold(background: Colour, foreground: Colour) -> Style {
-    Style::bold(Background(background), Foreground(foreground))
+    Style::bold(background, foreground)
 }
 
 #[inline]
 const fn underline(background: Colour, foreground: Colour) -> Style {
-    Style::underline(Background(background), Foreground(foreground))
+    Style::underline(background, foreground)
 }

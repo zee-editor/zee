@@ -6,36 +6,41 @@ use unicode_width::UnicodeWidthStr;
 use super::{Position, Size};
 use crate::terminal::Rect;
 
-pub type TextelContent = SmallString<[u8; 8]>;
+pub type GraphemeCluster = SmallString<[u8; 16]>;
 
-#[derive(Default, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct Textel {
+    pub grapheme: GraphemeCluster,
     pub style: Style,
-    pub content: TextelContent,
 }
 
+#[derive(Debug, Clone)]
 pub struct Canvas {
-    width: usize,
-    height: usize,
     buffer: Vec<Option<Textel>>,
+    size: Size,
+    min_size: Size,
 }
 
 impl Canvas {
     pub fn new(size: Size) -> Self {
-        // Allocate initial draw buffer
-        Canvas {
-            width: size.width,
-            height: size.height,
+        Self {
             buffer: iter::repeat(Textel::default())
                 .map(Some)
-                .take(size.width * size.height)
+                .take(size.area())
                 .collect(),
+            size,
+            min_size: Size::zero(),
         }
     }
 
     #[inline]
     pub fn size(&self) -> Size {
-        Size::new(self.width, self.height)
+        self.size
+    }
+
+    #[inline]
+    pub fn min_size(&self) -> Size {
+        self.min_size
     }
 
     #[inline]
@@ -44,23 +49,25 @@ impl Canvas {
     }
 
     #[inline]
+    pub fn buffer_mut(&mut self) -> &mut [Option<Textel>] {
+        self.buffer.as_mut_slice()
+    }
+
+    #[inline]
     pub fn resize(&mut self, size: Size) {
-        self.width = size.width;
-        self.height = size.height;
-        self.buffer
-            .resize(size.width * size.height, Default::default());
+        self.buffer.resize(size.area(), Default::default());
+        self.size = size;
+        self.min_size = size.min(self.min_size);
     }
 
     #[inline]
     pub fn clear_region(&mut self, region: Rect, style: Style) {
-        eprintln!("cs: {} {}", self.width, self.height);
-        eprintln!("cl: {}", region);
-        let y_range = region.origin.y..cmp::min(region.origin.y + region.size.height, self.height);
-        let x_range = region.origin.x..cmp::min(region.origin.x + region.size.width, self.width);
-        eprintln!("xr: {:?}", x_range);
-        eprintln!("yr: {:?}", y_range);
+        let y_range =
+            region.origin.y..cmp::min(region.origin.y + region.size.height, self.size.height);
+        let x_range =
+            region.origin.x..cmp::min(region.origin.x + region.size.width, self.size.width);
         for y in y_range {
-            self.buffer[y * self.width + x_range.start..y * self.width + x_range.end]
+            self.buffer[y * self.size.width + x_range.start..y * self.size.width + x_range.end]
                 .iter_mut()
                 .for_each(|textel| clear_textel(textel, style, " "));
         }
@@ -91,17 +98,17 @@ impl Canvas {
         x: usize,
         y: usize,
         style: Style,
-        grapheme_iter: impl Iterator<Item = impl Into<TextelContent>>,
+        graphemes: impl Iterator<Item = impl Into<GraphemeCluster>>,
     ) -> usize {
-        if y >= self.height || x >= self.width {
+        if y >= self.size.height || x >= self.size.width {
             return 0;
         }
 
-        let initial_offset = y * self.width + x;
-        let max_offset = (y + 1) * self.width + x - 1;
+        let initial_offset = y * self.size.width + x;
+        let max_offset = cmp::min((y + 1) * self.size.width + x, self.buffer.len());
         let mut current_offset = initial_offset;
 
-        for grapheme in grapheme_iter {
+        for grapheme in graphemes {
             if current_offset >= max_offset {
                 break;
             }
@@ -112,10 +119,7 @@ impl Canvas {
                 continue;
             }
 
-            self.buffer[current_offset] = Some(Textel {
-                style,
-                content: grapheme,
-            });
+            self.buffer[current_offset] = Some(Textel { style, grapheme });
 
             let num_modified = cmp::min(grapheme_width, max_offset - current_offset);
             self.buffer[current_offset + 1..current_offset + num_modified]
@@ -124,22 +128,28 @@ impl Canvas {
 
             current_offset += num_modified;
         }
+
+        // Update `min_size`
+        self.min_size.width = cmp::max(self.min_size.width, current_offset);
+        self.min_size.height = cmp::max(self.min_size.height, y);
+
         current_offset - initial_offset
     }
 
     #[inline]
     pub fn copy_region(&mut self, source: &Self, region: Rect) {
-        let y_range = cmp::min(region.origin.y, self.height)
-            ..cmp::min(region.origin.y + source.height, self.height);
-        let x_range = cmp::min(region.origin.x, self.width)
-            ..cmp::min(region.origin.x + source.width, self.width);
+        let y_range = cmp::min(region.origin.y, self.size.height)
+            ..cmp::min(region.origin.y + source.size.height, self.size.height);
+        let x_range = cmp::min(region.origin.x, self.size.width)
+            ..cmp::min(region.origin.x + source.size.width, self.size.width);
 
         for y in y_range {
-            self.buffer[y * self.width + x_range.start..y * self.width + x_range.end]
+            self.buffer[y * self.size.width + x_range.start..y * self.size.width + x_range.end]
                 .iter_mut()
                 .zip(
-                    source.buffer[(y - region.origin.y) * source.width
-                        ..(y - region.origin.y) * source.width + (x_range.end - region.origin.x)]
+                    source.buffer[(y - region.origin.y) * source.size.width
+                        ..(y - region.origin.y) * source.size.width
+                            + (x_range.end - region.origin.x)]
                         .iter(),
                 )
                 .for_each(|(textel, other)| *textel = other.clone());
@@ -147,8 +157,13 @@ impl Canvas {
     }
 
     #[inline]
-    pub fn draw_raw(&mut self, x: usize, y: usize) -> &mut Option<Textel> {
-        &mut self.buffer[y * self.width + x]
+    pub fn textel(&self, x: usize, y: usize) -> &Option<Textel> {
+        &self.buffer[y * self.size.width + x]
+    }
+
+    #[inline]
+    pub fn textel_mut(&mut self, x: usize, y: usize) -> &mut Option<Textel> {
+        &mut self.buffer[y * self.size.width + x]
     }
 }
 
@@ -161,41 +176,45 @@ pub struct Style {
 }
 
 impl Style {
+    pub const fn default() -> Self {
+        Style::normal(Colour::black(), Colour::white())
+    }
+
     #[inline]
-    pub fn normal(background: impl Into<Background>, foreground: impl Into<Foreground>) -> Self {
+    pub const fn normal(background: Background, foreground: Foreground) -> Self {
         Self {
-            background: background.into(),
-            foreground: foreground.into(),
+            background,
+            foreground,
             bold: false,
             underline: false,
         }
     }
 
     #[inline]
-    pub fn bold(background: impl Into<Background>, foreground: impl Into<Foreground>) -> Self {
+    pub const fn bold(background: Background, foreground: Foreground) -> Self {
         Self {
-            background: background.into(),
-            foreground: foreground.into(),
+            background,
+            foreground,
             bold: true,
             underline: false,
         }
     }
 
     #[inline]
-    pub fn underline(background: impl Into<Background>, foreground: impl Into<Foreground>) -> Self {
+    pub const fn underline(background: Background, foreground: Foreground) -> Self {
         Self {
-            background: background.into(),
-            foreground: foreground.into(),
+            background,
+            foreground,
             bold: false,
             underline: true,
         }
     }
 
     #[inline]
-    pub fn same_colour(colour: Colour) -> Self {
+    pub const fn same_colour(colour: Colour) -> Self {
         Self {
-            background: Background(colour),
-            foreground: Foreground(colour),
+            background: colour,
+            foreground: colour,
             bold: false,
             underline: false,
         }
@@ -205,7 +224,7 @@ impl Style {
 impl Default for Style {
     #[inline]
     fn default() -> Self {
-        Style::same_colour(Colour::black())
+        Self::default()
     }
 }
 
@@ -223,48 +242,42 @@ impl Colour {
     }
 
     #[inline]
-    pub fn black() -> Self {
+    pub const fn black() -> Self {
         Self {
             red: 0,
             green: 0,
             blue: 0,
         }
     }
-}
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct Background(pub Colour);
-
-impl From<Colour> for Background {
-    fn from(colour: Colour) -> Self {
-        Self(colour)
+    #[inline]
+    pub const fn white() -> Self {
+        Self {
+            red: 255,
+            green: 255,
+            blue: 255,
+        }
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct Foreground(pub Colour);
-
-impl From<Colour> for Foreground {
-    fn from(colour: Colour) -> Self {
-        Self(colour)
-    }
-}
+pub type Background = Colour;
+pub type Foreground = Colour;
 
 #[inline]
 fn clear_textel(textel: &mut Option<Textel>, style: Style, value: &str) {
     match *textel {
         Some(Textel {
             style: ref mut textel_style,
-            ref mut content,
+            ref mut grapheme,
         }) => {
             *textel_style = style;
-            content.clear();
-            content.push_str(value);
+            grapheme.clear();
+            grapheme.push_str(value);
         }
         _ => {
             *textel = Some(Textel {
                 style,
-                content: " ".into(),
+                grapheme: " ".into(),
             });
         }
     }
@@ -300,18 +313,39 @@ impl SquarePixelGrid {
     pub fn draw(&mut self, position: Position, colour: Colour) {
         let textel = self
             .canvas
-            .draw_raw(position.x, position.y / 2)
+            .textel_mut(position.x, position.y / 2)
             .as_mut()
             .expect("No textels should be uninitialised");
         if position.y % 2 == 0 {
-            textel.style.foreground = Foreground(colour);
+            textel.style.foreground = colour;
         } else {
-            textel.style.background = Background(colour);
+            textel.style.background = colour;
         }
     }
 
     #[inline]
     pub fn into_canvas(self) -> Canvas {
         self.canvas
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{GraphemeCluster, Style, Textel};
+
+    #[test]
+    fn size_of_style() {
+        eprintln!(
+            "std::mem::size_of::<Style>() == {}",
+            std::mem::size_of::<Style>()
+        );
+        eprintln!(
+            "std::mem::size_of::<Option<Textel>>() == {}",
+            std::mem::size_of::<Option<Textel>>()
+        );
+        eprintln!(
+            "std::mem::size_of::<GraphemeCluster>>() == {}",
+            std::mem::size_of::<Option<GraphemeCluster>>()
+        );
     }
 }

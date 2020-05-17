@@ -1,18 +1,30 @@
 use ropey::Rope;
+use std::cmp;
 use unicode_width::UnicodeWidthStr;
 
 use super::{
-    layout::Layout, BindingMatch, BindingTransition, Component, ComponentLink, ShouldRender,
+    layout::Layout, BindingMatch, BindingTransition, Callback, Component, ComponentLink,
+    ShouldRender,
 };
 use crate::{
-    task::Scheduler,
     terminal::{Canvas, Colour, Key, Rect, Style},
-    text::{cursor, CharIndex, Cursor, TextStorage},
+    text::{cursor, CharIndex, TextStorage},
 };
 
-#[derive(Clone, Debug)]
+pub use crate::text::Cursor;
+
+#[derive(Clone, PartialEq)]
+pub struct InputProperties {
+    pub style: InputStyle,
+    pub content: Rope,
+    pub cursor: Cursor,
+    pub on_change: Option<Callback<InputChange>>,
+    pub focused: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct InputStyle {
-    pub text: Style,
+    pub content: Style,
     pub cursor: Style,
 }
 
@@ -23,122 +35,108 @@ impl Default for InputStyle {
         const BRIGHT_BLUE: Colour = Colour::rgb(131, 165, 152);
 
         Self {
-            text: Style::normal(DARK0_SOFT, LIGHT2),
+            content: Style::normal(DARK0_SOFT, LIGHT2),
             cursor: Style::normal(BRIGHT_BLUE, DARK0_SOFT),
         }
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct InputProperties<CallbackT> {
-    pub style: InputStyle,
-    pub content: Rope,
-    pub on_change: Option<CallbackT>,
+pub struct InputChange {
+    pub content: Option<Rope>,
+    pub cursor: Cursor,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Message {
-    CursorLeft,
-    CursorRight,
-    InsertChar(char),
-    DeleteBackward,
-    DeleteForward,
-    StartOfLine,
-    EndOfLine,
+pub struct Input {
+    properties: InputProperties,
+    frame: Rect,
 }
 
-#[derive(Debug)]
-pub struct Input<CallbackT> {
-    properties: InputProperties<CallbackT>,
-    content: Rope,
-    cursor: Cursor,
-}
-
-impl<CallbackT> Component for Input<CallbackT>
-where
-    CallbackT: FnMut(String) + Clone + 'static,
-{
+impl Component for Input {
     type Message = Message;
-    type Properties = InputProperties<CallbackT>;
+    type Properties = InputProperties;
 
-    fn create(
-        properties: Self::Properties,
-        _link: ComponentLink<Self>,
-        _scheduler: &mut Scheduler<Self::Message>,
-    ) -> Self {
+    fn create(properties: Self::Properties, frame: Rect, _link: ComponentLink<Self>) -> Self {
         let mut content = properties.content.clone();
         cursor::ensure_trailing_newline_with_content(&mut content);
-        Self {
-            properties,
-            content,
-            cursor: Cursor::new(),
+        Self { properties, frame }
+    }
+
+    fn change(&mut self, properties: Self::Properties) -> ShouldRender {
+        if self.properties != properties {
+            self.properties = properties;
+            ShouldRender::Yes
+        } else {
+            ShouldRender::No
         }
     }
 
-    fn update(
-        &mut self,
-        message: Self::Message,
-        _scheduler: &mut Scheduler<Self::Message>,
-    ) -> ShouldRender {
-        match message {
-            Message::CursorLeft => self.cursor.move_left(&self.content),
-            Message::CursorRight => self.cursor.move_right(&self.content),
-            Message::StartOfLine => self.cursor.move_to_start_of_line(&self.content),
-            Message::EndOfLine => self.cursor.move_to_end_of_buffer(&self.content),
-            Message::InsertChar(character) => {
-                self.cursor.insert_char(&mut self.content, character);
-                self.cursor.move_right(&self.content);
-                if let Some(on_change) = self.properties.on_change.as_mut() {
-                    (on_change)(self.content.clone().into())
-                }
-            }
+    fn resize(&mut self, frame: Rect) -> ShouldRender {
+        self.frame = frame;
+        ShouldRender::Yes
+    }
 
+    fn update(&mut self, message: Self::Message) -> ShouldRender {
+        let mut cursor = self.properties.cursor.clone();
+        let mut content_change = None;
+        match message {
+            Message::CursorLeft => {
+                cursor.move_left(&self.properties.content);
+            }
+            Message::CursorRight => {
+                cursor.move_right(&self.properties.content);
+            }
+            Message::StartOfLine => {
+                cursor.move_to_start_of_line(&self.properties.content);
+            }
+            Message::EndOfLine => {
+                cursor.move_to_end_of_buffer(&self.properties.content);
+            }
+            Message::InsertChar(character) => {
+                let mut new_content = self.properties.content.clone();
+                cursor.insert_char(&mut new_content, character);
+                cursor.move_right(&new_content);
+                content_change = Some(new_content);
+            }
             Message::DeleteBackward => {
-                self.cursor.backspace(&mut self.content);
-                if let Some(on_change) = self.properties.on_change.as_mut() {
-                    (on_change)(self.content.clone().into())
-                }
+                let mut new_content = self.properties.content.clone();
+                cursor.backspace(&mut new_content);
+                content_change = Some(new_content);
             }
             Message::DeleteForward => {
-                self.cursor.delete(&mut self.content);
-                if let Some(on_change) = self.properties.on_change.as_mut() {
-                    (on_change)(self.content.clone().into())
-                }
+                let mut new_content = self.properties.content.clone();
+                cursor.delete(&mut new_content);
+                content_change = Some(new_content);
             }
         }
-        ShouldRender::Yes
-    }
 
-    fn change(
-        &mut self,
-        properties: Self::Properties,
-        _scheduler: &mut Scheduler<Self::Message>,
-    ) -> ShouldRender {
-        let mut new_content = properties.content.clone();
-        cursor::ensure_trailing_newline_with_content(&mut new_content);
-        self.cursor.sync(&self.content, &new_content);
-        self.content = new_content;
-        self.properties = properties;
+        if let Some(on_change) = self.properties.on_change.as_mut() {
+            on_change.emit(InputChange {
+                cursor,
+                content: content_change,
+            });
+        }
 
         ShouldRender::Yes
     }
 
-    fn view(&self, frame: Rect) -> Layout {
+    fn view(&self) -> Layout {
         let Self {
-            ref cursor,
             properties:
                 InputProperties {
                     ref content,
+                    ref cursor,
                     ref style,
                     ..
                 },
             ..
         } = *self;
 
-        let mut canvas = Canvas::new(frame.size);
-        canvas.clear(style.text);
+        let mut canvas = Canvas::new(self.frame.size);
+        canvas.clear(style.content);
 
         let mut char_offset = 0;
+        let mut visual_offset = 0;
         for grapheme in content.graphemes() {
             let len_chars = grapheme.len_chars();
             // TODO: don't unwrap (need to be able to create a smallstring from a rope slice)
@@ -146,15 +144,16 @@ where
             let grapheme_width = UnicodeWidthStr::width(grapheme);
 
             canvas.draw_str(
-                char_offset,
+                visual_offset,
                 0,
                 if cursor.range().contains(&CharIndex(char_offset)) {
                     style.cursor
                 } else {
-                    style.text
+                    style.content
                 },
                 if grapheme_width > 0 { grapheme } else { " " },
             );
+            visual_offset += grapheme_width;
             char_offset += len_chars;
         }
 
@@ -162,7 +161,7 @@ where
     }
 
     fn has_focus(&self) -> bool {
-        true
+        self.properties.focused
     }
 
     fn input_binding(&self, pressed: &[Key]) -> BindingMatch<Self::Message> {
@@ -172,7 +171,9 @@ where
             &[Key::Ctrl('f')] | &[Key::Right] => Some(Message::CursorRight),
             &[Key::Ctrl('a')] | &[Key::Home] => Some(Message::StartOfLine),
             &[Key::Ctrl('e')] | &[Key::End] => Some(Message::EndOfLine),
-            &[Key::Char(character)] if character != '\n' && character != '\r' => {
+            &[Key::Char(character)]
+                if character != '\n' && character != '\r' && character != '\t' =>
+            {
                 Some(Message::InsertChar(character))
             }
             &[Key::Ctrl('d')] | &[Key::Delete] => Some(Message::DeleteForward),
@@ -190,12 +191,13 @@ where
     }
 }
 
-// pub fn from_rope_slice(text: &RopeSlice) -> SmallString<[u8; 4]> {
-//     let mut string = SmallString::with_capacity(text.len_bytes());
-//     let mut idx = 0;
-//     for chunk in text.chunks() {
-//         unsafe { string.insert_bytes(idx, chunk.as_bytes()) };
-//         idx += chunk.len();
-//     }
-//     string
-// }
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Message {
+    CursorLeft,
+    CursorRight,
+    InsertChar(char),
+    DeleteBackward,
+    DeleteForward,
+    StartOfLine,
+    EndOfLine,
+}

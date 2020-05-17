@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use dirs;
 use serde_derive::{Deserialize, Serialize};
 use std::{
@@ -6,7 +7,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::error::{Error, Result};
+use crate::error::{Context, Result};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Settings {
@@ -21,7 +22,7 @@ impl Default for Settings {
 
 pub fn settings_path() -> Result<PathBuf> {
     let mut path = dirs::config_dir()
-        .ok_or_else(|| Error::Config("Could not get path to the user's config directory".into()))
+        .ok_or_else(|| anyhow!("Could not get path to the user's config directory"))
         .map(|mut config_dir| {
             config_dir.push("zee");
             config_dir
@@ -38,21 +39,14 @@ pub fn read_settings(path: impl AsRef<Path>) -> Settings {
                 file.read_to_string(&mut contents)?;
                 Ok(contents)
             })
-            .map_err(|err| {
-                Error::Config(format!(
-                    "Could not read settings file `{}`: {}",
-                    path.as_ref().display(),
-                    err
-                ))
-            })
+            .with_context(|| format!("Could not read settings file `{}`", path.as_ref().display()))
             .and_then(|contents| {
                 log::info!("Reading settings file `{}`", path.as_ref().display());
-                toml::de::from_str(&contents).map_err(|err| {
-                    Error::Config(format!(
-                        "Could not parse settings file `{}`: {}",
+                toml::de::from_str(&contents).with_context(|| {
+                    format!(
+                        "Could not parse settings file `{}`",
                         path.as_ref().display(),
-                        err
-                    ))
+                    )
                 })
             })
             .map_err(|err| log::error!("{}", err))
@@ -64,30 +58,19 @@ pub fn read_settings(path: impl AsRef<Path>) -> Settings {
 
 pub fn create_default_file(path: impl AsRef<Path>) -> Result<()> {
     if let Some(parent) = path.as_ref().parent() {
-        fs::create_dir_all(parent).map_err(|err| {
-            Error::Config(format!(
-                "Could not create config directory {}: {}",
-                parent.display(),
-                err
-            ))
+        fs::create_dir_all(parent).with_context(|| {
+            format!("Could not create config directory `{}`", parent.display(),)
         })?;
     }
-    let settings_str = toml::to_string_pretty(&Settings::default()).map_err(|err| {
-        Error::Config(format!(
-            "Could not serialize settings to file `{}`: {}",
-            path.as_ref().display(),
-            err
-        ))
+    let settings_str = toml::to_string_pretty(&Settings::default()).with_context(|| {
+        format!(
+            "Could not serialize settings to file `{}`",
+            path.as_ref().display()
+        )
     })?;
     File::create(path.as_ref())
         .and_then(|mut file| file.write(settings_str.as_bytes()))
-        .map_err(|err| {
-            Error::Config(format!(
-                "Could not read settings file `{}`: {}",
-                path.as_ref().display(),
-                err
-            ))
-        })?;
+        .with_context(|| format!("Could not read settings file `{}`", path.as_ref().display(),))?;
 
     Ok(())
 }

@@ -1,10 +1,7 @@
 use unicode_width::UnicodeWidthStr;
 
 use super::{layout::Layout, Component, ComponentLink, ShouldRender};
-use crate::{
-    task::Scheduler,
-    terminal::{Canvas, Rect, Size, Style},
-};
+use crate::terminal::{Canvas, Rect, Size, Style};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum TextAlign {
@@ -13,51 +10,101 @@ pub enum TextAlign {
     Right,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+impl Default for TextAlign {
+    fn default() -> Self {
+        Self::Left
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum TextWrap {
+    None,
+    Word,
+}
+
+impl Default for TextWrap {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TextProperties {
     pub style: Style,
     pub content: String,
     pub align: TextAlign,
+    pub wrap: TextWrap,
+}
+
+impl TextProperties {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn style(mut self, style: Style) -> Self {
+        self.style = style;
+        self
+    }
+
+    pub fn content(mut self, content: impl Into<String>) -> Self {
+        self.content = content.into();
+        self
+    }
+
+    pub fn align(mut self, align: TextAlign) -> Self {
+        self.align = align;
+        self
+    }
+
+    pub fn wrap(mut self, wrap: TextWrap) -> Self {
+        self.wrap = wrap;
+        self
+    }
 }
 
 #[derive(Debug)]
 pub struct Text {
+    frame: Rect,
     properties: <Self as Component>::Properties,
-}
-
-impl Text {
-    fn new(properties: <Self as Component>::Properties) -> Self {
-        Self { properties }
-    }
 }
 
 impl Component for Text {
     type Message = ();
     type Properties = TextProperties;
 
-    fn create(
-        properties: Self::Properties,
-        _link: ComponentLink<Self>,
-        _scheduler: &mut Scheduler<Self::Message>,
-    ) -> Self {
-        Self::new(properties)
+    fn create(properties: Self::Properties, frame: Rect, _link: ComponentLink<Self>) -> Self {
+        Self { properties, frame }
     }
 
-    fn change(
-        &mut self,
-        properties: Self::Properties,
-        _scheduler: &mut Scheduler<Self::Message>,
-    ) -> ShouldRender {
-        self.properties = properties;
-        ShouldRender::Yes
+    fn change(&mut self, properties: Self::Properties) -> ShouldRender {
+        if self.properties != properties {
+            self.properties = properties;
+            ShouldRender::Yes
+        } else {
+            ShouldRender::No
+        }
     }
 
-    fn view(&self, frame: Rect) -> Layout {
-        let Self::Properties {
-            align,
-            style,
-            ref content,
-        } = self.properties;
+    fn resize(&mut self, frame: Rect) -> ShouldRender {
+        if self.frame != frame {
+            self.frame = frame;
+            ShouldRender::Yes
+        } else {
+            ShouldRender::No
+        }
+    }
+
+    fn view(&self) -> Layout {
+        let Self {
+            frame,
+            properties:
+                Self::Properties {
+                    ref content,
+                    align,
+                    style,
+                    wrap,
+                },
+        } = *self;
 
         let mut canvas = Canvas::new(frame.size);
         canvas.clear(style);
@@ -68,8 +115,34 @@ impl Component for Text {
             TextAlign::Centre => (frame.size.width / 2).saturating_sub(content_size.width / 2),
             TextAlign::Right => frame.size.width.saturating_sub(content_size.width),
         };
-        for (position_y, line) in content.lines().enumerate() {
-            canvas.draw_str(position_x, position_y, style, line);
+
+        let mut position_y = 0;
+        for line in content.lines() {
+            match wrap {
+                TextWrap::None => {
+                    canvas.draw_str(position_x, position_y, style, line);
+                }
+                TextWrap::Word => {
+                    let mut cursor_x = position_x;
+                    for word in line.split_whitespace() {
+                        let word_width = UnicodeWidthStr::width(word);
+                        if cursor_x > position_x {
+                            if cursor_x >= frame.size.width
+                                || word_width > frame.size.width.saturating_sub(cursor_x + 1)
+                            {
+                                position_y += 1;
+                                cursor_x = position_x
+                            } else {
+                                canvas.draw_str(cursor_x, position_y, style, " ");
+                                cursor_x += 1;
+                            }
+                        }
+                        canvas.draw_str(cursor_x, position_y, style, word);
+                        cursor_x += word_width;
+                    }
+                }
+            }
+            position_y += 1;
         }
 
         Layout::Canvas(canvas)

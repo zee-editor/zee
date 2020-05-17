@@ -2,91 +2,100 @@ use crossbeam_channel::{select, Receiver, Sender};
 use smallvec::SmallVec;
 use std::{
     collections::HashMap,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
 use crate::{
     component::{
-        layout::{LaidCanvas, LaidComponent},
-        template::{ComponentId, DynamicMessage, Renderable},
-        BindingTransition, Component, ComponentLink, ShouldRender,
+        layout::{LaidCanvas, LaidComponent, Layout},
+        template::{ComponentId, DynamicMessage, DynamicProperties, Renderable, Template},
+        BindingMatch, BindingTransition, LinkMessage, ShouldRender,
     },
-    error::{Error, Result},
+    error::Result,
     frontend::Frontend,
-    task::{TaskId, TaskPool},
     terminal::{Canvas, Key, Position, Rect},
 };
 
+#[derive(Debug)]
 enum PollState {
     Clean,
     Dirty,
     Exit,
 }
 
+struct MountedComponent {
+    renderable: Box<dyn Renderable>,
+    should_render: bool,
+    frame: Rect,
+}
+
+impl MountedComponent {
+    #[inline]
+    fn change(&mut self, properties: DynamicProperties) -> bool {
+        self.should_render = self.renderable.change(properties).into() || self.should_render;
+        self.should_render
+    }
+
+    #[inline]
+    fn resize(&mut self, frame: Rect) -> bool {
+        self.should_render = self.renderable.resize(frame).into() || self.should_render;
+        self.frame = frame;
+        self.should_render
+    }
+
+    #[inline]
+    fn update(&mut self, message: DynamicMessage) -> bool {
+        self.should_render = self.renderable.update(message).into() || self.should_render;
+        self.should_render
+    }
+
+    #[inline]
+    fn view(&mut self) -> Layout {
+        self.should_render = false;
+        self.renderable.view()
+    }
+
+    #[inline]
+    fn has_focus(&self) -> bool {
+        self.renderable.has_focus()
+    }
+
+    #[inline]
+    fn input_binding(&self, pressed: &[Key]) -> BindingMatch<DynamicMessage> {
+        self.renderable.input_binding(pressed)
+    }
+
+    #[inline]
+    fn tick(&self) -> Option<DynamicMessage> {
+        self.renderable.tick()
+    }
+}
+
 pub struct App {
-    task_pool: TaskPool,
     controller: InputController,
-    components: HashMap<ComponentId, Box<dyn Renderable>>,
-    pending_tasks: HashMap<TaskId, ComponentId>,
+    components: HashMap<ComponentId, MountedComponent>,
+    layout_cache: HashMap<ComponentId, Layout>,
     focused_components: SmallVec<[ComponentId; 2]>,
-    links_receiver: Receiver<(ComponentId, DynamicMessage)>,
-    links_sender: Sender<(ComponentId, DynamicMessage)>,
-    root_id: ComponentId,
+    tickable_components: SmallVec<[(ComponentId, DynamicMessage); 2]>,
+    links_receiver: Receiver<LinkMessage>,
+    links_sender: Arc<Sender<LinkMessage>>,
+    root: Layout,
 }
 
 impl App {
-    pub fn new_with_component<ComponentT: Component>(component: ComponentT) -> Result<Self> {
-        // Initialise app resources and book keeping
-        let task_pool = TaskPool::new()?;
-        let mut components: HashMap<ComponentId, Box<dyn Renderable>> = HashMap::new();
-        let pending_tasks = HashMap::new();
+    pub fn new(root: Layout) -> Self {
         let (links_sender, links_receiver) = crossbeam_channel::unbounded();
-
-        // Mount root
-        let root_id = make_root_id::<ComponentT>();
-        components.insert(root_id, Box::new(component));
-
-        Ok(Self {
-            task_pool,
+        Self {
             controller: InputController::new(),
-            components,
-            pending_tasks,
+            components: HashMap::new(),
+            layout_cache: HashMap::new(),
             focused_components: SmallVec::new(),
+            tickable_components: SmallVec::new(),
             links_receiver,
-            links_sender,
-            root_id,
-        })
-    }
-
-    pub fn new<ComponentT: Component>(properties: ComponentT::Properties) -> Result<Self> {
-        // Initialise app resources and book keeping
-        let task_pool = TaskPool::new()?;
-        let mut components: HashMap<ComponentId, Box<dyn Renderable>> = HashMap::new();
-        let mut pending_tasks = HashMap::new();
-        let (links_sender, links_receiver) = crossbeam_channel::unbounded();
-
-        // Mount root
-        let root_id = make_root_id::<ComponentT>();
-        let link = ComponentLink::new(links_sender.clone(), root_id);
-        let mut scheduler = task_pool.scheduler::<ComponentT::Message>();
-        components.insert(
-            root_id,
-            Box::new(ComponentT::create(properties, link, &mut scheduler)),
-        );
-        for task_id in scheduler.into_scheduled() {
-            pending_tasks.insert(task_id, root_id);
+            links_sender: Arc::new(links_sender),
+            root,
         }
-
-        Ok(Self {
-            task_pool,
-            controller: InputController::new(),
-            components,
-            pending_tasks,
-            focused_components: SmallVec::new(),
-            links_receiver,
-            links_sender,
-            root_id,
-        })
     }
 
     pub fn run_event_loop(&mut self, mut frontend: impl Frontend) -> Result<()> {
@@ -94,18 +103,39 @@ impl App {
         let mut poll_state = PollState::Dirty;
         let mut last_drawn = Instant::now() - REDRAW_LATENCY;
         loop {
-            match poll_state {
-                PollState::Dirty => {
-                    screen.resize(frontend.size()?);
+            let screen_size = frontend.size()?;
+            let resized = screen_size != screen.size();
+
+            // eprintln!("({:?}, {:?})", poll_state, resized);
+            match (poll_state, resized) {
+                (PollState::Dirty, _) | (PollState::Clean, true) => {
+                    let now = Instant::now();
+
+                    // Draw
+                    if resized {
+                        screen.resize(screen_size);
+                    }
+
                     let frame = Rect::new(Position::new(0, 0), screen.size());
                     self.draw(&mut screen, frame);
-                    frontend.present(&screen)?;
+                    let drawn_time = now.elapsed();
+
+                    // Present
+                    let now = Instant::now();
+                    let num_bytes_presented = frontend.present(&screen)?;
+
+                    log::info!(
+                        "Drawn in {:?} | Presented {} bytes in {:?}",
+                        drawn_time,
+                        num_bytes_presented,
+                        now.elapsed(),
+                    );
                     last_drawn = Instant::now();
                 }
-                PollState::Exit => {
+                (PollState::Exit, _) => {
                     return Ok(());
                 }
-                PollState::Clean => {}
+                (PollState::Clean, false) => {}
             }
 
             poll_state = self.poll_events_batch(&frontend, last_drawn)?;
@@ -113,64 +143,90 @@ impl App {
     }
 
     #[inline]
-    fn root(&self) -> &Box<dyn Renderable> {
-        self.components
-            .get(&self.root_id)
-            .expect("root component is always mounted")
-    }
-
-    #[inline]
     fn draw(&mut self, screen: &mut Canvas, frame: Rect) {
-        let layout = self.root().view(frame);
-
         self.focused_components.clear();
-        if self.root().has_focus() {
-            self.focused_components.push(self.root_id);
-        }
+        self.tickable_components.clear();
 
         let Self {
             ref mut components,
+            ref mut layout_cache,
             ref mut focused_components,
-            ref mut pending_tasks,
+            ref mut tickable_components,
             ref links_sender,
-            ref task_pool,
             ..
         } = *self;
-        eprintln!("======");
-        layout.crawl(
-            frame,
-            0,
-            &mut |LaidComponent {
-                      frame,
-                      position_hash,
-                      template,
-                  }| {
-                let component_id = template.generate_id(position_hash);
-                eprintln!("cur com: [ph: {}] {}", position_hash, component_id);
-                let mut new_component = false;
-                let component = components.entry(component_id).or_insert_with(|| {
-                    new_component = true;
-                    let created = template.create(component_id, links_sender.clone(), &task_pool);
-                    for task_id in created.scheduled {
-                        pending_tasks.insert(task_id, component_id);
-                    }
-                    created.component
-                });
-                if !new_component {
-                    let changed = component.change(template.dynamic_properties(), &task_pool);
-                    for task_id in changed.scheduled {
-                        pending_tasks.insert(task_id, component_id);
-                    }
+        let mut first = true;
+        let mut pending = Vec::new();
+
+        loop {
+            let (layout, frame2, position_hash, parent_changed) = if first {
+                first = false;
+                (&mut self.root, frame, 0, false)
+            } else if let Some((component_id, frame, position_hash)) = pending.pop() {
+                let component = components
+                    .get_mut(&component_id)
+                    .expect("Layout is cached only for mounted components");
+                let layout = layout_cache
+                    .entry(component_id)
+                    .or_insert_with(|| component.view());
+                let changed = component.should_render.into();
+                if changed {
+                    *layout = component.view()
                 }
-                if component.has_focus() {
-                    focused_components.push(component_id);
-                }
-                component.view(frame)
-            },
-            &mut |LaidCanvas { frame, canvas, .. }| {
-                screen.copy_region(&canvas, frame);
-            },
-        );
+                (layout, frame, position_hash, changed)
+            } else {
+                break;
+            };
+
+            layout.crawl(
+                frame2,
+                position_hash,
+                &mut |LaidComponent {
+                          frame,
+                          position_hash,
+                          template,
+                      }| {
+                    let component_id = template.generate_id(position_hash);
+                    let mut new_component = false;
+                    let component = components.entry(component_id).or_insert_with(|| {
+                        new_component = true;
+                        let renderable = template.create(component_id, frame, links_sender.clone());
+                        MountedComponent {
+                            renderable,
+                            frame,
+                            should_render: ShouldRender::Yes.into(),
+                        }
+                    });
+
+                    if !new_component {
+                        if parent_changed {
+                            component.change(template.dynamic_properties());
+                        }
+                        if frame != component.frame {
+                            component.resize(frame);
+                        }
+                    }
+
+                    if component.has_focus() {
+                        focused_components.push(component_id);
+                    }
+
+                    if let Some(message) = component.tick() {
+                        tickable_components.push((component_id, message));
+                    }
+
+                    // eprintln!(
+                    //     "should_render={} new={} parent_changed={} [{} at {}]",
+                    //     component.should_render, new_component, parent_changed, component_id, frame,
+                    // );
+
+                    pending.push((component_id, frame, position_hash));
+                },
+                &mut |LaidCanvas { frame, canvas, .. }| {
+                    screen.copy_region(&canvas, frame);
+                },
+            );
+        }
     }
 
     /// Poll as many events as we can respecting REDRAW_LATENCY and REDRAW_LATENCY_SUSTAINED_IO
@@ -192,26 +248,29 @@ impl App {
                 } else if dirty {
                     REDRAW_LATENCY - since_last_drawn
                 } else {
-                    Duration::from_millis(60000)
+                    Duration::from_millis(if self.tickable_components.is_empty() {
+                        240
+                    } else {
+                        60
+                    })
                 }
             };
 
             select! {
                 recv(self.links_receiver) -> links_message_result => {
-                    let (component_id, dyn_message) = links_message_result.map_err(|err| Error::TaskPool(Box::new(err)))?;
+                    let (component_id, dyn_message) = match links_message_result? {
+                        LinkMessage::Component(component_id, dyn_message) => {
+                            (component_id, dyn_message)
+                        }
+                        LinkMessage::Exit => return Ok(PollState::Exit),
+                    };
                     let Self {
                         ref mut components,
-                        ref mut pending_tasks,
-                        ref task_pool,
                         ..
                     } = *self;
                     dirty = match components.get_mut(&component_id) {
                         Some(component) => {
-                            let update = component.update(dyn_message, task_pool);
-                            for task_id in update.scheduled {
-                                pending_tasks.insert(task_id, component_id);
-                            }
-                            update.should_render == ShouldRender::Yes
+                            component.update(dyn_message)
                         },
                         None => {
                             log::debug!(
@@ -222,41 +281,10 @@ impl App {
                         }
                     }
                 }
-                recv(self.task_pool.receiver) -> task_result => {
-                    let Self {
-                        ref mut components,
-                        ref mut pending_tasks,
-                        ref task_pool,
-                        ..
-                    } = *self;
-                    let task_result = task_result.map_err(|err| Error::TaskPool(Box::new(err)))?;
-                    let component_id = pending_tasks
-                        .remove(&task_result.id)
-                        .expect("tasks are always associated with a component");
-                    dirty = match components.get_mut(&component_id) {
-                        Some(component) => {
-                            let update = component.update(task_result.payload, task_pool);
-                            for task_id in update.scheduled {
-                                pending_tasks.insert(task_id, component_id);
-                            }
-                            update.should_render == ShouldRender::Yes
-                        },
-                        None => {
-                            log::debug!(
-                                "Task done (id: {:?}) for nonexistent component (id: {}).",
-                                task_result.id,
-                                component_id,
-                            );
-                            false
-                        }
-                    }
-                }
                 recv(frontend.events()) -> event => {
-                    match event.map_err(|error| Error::TaskPool(Box::new(error)))? {
+                    match event? {
                         key => {
-                            if self.handle_event(key)? {
-                                return Ok(PollState::Exit);
-                            }
+                            self.handle_event(key)?;
                             dirty = true; // handle_event should return whether we need to rerender
                         }
                     };
@@ -265,6 +293,20 @@ impl App {
                         >= SUSTAINED_IO_REDRAW_LATENCY;
                 }
                 default(timeout) => {
+                    for (component_id, dyn_message) in self.tickable_components.drain(..) {
+                        dirty = true;
+                        match self.components.get_mut(&component_id) {
+                            Some(component) => {
+                                component.update(dyn_message);
+                            },
+                            None => {
+                                log::debug!(
+                                    "Received message for nonexistent component (id: {}).",
+                                    component_id,
+                                );
+                            }
+                        }
+                    }
                     force_redraw = true;
                 }
             }
@@ -278,14 +320,10 @@ impl App {
     }
 
     #[inline]
-    fn handle_event(&mut self, key: Key) -> Result<bool> {
-        eprintln!("key: {:?}", key);
-
+    fn handle_event(&mut self, key: Key) -> Result<()> {
         let Self {
             ref mut components,
-            ref mut pending_tasks,
             ref focused_components,
-            ref task_pool,
             ref mut controller,
             ..
         } = *self;
@@ -296,7 +334,7 @@ impl App {
         for component_id in focused_components.iter() {
             let focused_component = components
                 .get_mut(component_id)
-                .expect("tasks are always associated with a component");
+                .expect("A focused component should be mounted.");
             let binding = focused_component.input_binding(&controller.keys);
             match binding.transition {
                 BindingTransition::Continue => {}
@@ -306,20 +344,16 @@ impl App {
                 BindingTransition::ChangedFocus => {
                     changed_focus = true;
                 }
-                BindingTransition::Exit => return Ok(true),
             }
             if let Some(message) = binding.message {
-                let update = focused_component.update(message, &task_pool);
-                for task_id in update.scheduled {
-                    pending_tasks.insert(task_id, *component_id);
-                }
+                focused_component.update(message);
             }
 
             // If the focus has changed we don't notify other focused components
             // deeper in the tree.
             if changed_focus {
                 controller.keys.clear();
-                return Ok(false);
+                return Ok(());
             }
         }
 
@@ -328,7 +362,7 @@ impl App {
             controller.keys.clear();
         }
 
-        Ok(false)
+        Ok(())
     }
 }
 
@@ -347,14 +381,6 @@ impl InputController {
         self.keys.push(key);
         log::info!("keys: {:?}", self.keys);
     }
-
-    // fn matches<Action>(&mut self, bindings: &impl Bindings<Action>) -> BindingMatch<Action> {
-    //     let binding_match = bindings.matches(&self.keys);
-    //     if let BindingMatch::Full(_) = binding_match {
-    //         self.keys.clear();
-    //     }
-    //     binding_match
-    // }
 }
 
 impl std::fmt::Display for InputController {
@@ -376,9 +402,22 @@ impl std::fmt::Display for InputController {
     }
 }
 
-fn make_root_id<ComponentT: Component>() -> ComponentId {
-    ComponentId::new::<ComponentT>(0)
-}
-
 const REDRAW_LATENCY: Duration = Duration::from_millis(10);
 const SUSTAINED_IO_REDRAW_LATENCY: Duration = Duration::from_millis(100);
+
+#[cfg(test)]
+mod tests {
+    use super::{ComponentId, DynamicMessage, LinkMessage};
+
+    #[test]
+    fn sizes() {
+        eprintln!(
+            "std::mem::size_of::<(ComponentId, DynamicMessage)>() == {}",
+            std::mem::size_of::<(ComponentId, DynamicMessage)>()
+        );
+        eprintln!(
+            "std::mem::size_of::<LinkMessage>() == {}",
+            std::mem::size_of::<LinkMessage>()
+        );
+    }
+}

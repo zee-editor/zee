@@ -5,70 +5,79 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use super::{Frontend, Result};
-use crate::terminal::{canvas::Textel, Canvas, Colour, Key, Size, Style};
+use super::{
+    painter::{IncrementalPainter, PaintOperation, Painter},
+    utils::MeteredWriter,
+    Frontend, Result,
+};
+use crate::terminal::{Canvas, Colour, Key, Size, Style};
+
+pub fn incremental() -> Result<Crossterm<IncrementalPainter>> {
+    Crossterm::<IncrementalPainter>::new()
+}
+
+pub fn full() -> Result<Crossterm<IncrementalPainter>> {
+    Crossterm::<IncrementalPainter>::new()
+}
 
 pub type Error = crossterm::ErrorKind;
 
-pub struct Crossterm {
-    target: BufWriter<Stdout>,
+pub struct Crossterm<PainterT: Painter = IncrementalPainter> {
+    target: MeteredWriter<BufWriter<Stdout>>,
     input: Input,
+    painter: PainterT,
 }
 
-impl Crossterm {
+impl<PainterT: Painter> Crossterm<PainterT> {
     pub fn new() -> Result<Self> {
-        let mut target = BufWriter::with_capacity(1 << 20, io::stdout());
+        let mut target = MeteredWriter::new(BufWriter::with_capacity(1 << 20, io::stdout()));
         target
             .queue(crossterm::terminal::EnterAlternateScreen)?
             .queue(crossterm::cursor::Hide)?;
         crossterm::terminal::enable_raw_mode()?;
+        queue_set_style(&mut target, &PainterT::INITIAL_STYLE)?;
+
         Ok(Self {
             target,
             input: Input::new(),
+            painter: PainterT::create(
+                crossterm::terminal::size()
+                    .map(|(width, height)| Size::new(width as usize, height as usize))?,
+            ),
         })
     }
 }
 
-impl Frontend for Crossterm {
+impl<PainterT: Painter> Frontend for Crossterm<PainterT> {
     #[inline]
     fn size(&self) -> Result<Size> {
-        let (width, height) = crossterm::terminal::size()?;
-        Ok(Size::new(width as usize, height as usize))
+        Ok(crossterm::terminal::size()
+            .map(|(width, height)| Size::new(width as usize, height as usize))?)
     }
 
     #[inline]
-    fn present(&mut self, screen: &Canvas) -> Result<()> {
-        let Self { ref mut target, .. } = *self;
-
-        let mut last_style = Style::default();
-        queue_set_style(target, last_style)?;
-
-        screen
-            .buffer()
-            .chunks(screen.size().width)
-            .enumerate()
-            .try_for_each(|(y, line)| {
-                // Go to the begining of line (`MoveTo` uses 0-based indexing)
-                queue!(target, crossterm::cursor::MoveTo(0, y as u16))?;
-
-                line.iter().try_for_each(|textel| -> Result<()> {
-                    if let Some(Textel {
-                        ref style,
-                        ref content,
-                    }) = textel
-                    {
-                        if *style != last_style {
-                            queue_set_style(target, *style)?;
-                            last_style = *style;
-                        }
-                        queue!(target, crossterm::style::Print(content))?;
-                    }
-                    Ok(())
-                })
-            })?;
-
-        target.flush().map_err(Error::from)?;
-        Ok(())
+    fn present(&mut self, canvas: &Canvas) -> Result<usize> {
+        let Self {
+            ref mut target,
+            ref mut painter,
+            ..
+        } = *self;
+        let initial_num_bytes_written = target.num_bytes_written();
+        painter.paint(canvas, |operation| {
+            match operation {
+                PaintOperation::WriteContent(grapheme) => {
+                    queue!(target, crossterm::style::Print(grapheme))?
+                }
+                PaintOperation::SetStyle(style) => queue_set_style(target, style)?,
+                PaintOperation::MoveTo(position) => queue!(
+                    target,
+                    crossterm::cursor::MoveTo(position.x as u16, position.y as u16)
+                )?, // Go to the begining of line (`MoveTo` uses 0-based indexing)
+            }
+            Ok(())
+        })?;
+        target.flush()?;
+        Ok(target.num_bytes_written() - initial_num_bytes_written)
     }
 
     #[inline]
@@ -77,7 +86,7 @@ impl Frontend for Crossterm {
     }
 }
 
-impl Drop for Crossterm {
+impl<PainterT: Painter> Drop for Crossterm<PainterT> {
     fn drop(&mut self) {
         queue!(
             self.target,
@@ -93,7 +102,7 @@ impl Drop for Crossterm {
 }
 
 #[inline]
-fn queue_set_style(target: &mut impl Write, style: Style) -> Result<()> {
+fn queue_set_style(target: &mut impl Write, style: &Style) -> Result<()> {
     use crossterm::style::{
         Attribute, Color, SetAttribute, SetBackgroundColor, SetForegroundColor,
     };
@@ -118,7 +127,7 @@ fn queue_set_style(target: &mut impl Write, style: Style) -> Result<()> {
 
     // Background
     {
-        let Colour { red, green, blue } = style.background.0;
+        let Colour { red, green, blue } = style.background;
         queue!(
             target,
             SetBackgroundColor(Color::Rgb {
@@ -131,7 +140,7 @@ fn queue_set_style(target: &mut impl Write, style: Style) -> Result<()> {
 
     // Foreground
     {
-        let Colour { red, green, blue } = style.foreground.0;
+        let Colour { red, green, blue } = style.foreground;
         queue!(
             target,
             SetForegroundColor(Color::Rgb {

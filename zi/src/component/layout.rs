@@ -22,6 +22,11 @@ pub fn column_iter(children: impl Iterator<Item = Item>) -> Layout {
 }
 
 #[inline]
+pub fn column_reverse_iter(children: impl Iterator<Item = Item>) -> Layout {
+    container_iter(FlexDirection::ColumnReverse, children)
+}
+
+#[inline]
 pub fn row(children: impl ToSmallVec<Item>) -> Layout {
     container(FlexDirection::Row, children)
 }
@@ -32,17 +37,16 @@ pub fn row_iter(children: impl Iterator<Item = Item>) -> Layout {
 }
 
 #[inline]
+pub fn row_reverse_iter(children: impl Iterator<Item = Item>) -> Layout {
+    container_iter(FlexDirection::RowReverse, children)
+}
+
+#[inline]
 pub fn container(direction: FlexDirection, children: impl ToSmallVec<Item>) -> Layout {
     Layout::Container(Box::new(Container {
         direction,
         children: children.to_smallvec(),
     }))
-}
-
-impl From<Canvas> for Layout {
-    fn from(canvas: Canvas) -> Self {
-        Self::Canvas(canvas)
-    }
 }
 
 #[inline]
@@ -66,13 +70,24 @@ pub fn component_with_key<ComponentT: Component>(
     properties: ComponentT::Properties,
 ) -> Layout {
     Layout::Component(DynamicTemplate(Box::new(ComponentDef::<ComponentT>::new(
-        Some(key),
+        Some(key.into()),
         properties,
     ))))
 }
 
 #[inline]
-pub fn stretched(layout: Layout) -> Item {
+pub fn component_with_key_str<ComponentT: Component>(
+    key: &str,
+    properties: ComponentT::Properties,
+) -> Layout {
+    Layout::Component(DynamicTemplate(Box::new(ComponentDef::<ComponentT>::new(
+        Some(key.into()),
+        properties,
+    ))))
+}
+
+#[inline]
+pub fn auto(layout: Layout) -> Item {
     Item {
         node: layout,
         flex: FlexBasis::Auto,
@@ -87,6 +102,24 @@ pub fn fixed(size: usize, layout: Layout) -> Item {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ComponentKey(usize);
+
+impl From<usize> for ComponentKey {
+    fn from(key: usize) -> Self {
+        Self(key)
+    }
+}
+
+impl From<&str> for ComponentKey {
+    fn from(key: &str) -> Self {
+        let mut hasher = DefaultHasher::new();
+        key.hash(&mut hasher);
+        Self(hasher.finish() as usize)
+    }
+}
+
+#[derive(Clone)]
 pub enum Layout {
     Container(Box<Container>),
     Component(DynamicTemplate),
@@ -94,16 +127,11 @@ pub enum Layout {
 }
 
 impl Layout {
-    const CONTAINER_HASH: u64 = 0;
-    const CONTAINER_ITEM_HASH: u64 = 1;
-    const COMPONENT_HASH: u64 = 2;
-    const CANVAS_HASH: u64 = 3;
-
     pub(crate) fn crawl(
-        self,
+        &mut self,
         frame: Rect,
         position_hash: u64,
-        view_fn: &mut impl FnMut(LaidComponent) -> Layout,
+        view_fn: &mut impl FnMut(LaidComponent),
         draw_fn: &mut impl FnMut(LaidCanvas),
     ) {
         let mut hasher = DefaultHasher::new();
@@ -111,40 +139,64 @@ impl Layout {
         match self {
             Self::Container(container) => {
                 hasher.write_u64(Self::CONTAINER_HASH);
-                let frames = splits_iter(frame, container.direction, &container.children)
-                    .collect::<SmallVec<[_; ARRAY_SIZE]>>();
-                for (child, frame) in container.children.into_iter().zip(frames) {
-                    // hasher.write_u64(Self::CONTAINER_ITEM_HASH);
-                    child.node.crawl(frame, hasher.finish(), view_fn, draw_fn);
+                if container.direction.is_reversed() {
+                    let frames: SmallVec<[_; ARRAY_SIZE]> =
+                        splits_iter(frame, container.direction, container.children.iter().rev())
+                            .collect();
+                    for (child, frame) in container.children.iter_mut().rev().zip(frames) {
+                        // hasher.write_u64(Self::CONTAINER_ITEM_HASH);
+                        child.node.crawl(frame, hasher.finish(), view_fn, draw_fn);
+                    }
+                } else {
+                    let frames: SmallVec<[_; ARRAY_SIZE]> =
+                        splits_iter(frame, container.direction, container.children.iter())
+                            .collect();
+                    for (child, frame) in container.children.iter_mut().zip(frames) {
+                        // hasher.write_u64(Self::CONTAINER_ITEM_HASH);
+                        child.node.crawl(frame, hasher.finish(), view_fn, draw_fn);
+                    }
                 }
             }
             Self::Component(template) => {
-                template.0.component_type_id().hash(&mut hasher);
-                template.0.key().map(|key| key.hash(&mut hasher));
+                template.component_type_id().hash(&mut hasher);
+                template.key().map(|key| key.hash(&mut hasher));
                 view_fn(LaidComponent {
                     frame,
                     position_hash: hasher.finish(),
-                    template: template.0,
-                })
-                .crawl(frame, hasher.finish(), view_fn, draw_fn);
+                    template,
+                });
             }
             Self::Canvas(canvas) => {
                 hasher.write_u64(Self::CANVAS_HASH);
                 draw_fn(LaidCanvas {
                     frame,
                     position_hash: hasher.finish(),
-                    canvas: canvas,
+                    canvas,
                 });
             }
         };
     }
+
+    // Some random numbers to initialise the hash (0 & 1 would also do, but
+    // hopefully this is less pathological if a simpler hash the `DefaultHasher`
+    // was used).
+    const CONTAINER_HASH: u64 = 0x5aa2d5349a05cde8;
+    const CANVAS_HASH: u64 = 0x38c0758c1492cbf1;
 }
 
+impl From<Canvas> for Layout {
+    fn from(canvas: Canvas) -> Self {
+        Self::Canvas(canvas)
+    }
+}
+
+#[derive(Clone)]
 pub struct Container {
     children: SmallVec<[Item; ARRAY_SIZE]>,
     direction: FlexDirection,
 }
 
+#[derive(Clone)]
 pub struct Item {
     node: Layout,
     flex: FlexBasis,
@@ -158,30 +210,42 @@ pub enum FlexBasis {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum FlexDirection {
-    Row,
     Column,
+    ColumnReverse,
+    Row,
+    RowReverse,
 }
 
 impl FlexDirection {
     #[inline]
+    pub fn is_reversed(&self) -> bool {
+        match self {
+            FlexDirection::Column | FlexDirection::Row => false,
+            FlexDirection::ColumnReverse | FlexDirection::RowReverse => true,
+        }
+    }
+
+    #[inline]
     pub(crate) fn dimension(self, size: Size) -> usize {
         match self {
             FlexDirection::Row => size.width,
+            FlexDirection::RowReverse => size.width,
             FlexDirection::Column => size.height,
+            FlexDirection::ColumnReverse => size.height,
         }
     }
 }
 
-pub(crate) struct LaidComponent {
+pub(crate) struct LaidComponent<'a> {
     pub(crate) frame: Rect,
     pub(crate) position_hash: u64,
-    pub(crate) template: Box<dyn Template>,
+    pub(crate) template: &'a mut DynamicTemplate,
 }
 
-pub(crate) struct LaidCanvas {
+pub(crate) struct LaidCanvas<'a> {
     pub(crate) frame: Rect,
     pub(crate) position_hash: u64,
-    pub(crate) canvas: Canvas,
+    pub(crate) canvas: &'a Canvas,
 }
 
 pub const ARRAY_SIZE: usize = 4;
@@ -221,11 +285,27 @@ impl ToSmallVec<Item> for [Item; 2] {
     }
 }
 
+impl ToSmallVec<Item> for [Item; 3] {
+    fn to_smallvec(self) -> SmallVec<[Item; ARRAY_SIZE]> {
+        match self {
+            [x0, x1, x2] => smallvec![x0, x1, x2],
+        }
+    }
+}
+
+impl ToSmallVec<Item> for [Item; 4] {
+    fn to_smallvec(self) -> SmallVec<[Item; ARRAY_SIZE]> {
+        match self {
+            [x0, x1, x2, x3] => smallvec![x0, x1, x2, x3],
+        }
+    }
+}
+
 #[inline]
 fn splits_iter<'a>(
     frame: Rect,
     direction: FlexDirection,
-    children: &'a [Item],
+    children: impl Iterator<Item = &'a Item> + Clone + 'a,
 ) -> impl Iterator<Item = Rect> + 'a {
     let total_size = direction.dimension(frame.size);
 
@@ -234,7 +314,7 @@ fn splits_iter<'a>(
         let mut stretched_budget = total_size;
         let mut num_stretched_children = 0;
         let mut total_fixed_size = 0;
-        for child in children.iter() {
+        for child in children.clone() {
             match child.flex {
                 FlexBasis::Auto => {
                     num_stretched_children += 1;
@@ -257,8 +337,8 @@ fn splits_iter<'a>(
     let mut remainder =
         total_size.saturating_sub(num_stretched_children * stretched_size + total_fixed_size);
     let mut remaining_size = total_size;
+
     children
-        .iter()
         .map(move |child| match child.flex {
             FlexBasis::Auto => {
                 let offset = total_size - remaining_size;
@@ -279,11 +359,11 @@ fn splits_iter<'a>(
             }
         })
         .map(move |(offset, size)| match direction {
-            FlexDirection::Row => Rect::new(
+            FlexDirection::Row | FlexDirection::RowReverse => Rect::new(
                 Position::new(frame.origin.x + offset, frame.origin.y),
                 Size::new(size, frame.size.height),
             ),
-            FlexDirection::Column => Rect::new(
+            FlexDirection::Column | FlexDirection::ColumnReverse => Rect::new(
                 Position::new(frame.origin.x, frame.origin.y + offset),
                 Size::new(frame.size.width, size),
             ),

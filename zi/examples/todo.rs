@@ -1,15 +1,18 @@
 use ropey::Rope;
-use std::{cmp, iter};
+use std::{cmp, rc::Rc};
 use unicode_width::UnicodeWidthStr;
 
 use zi::{
     component::{
-        input::{Input, InputProperties},
+        input::{Cursor, Input, InputChange, InputProperties, InputStyle},
+        select::{Select, SelectProperties},
         text::{Text, TextAlign, TextProperties},
+        Callback,
     },
-    frontend::Termion,
-    layout, App, BindingMatch, BindingTransition, Canvas, Colour, Component, ComponentLink, Key,
-    Layout, Rect, Result, Scheduler, ShouldRender, Style,
+    frontend,
+    layout::{self, FlexDirection},
+    App, BindingMatch, BindingTransition, Canvas, Colour, Component, ComponentLink, Key, Layout,
+    Rect, Result, ShouldRender, Style,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -21,37 +24,36 @@ pub struct CheckboxProperties {
 #[derive(Debug)]
 pub struct Checkbox {
     properties: <Self as Component>::Properties,
-}
-
-impl Checkbox {
-    fn new(properties: <Self as Component>::Properties) -> Self {
-        Self { properties }
-    }
+    frame: Rect,
 }
 
 impl Component for Checkbox {
     type Message = ();
     type Properties = CheckboxProperties;
 
-    fn create(
-        properties: Self::Properties,
-        _link: ComponentLink<Self>,
-        _scheduler: &mut Scheduler<Self::Message>,
-    ) -> Self {
-        Self::new(properties)
+    fn create(properties: Self::Properties, frame: Rect, _link: ComponentLink<Self>) -> Self {
+        Self { properties, frame }
     }
 
-    fn change(
-        &mut self,
-        properties: Self::Properties,
-        _scheduler: &mut Scheduler<Self::Message>,
-    ) -> ShouldRender {
-        self.properties = properties;
+    fn change(&mut self, properties: Self::Properties) -> ShouldRender {
+        if self.properties != properties {
+            self.properties = properties;
+            ShouldRender::Yes
+        } else {
+            ShouldRender::No
+        }
+    }
+
+    fn resize(&mut self, frame: Rect) -> ShouldRender {
+        self.frame = frame;
         ShouldRender::Yes
     }
 
-    fn view(&self, frame: Rect) -> Layout {
-        let Self::Properties { style, checked } = self.properties;
+    fn view(&self) -> Layout {
+        let Self {
+            frame,
+            properties: Self::Properties { style, checked },
+        } = *self;
 
         let mut canvas = Canvas::new(frame.size);
         canvas.clear(style);
@@ -66,90 +68,128 @@ impl Component for Checkbox {
 
 // The missing space from `CHECKED` is because of a terminal rendering bug (?)
 // when using unicode combining characters for strikethrough styling.
-const UNCHECKED: &str = "  [ ] ";
-const CHECKED: &str = "  [x] ";
+const UNCHECKED: &str = " [ ] ";
+const CHECKED: &str = " [x] ";
 
-#[derive(Clone, Debug)]
-struct TodoProperties<CallbackT> {
-    style: Style,
-    checked: bool,
-    editing: bool,
+#[derive(Clone, PartialEq)]
+struct TodoProperties {
     content: String,
-    on_change: CallbackT,
+    checked: bool,
+    content_style: Style,
+    cursor_style: Style,
+    editing: bool,
+    on_change: Callback<Rope>,
 }
 
-#[derive(Debug)]
-struct Todo<CallbackT: FnMut(String) + Clone + 'static> {
-    properties: TodoProperties<CallbackT>,
-    styled_content: String,
+enum TodoMessage {
+    SetCursor(Cursor),
 }
 
-impl<CallbackT> Component for Todo<CallbackT>
-where
-    CallbackT: FnMut(String) + Clone + 'static,
-{
-    type Message = ();
-    type Properties = TodoProperties<CallbackT>;
+struct Todo {
+    properties: TodoProperties,
+    link: ComponentLink<Self>,
+    cursor: Cursor,
+    handle_input_change: Callback<InputChange>,
+}
 
-    fn create(
-        properties: Self::Properties,
-        _link: ComponentLink<Self>,
-        _scheduler: &mut Scheduler<Self::Message>,
-    ) -> Self {
+impl Component for Todo {
+    type Message = TodoMessage;
+    type Properties = TodoProperties;
+
+    fn create(properties: Self::Properties, _frame: Rect, link: ComponentLink<Self>) -> Self {
+        let handle_input_change = {
+            let link = link.clone();
+            let on_change = properties.on_change.clone();
+            (move |InputChange { cursor, content }| {
+                link.send(TodoMessage::SetCursor(cursor));
+                if let Some(content) = content {
+                    on_change.emit(content)
+                }
+            })
+            .into()
+        };
+
         Self {
             properties,
-            styled_content: String::new(),
+            link,
+            cursor: Cursor::new(),
+            handle_input_change,
         }
     }
 
-    fn change(
-        &mut self,
-        properties: Self::Properties,
-        _scheduler: &mut Scheduler<Self::Message>,
-    ) -> ShouldRender {
-        self.properties = properties;
+    fn change(&mut self, properties: Self::Properties) -> ShouldRender {
+        if self.properties != properties {
+            self.properties = properties;
+            self.handle_input_change = {
+                let link = self.link.clone();
+                let on_change = self.properties.on_change.clone();
+                (move |InputChange { cursor, content }| {
+                    link.send(TodoMessage::SetCursor(cursor));
+                    if let Some(content) = content {
+                        on_change.emit(content)
+                    }
+                })
+                .into()
+            };
+            ShouldRender::Yes
+        } else {
+            ShouldRender::No
+        }
+    }
+
+    fn update(&mut self, message: Self::Message) -> ShouldRender {
+        match message {
+            Self::Message::SetCursor(cursor) => self.cursor = cursor,
+        }
         ShouldRender::Yes
     }
 
-    fn view(&self, _frame: Rect) -> Layout {
+    fn view(&self) -> Layout {
         let Self::Properties {
-            ref on_change,
             ref content,
             checked,
-            style,
+            content_style,
+            cursor_style,
             editing,
+            ..
         } = self.properties;
         let todo_component = if editing {
-            layout::component::<Input<_>>(InputProperties {
-                style: Default::default(),
+            let cursor = self.cursor.clone();
+            layout::component::<Input>(InputProperties {
+                style: InputStyle {
+                    content: content_style,
+                    cursor: cursor_style,
+                },
                 content: Rope::from_str(&content),
-                on_change: Some(on_change.clone()),
+                cursor,
+                on_change: self.handle_input_change.clone().into(),
+                focused: true,
             })
         } else {
-            layout::component::<Text>(TextProperties {
-                style,
-                content: if checked {
-                    unicode_strikethrough(content)
-                } else {
-                    content.clone()
-                },
-                align: TextAlign::Left,
-            })
+            let content = if checked {
+                unicode_strikethrough(content)
+            } else {
+                content.clone()
+            };
+            layout::component::<Text>(TextProperties::new().content(content).style(content_style))
         };
 
-        let checkbox_width = UnicodeWidthStr::width(if checked { CHECKED } else { UNCHECKED }) + 1;
+        let checkbox_width = UnicodeWidthStr::width(if checked { CHECKED } else { UNCHECKED });
         layout::row([
             layout::fixed(
                 checkbox_width,
-                layout::component::<Checkbox>(CheckboxProperties { style, checked }),
+                layout::component::<Checkbox>(CheckboxProperties {
+                    style: content_style,
+                    checked,
+                }),
             ),
-            layout::stretched(todo_component),
+            layout::auto(todo_component),
         ])
     }
 }
 
 fn unicode_strikethrough(content: &str) -> String {
-    let content = content.trim();
+    let content = content.trim_end();
     if content.is_empty() {
         return "\n".into();
     }
@@ -168,6 +208,7 @@ struct Theme {
     checked: Style,
     unchecked: Style,
     focused: Style,
+    cursor: Style,
 }
 
 impl Default for Theme {
@@ -178,243 +219,239 @@ impl Default for Theme {
         const BRIGHT_BLUE: Colour = Colour::rgb(131, 165, 152);
 
         Self {
-            unchecked: Style::normal(DARK0_SOFT, LIGHT2),
-            checked: Style::normal(DARK0_SOFT, GRAY_245),
-            focused: Style::normal(BRIGHT_BLUE, DARK0_SOFT),
+            unchecked: Style::normal(DARK0_SOFT.into(), LIGHT2.into()),
+            checked: Style::normal(DARK0_SOFT.into(), GRAY_245.into()),
+            focused: Style::normal(BRIGHT_BLUE.into(), DARK0_SOFT.into()),
+            cursor: Style::normal(BRIGHT_BLUE.into(), DARK0_SOFT.into()),
         }
     }
 }
 
 #[derive(Clone, Debug)]
 struct TodoItem {
+    id: usize,
     checked: bool,
     content: String,
-}
-#[derive(Clone, Debug)]
-struct State {
-    theme: Theme,
-    focus_index: usize,
-    todos: Vec<TodoItem>,
-    editing: bool,
-}
-
-impl Default for State {
-    fn default() -> Self {
-        Self {
-            theme: Default::default(),
-            focus_index: 0,
-            todos: vec![
-                TodoItem {
-                    checked: false,
-                    content: "All work and no play makes Jack a dull boy\n".into(),
-                },
-                TodoItem {
-                    checked: false,
-                    content: "Выучить китайский для хорошего блага\n".into(),
-                },
-                TodoItem {
-                    checked: true,
-                    content: "Unicode support 學點中文造福大家\n".into(),
-                },
-            ],
-            editing: true,
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Message {
     AddItem,
-    FocusNextItem,
-    FocusPreviousItem,
-    MoveItemUp,
-    MoveItemDown,
-    DeleteItem,
+    ChangeContent((usize, Rope)),
     DeleteDone,
-    ToggleDone,
-    ChangeContent((usize, String)),
+    DeleteItem,
     Edit,
+    FocusItem(usize),
+    MoveItemDown,
+    MoveItemUp,
+    ToggleDone,
 }
 
-#[derive(Debug)]
 struct TodoMvc {
-    properties: State,
     link: ComponentLink<Self>,
+    theme: Theme,
+    todos: Rc<Vec<TodoItem>>,
+    next_id: usize,
+    focus_index: usize,
+    editing: bool,
+}
+
+impl TodoMvc {
+    fn insert_todo(&mut self, index: usize, checked: bool, content: String) {
+        Rc::make_mut(&mut self.todos).insert(
+            index,
+            TodoItem {
+                id: self.next_id,
+                checked,
+                content,
+            },
+        );
+        self.next_id += 1;
+    }
 }
 
 impl Component for TodoMvc {
     type Message = Message;
-    type Properties = State;
+    type Properties = ();
 
-    fn create(
-        properties: Self::Properties,
-        link: ComponentLink<Self>,
-        _scheduler: &mut Scheduler<Self::Message>,
-    ) -> Self {
-        Self { properties, link }
+    fn create(_properties: (), _frame: Rect, link: ComponentLink<Self>) -> Self {
+        Self {
+            link,
+            theme: Default::default(),
+            todos: (0..1)
+                .into_iter()
+                .map(|index| TodoItem {
+                    id: index,
+                    checked: false,
+                    content: format!(
+                        "    豈 更 車 賈 滑 串 句 All work and no play makes Jack a dull boy {}\n",
+                        index
+                    ),
+                })
+                .collect::<Vec<_>>()
+                .into(),
+            next_id: 100,
+            focus_index: 0,
+            editing: true,
+        }
     }
 
-    fn update(
-        &mut self,
-        message: Self::Message,
-        _scheduler: &mut Scheduler<Self::Message>,
-    ) -> ShouldRender {
+    fn update(&mut self, message: Self::Message) -> ShouldRender {
         eprintln!("Message: {:?}", message);
 
         match message {
             Message::Edit => {
-                self.properties.editing = false;
+                self.editing = false;
             }
-            Message::AddItem if !self.properties.editing => {
-                self.properties.editing = true;
-                if self.properties.todos.is_empty() {
-                    self.properties.todos.push(TodoItem {
-                        checked: false,
-                        content: "\n".into(),
-                    });
+            Message::AddItem if !self.editing => {
+                self.editing = true;
+                if self.todos.is_empty() {
+                    self.insert_todo(0, false, "\n".into());
                 }
             }
-            Message::AddItem if self.properties.editing => {
-                self.properties.todos.insert(
-                    cmp::min(self.properties.focus_index + 1, self.properties.todos.len()),
-                    TodoItem {
-                        checked: false,
-                        content: "\n".into(),
-                    },
+            Message::AddItem if self.editing => {
+                self.insert_todo(
+                    cmp::min(self.focus_index + 1, self.todos.len()),
+                    false,
+                    "\n".into(),
                 );
-                self.properties.focus_index = cmp::min(
-                    self.properties.focus_index + 1,
-                    self.properties.todos.len().saturating_sub(1),
-                );
+                self.focus_index =
+                    cmp::min(self.focus_index + 1, self.todos.len().saturating_sub(1));
             }
-            Message::FocusNextItem => {
-                self.properties.editing = false;
-                self.properties.focus_index = cmp::min(
-                    self.properties.focus_index + 1,
-                    self.properties.todos.len().saturating_sub(1),
-                );
-            }
-            Message::FocusPreviousItem => {
-                self.properties.editing = false;
-                self.properties.focus_index = self.properties.focus_index.saturating_sub(1);
+            Message::FocusItem(index) => {
+                self.editing = false;
+                self.focus_index = index;
             }
             Message::MoveItemUp => {
-                let current_index = self.properties.focus_index;
-                let new_index = self.properties.focus_index.saturating_sub(1);
+                self.editing = false;
+                let current_index = self.focus_index;
+                let new_index = self.focus_index.saturating_sub(1);
                 if current_index != new_index {
-                    self.properties.todos.swap(current_index, new_index);
-                    self.properties.focus_index = new_index;
+                    Rc::make_mut(&mut self.todos).swap(current_index, new_index);
+                    self.focus_index = new_index;
                 }
             }
             Message::MoveItemDown => {
-                let current_index = self.properties.focus_index;
-                let new_index = cmp::min(
-                    self.properties.focus_index + 1,
-                    self.properties.todos.len().saturating_sub(1),
-                );
+                self.editing = false;
+                let current_index = self.focus_index;
+                let new_index = cmp::min(self.focus_index + 1, self.todos.len().saturating_sub(1));
                 if current_index != new_index {
-                    self.properties.todos.swap(current_index, new_index);
-                    self.properties.focus_index = new_index;
+                    Rc::make_mut(&mut self.todos).swap(current_index, new_index);
+                    self.focus_index = new_index;
                 }
             }
-            Message::DeleteItem if !self.properties.todos.is_empty() => {
-                self.properties.todos.remove(self.properties.focus_index);
-                self.properties.focus_index = cmp::min(
-                    self.properties.focus_index,
-                    self.properties.todos.len().saturating_sub(1),
-                );
+            Message::DeleteItem if !self.todos.is_empty() => {
+                Rc::make_mut(&mut self.todos).remove(self.focus_index);
+                self.focus_index = cmp::min(self.focus_index, self.todos.len().saturating_sub(1));
             }
-            Message::DeleteDone if !self.properties.todos.is_empty() => {
-                self.properties.focus_index = 0;
-                self.properties.todos.retain(|item| !item.checked);
+            Message::DeleteDone if !self.todos.is_empty() => {
+                self.focus_index = 0;
+                Rc::make_mut(&mut self.todos).retain(|item| !item.checked);
             }
-            Message::ToggleDone if !self.properties.todos.is_empty() => {
-                let checked = &mut self.properties.todos[self.properties.focus_index].checked;
+            Message::ToggleDone if !self.todos.is_empty() => {
+                let checked = &mut Rc::make_mut(&mut self.todos)[self.focus_index].checked;
                 *checked = !*checked;
-                self.update(Message::FocusNextItem, _scheduler);
+                self.focus_index =
+                    cmp::min(self.focus_index + 1, self.todos.len().saturating_sub(1));
             }
             Message::ChangeContent(content) => {
-                self.properties.todos[content.0].content = content.1;
+                Rc::make_mut(&mut self.todos)[content.0].content = content.1.into();
             }
-            _ => {}
+            _ => {
+                return ShouldRender::No;
+            }
         }
         ShouldRender::Yes
     }
 
-    fn change(
-        &mut self,
-        properties: Self::Properties,
-        _scheduler: &mut Scheduler<Self::Message>,
-    ) -> ShouldRender {
-        self.properties = properties;
-        ShouldRender::Yes
-    }
-
-    fn view(&self, _frame: Rect) -> Layout {
-        let Self::Properties {
+    fn view(&self) -> Layout {
+        let Self {
+            ref link,
             ref theme,
             ref todos,
-            focus_index,
             editing,
-        } = self.properties;
+            focus_index,
+            ..
+        } = *self;
         let num_left = todos.iter().filter(|item| !item.checked).count();
 
         // Title component
-        let title = iter::once(layout::fixed(
+        let title = layout::fixed(
             LOGO.lines().count() + 1,
-            layout::component::<Text>(TextProperties {
-                style: theme.checked,
-                content: LOGO.into(),
-                align: TextAlign::Centre,
-            }),
-        ));
+            layout::component_with_key_str::<Text>(
+                "title",
+                TextProperties::new()
+                    .content(LOGO)
+                    .style(theme.checked)
+                    .align(TextAlign::Centre),
+            ),
+        );
 
         // The list of todo items
-        let todo_items = todos.iter().enumerate().map(|(index, item)| {
-            let link = self.link.clone();
-            layout::fixed(
-                1,
-                layout::component_with_key::<Todo<_>>(
-                    index,
-                    TodoProperties {
-                        style: if index == focus_index && !editing {
-                            theme.focused.clone()
-                        } else if item.checked {
-                            theme.checked.clone()
-                        } else {
-                            theme.unchecked.clone()
-                        },
-                        checked: item.checked,
-                        content: item.content.clone(),
-                        editing: index == focus_index && editing,
-                        on_change: move |content| {
-                            link.send(Message::ChangeContent((index, content)))
-                        },
-                    },
-                ),
-            )
-        });
-
-        // "Filler" component for the unused space
-        let filler = iter::once(layout::stretched(layout::component::<Text>(
-            TextProperties {
-                style: theme.checked,
-                content: "".into(),
-                align: TextAlign::Left,
+        let todo_items = layout::auto(layout::component_with_key_str::<Select>(
+            "select",
+            SelectProperties {
+                background: theme.unchecked,
+                direction: FlexDirection::Column,
+                num_items: todos.len(),
+                selected: focus_index,
+                item_at: {
+                    let todos = todos.clone();
+                    let link = self.link.clone();
+                    let theme = theme.clone();
+                    (move |index| {
+                        let item: &TodoItem = &todos[index];
+                        let link = link.clone();
+                        layout::fixed(
+                            1,
+                            layout::component_with_key::<Todo>(
+                                item.id,
+                                TodoProperties {
+                                    content_style: if focus_index == index && !editing {
+                                        theme.focused
+                                    } else if item.checked {
+                                        theme.checked
+                                    } else {
+                                        theme.unchecked
+                                    },
+                                    cursor_style: theme.cursor,
+                                    checked: item.checked,
+                                    content: item.content.clone(),
+                                    editing: index == focus_index && editing,
+                                    on_change: (move |content| {
+                                        link.send(Message::ChangeContent((index, content)))
+                                    })
+                                    .into(),
+                                },
+                            ),
+                        )
+                    })
+                    .into()
+                },
+                item_size: 1,
+                focused: true,
+                on_change: Some(link.callback(|index| Message::FocusItem(index))),
             },
-        )));
-
-        // Status bar at the bottom counting how many items have been ticked off
-        let status_bar = iter::once(layout::fixed(
-            1,
-            layout::component::<Text>(TextProperties {
-                style: theme.checked,
-                content: format!("{} items left ({} done)", num_left, todos.len() - num_left),
-                align: TextAlign::Left,
-            }),
         ));
 
-        layout::column_iter(title.chain(todo_items).chain(filler).chain(status_bar))
+        // Status bar at the bottom counting how many items have been ticked off
+        let status_bar = layout::fixed(
+            1,
+            layout::component_with_key_str::<Text>(
+                "status-bar",
+                TextProperties::new()
+                    .content(format!(
+                        "Item {} of {} ({} remaining, {} done)",
+                        focus_index + 1,
+                        todos.len(),
+                        num_left,
+                        todos.len() - num_left
+                    ))
+                    .style(theme.checked),
+            ),
+        );
+
+        layout::column([title, todo_items, status_bar])
     }
 
     fn has_focus(&self) -> bool {
@@ -426,15 +463,13 @@ impl Component for TodoMvc {
         let message = match pressed {
             &[Key::Esc] | &[Key::Alt('\u{1b}')] => Some(Message::Edit),
             &[Key::Char('\n')] => Some(Message::AddItem),
-            &[Key::Ctrl('p')] | &[Key::Up] => Some(Message::FocusPreviousItem),
-            &[Key::Ctrl('n')] | &[Key::Down] => Some(Message::FocusNextItem),
             &[Key::Alt('p')] => Some(Message::MoveItemUp),
             &[Key::Alt('n')] => Some(Message::MoveItemDown),
             &[Key::Ctrl('k')] => Some(Message::DeleteItem),
             &[Key::Ctrl('x'), Key::Ctrl('k')] => Some(Message::DeleteDone),
             &[Key::Char('\t')] => Some(Message::ToggleDone),
             &[Key::Ctrl('x'), Key::Ctrl('c')] => {
-                transition = BindingTransition::Exit;
+                self.link.exit();
                 None
             }
             &[Key::Ctrl('x')] => {
@@ -468,6 +503,6 @@ const LOGO: &str = r#"
 "#;
 
 fn main() -> Result<()> {
-    let mut app = App::new::<TodoMvc>(State::default())?;
-    app.run_event_loop(Termion::new()?)
+    let mut app = App::new(layout::component::<TodoMvc>(Default::default()));
+    app.run_event_loop(frontend::default()?)
 }

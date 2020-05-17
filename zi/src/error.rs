@@ -1,4 +1,4 @@
-use std::io;
+use crossbeam_channel::RecvError;
 use thiserror::Error;
 
 use crate::frontend;
@@ -10,6 +10,6 @@ pub enum Error {
     #[error("{0}")]
     Frontend(#[from] frontend::Error),
 
-    #[error("task error: {0}")]
-    TaskPool(Box<dyn std::error::Error>),
+    #[error("Failed to receive message: {0}")]
+    RecvError(#[from] RecvError),
 }

@@ -189,27 +189,29 @@ impl Cursor {
         ensure_trailing_newline_with_content(text);
     }
 
-    //     pub fn delete_line(&mut self, text: &mut impl TextStorage) {
-    //         if text.len_chars() == 0 {
-    //             return;
-    //         }
+    pub fn delete_line<'a>(&mut self, text: &mut impl TextStorageMut<'a>) {
+        if text.len_chars() == 0.into() {
+            return;
+        }
 
-    //         // Delete line
-    //         let line_index = text.char_to_line(self.range.start.0);
-    //         let delete_range_start = text.line_to_char(line_index);
-    //         let delete_range_end = text.line_to_char(line_index + 1);
-    //         text.remove(delete_range_start..delete_range_end);
+        // Delete line
+        let line_index = text.char_to_line(self.range.start);
+        let delete_range_start = text.line_to_char(line_index);
+        let delete_range_end = text.line_to_char(line_index + 1.into());
+        text.remove(delete_range_start.0..delete_range_end.0);
 
-    //         // Update cursor position
-    //         let grapheme_start =
-    //             CharIndex(text.line_to_char(cmp::min(line_index, text.len_lines().saturating_sub(2))));
-    //         let grapheme_end = next_grapheme_boundary(&text.slice(..), grapheme_start);
-    //         if grapheme_start != grapheme_end {
-    //             self.range = grapheme_start..grapheme_end
-    //         } else {
-    //             self.range = CharIndex(0)..CharIndex(1)
-    //         }
-    //     }
+        // Update cursor position
+        let grapheme_start = text.line_to_char(cmp::min(
+            line_index,
+            text.len_lines().saturating_sub(2.into()),
+        ));
+        let grapheme_end = text.next_grapheme_boundary(grapheme_start);
+        if grapheme_start != grapheme_end {
+            self.range = grapheme_start..grapheme_end
+        } else {
+            self.range = CharIndex(0)..CharIndex(1)
+        }
+    }
 
     //     pub fn delete_selection(&mut self, text: &mut impl TextStorage) {
     //         // Delete selection

@@ -104,3 +104,11 @@ impl LineIndex {
         Self(usize::saturating_sub(self.0, other.0))
     }
 }
+
+impl Add for LineIndex {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        Self(self.0 + other.0)
+    }
+}
