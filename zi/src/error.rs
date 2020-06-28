@@ -1,4 +1,3 @@
-use crossbeam_channel::RecvError;
 use thiserror::Error;
 
 use crate::frontend;
@@ -10,6 +9,6 @@ pub enum Error {
     #[error("{0}")]
     Frontend(#[from] frontend::Error),
 
-    #[error("Failed to receive message: {0}")]
-    RecvError(#[from] RecvError),
+    #[error("Tokio error: {0}")]
+    Tokio(#[from] tokio::io::Error),
 }

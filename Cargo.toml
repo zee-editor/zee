@@ -46,22 +46,6 @@ zee-grammar = { version = "0.1.2", path = "grammar" }
 zee-highlight = { version = "0.1.1", path = "highlight" }
 zi = { version = "0.1.0", path = "zi" }
 
-# Optional dependencies
-crossterm = { version = "0.17.1", optional = true }
-termion = { version = "1.5.3", optional = true}
-
-[features]
-default = ["frontend-crossterm", "frontend-termion"]
-
-# Enables a terminal frontend using `crossterm`.
-frontend-crossterm = [
-  "crossterm",
-]
-
-frontend-termion = [
-  "termion",
-]
-
 [profile.dev]
 opt-level = 2
 

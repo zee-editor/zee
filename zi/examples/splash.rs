@@ -180,5 +180,5 @@ const SPLASH_CREDITS: &str = "C-x C-c to quit";
 
 fn main() -> Result<()> {
     let mut app = App::new(layout::component::<SplashGrid>(Default::default()));
-    app.run_event_loop(frontend::default()?)
+    app.run_event_loop(frontend::crossterm::incremental()?)
 }

@@ -7,12 +7,11 @@ pub mod text;
 
 pub use self::layout::Layout;
 
-use crossbeam_channel::{self, Sender};
 use smallvec::SmallVec;
 use std::{
     any::TypeId, cmp::Ordering, collections::hash_map::HashMap, marker::PhantomData, rc::Rc,
-    sync::Arc,
 };
+use tokio::sync::mpsc::UnboundedSender;
 
 use self::template::{ComponentId, DynamicMessage};
 use crate::terminal::{Key, Rect};
@@ -131,7 +130,7 @@ where
 
 #[derive(Debug)]
 pub struct ComponentLink<ComponentT> {
-    sender: Arc<Sender<LinkMessage>>,
+    sender: UnboundedSender<LinkMessage>,
     component_id: ComponentId,
     _component: PhantomData<fn() -> ComponentT>,
 }
@@ -143,6 +142,7 @@ impl<ComponentT: Component> ComponentLink<ComponentT> {
                 self.component_id,
                 DynamicMessage(Box::new(message)),
             ))
+            .map_err(|_| ()) // tokio's SendError doesn't implement Debug
             .expect("App receiver needs to outlive senders for inter-component messages");
     }
 
@@ -157,6 +157,7 @@ impl<ComponentT: Component> ComponentLink<ComponentT> {
     pub fn exit(&self) {
         self.sender
             .send(LinkMessage::Exit)
+            .map_err(|_| ()) // tokio's SendError doesn't implement Debug
             .expect("App needs to outlive components");
     }
 
@@ -169,10 +170,11 @@ impl<ComponentT: Component> ComponentLink<ComponentT> {
             .send(LinkMessage::RunExclusive(Box::new(move || {
                 process().map(|message| (component_id, DynamicMessage(Box::new(message))))
             })))
+            .map_err(|_| ()) // tokio's SendError doesn't implement Debug
             .expect("App needs to outlive components");
     }
 
-    pub(crate) fn new(sender: Arc<Sender<LinkMessage>>, component_id: ComponentId) -> Self {
+    pub(crate) fn new(sender: UnboundedSender<LinkMessage>, component_id: ComponentId) -> Self {
         assert_eq!(TypeId::of::<ComponentT>(), component_id.type_id());
         Self {
             sender,

@@ -365,7 +365,8 @@ impl Component for Prompt {
             };
             layout::fixed(
                 1,
-                layout::component::<Text>(
+                layout::component_with_key::<Text>(
+                    index,
                     TextProperties::new()
                         .content(
                             &path.to_string_lossy()[file_picker

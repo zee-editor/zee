@@ -13,10 +13,7 @@ use clap;
 use flexi_logger::{opt_format, Logger};
 use std::{env, path::PathBuf, rc::Rc};
 use structopt::StructOpt;
-use zi::{
-    frontend::{FrontendKind, DEFAULT_FRONTEND_STR},
-    layout, App,
-};
+use zi::{layout, App};
 
 use crate::{
     editor2::{Context, Editor},
@@ -39,33 +36,9 @@ struct Args {
     /// Writes the default configuration to file, if the file doesn't exist
     create_settings: bool,
 
-    #[structopt(long = "frontend", default_value = DEFAULT_FRONTEND_STR)]
-    /// What frontend to use. Depending on how features enabled at compile time,
-    /// one of: termion, crossterm
-    frontend_kind: FrontendKind,
-
     #[structopt(long = "log")]
     /// Enable debug logging to `zee.log` file
     enable_logging: bool,
-}
-
-fn run_event_loop(frontend_kind: &FrontendKind, mut editor: App) -> Result<()> {
-    match frontend_kind {
-        #[cfg(feature = "frontend-termion")]
-        FrontendKind::Termion => {
-            let frontend =
-                zi::frontend::termion::incremental().map_err(|err| -> zi::Error { err.into() })?;
-            editor.run_event_loop(frontend)?;
-        }
-
-        #[cfg(feature = "frontend-crossterm")]
-        FrontendKind::Crossterm => {
-            let frontend = zi::frontend::crossterm::incremental()
-                .map_err(|err| -> zi::Error { err.into() })?;
-            editor.run_event_loop(frontend)?;
-        }
-    }
-    Ok(())
 }
 
 fn configure_logging() -> Result<()> {
@@ -112,10 +85,14 @@ fn start_editor() -> Result<()> {
         settings,
         task_pool: TaskPool::new()?,
     });
-    let app = App::new(layout::component::<Editor>(context));
+    let mut app = App::new(layout::component::<Editor>(context));
 
     // Start the UI loop
-    run_event_loop(&args.frontend_kind, app)
+    let frontend =
+        zi::frontend::crossterm::incremental().map_err(|err| -> zi::Error { err.into() })?;
+    app.run_event_loop(frontend)?;
+
+    Ok(())
 }
 
 fn main() -> Result<()> {

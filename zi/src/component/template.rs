@@ -1,9 +1,9 @@
-use crossbeam_channel::{self, Sender};
 use std::{
     any::{Any, TypeId},
     hash::{Hash, Hasher},
     sync::Arc,
 };
+use tokio::sync::mpsc::UnboundedSender;
 
 use super::{
     layout::{ComponentKey, Layout},
@@ -94,7 +94,7 @@ impl Template for DynamicTemplate {
         &mut self,
         id: ComponentId,
         frame: Rect,
-        sender: Arc<Sender<LinkMessage>>,
+        sender: UnboundedSender<LinkMessage>,
     ) -> Box<dyn Renderable + 'static> {
         self.0.create(id, frame, sender)
     }
@@ -192,7 +192,7 @@ pub(crate) trait Template {
         &mut self,
         id: ComponentId,
         frame: Rect,
-        sender: Arc<Sender<LinkMessage>>,
+        sender: UnboundedSender<LinkMessage>,
     ) -> Box<dyn Renderable + 'static>;
 
     fn dynamic_properties(&mut self) -> DynamicProperties;
@@ -250,7 +250,7 @@ impl<ComponentT: Component> Template for ComponentDef<ComponentT> {
         &mut self,
         component_id: ComponentId,
         frame: Rect,
-        sender: Arc<Sender<LinkMessage>>,
+        sender: UnboundedSender<LinkMessage>,
     ) -> Box<dyn Renderable> {
         let link = ComponentLink::new(sender, component_id);
         Box::new(ComponentT::create(self.properties_unwrap(), frame, link))

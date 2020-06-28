@@ -1,9 +1,13 @@
-use crossbeam_channel::{select, Receiver, Sender};
+use futures::{self, stream::StreamExt, FutureExt};
 use smallvec::SmallVec;
 use std::{
     collections::HashMap,
-    sync::Arc,
     time::{Duration, Instant},
+};
+use tokio::{
+    self,
+    runtime::{Builder as RuntimeBuilder, Runtime},
+    sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
 };
 
 use crate::{
@@ -17,75 +21,21 @@ use crate::{
     terminal::{Canvas, Key, Position, Rect},
 };
 
-#[derive(Debug)]
-enum PollState {
-    Clean,
-    Dirty,
-    Exit,
-}
-
-struct MountedComponent {
-    renderable: Box<dyn Renderable>,
-    should_render: bool,
-    frame: Rect,
-}
-
-impl MountedComponent {
-    #[inline]
-    fn change(&mut self, properties: DynamicProperties) -> bool {
-        self.should_render = self.renderable.change(properties).into() || self.should_render;
-        self.should_render
-    }
-
-    #[inline]
-    fn resize(&mut self, frame: Rect) -> bool {
-        self.should_render = self.renderable.resize(frame).into() || self.should_render;
-        self.frame = frame;
-        self.should_render
-    }
-
-    #[inline]
-    fn update(&mut self, message: DynamicMessage) -> bool {
-        self.should_render = self.renderable.update(message).into() || self.should_render;
-        self.should_render
-    }
-
-    #[inline]
-    fn view(&mut self) -> Layout {
-        self.should_render = false;
-        self.renderable.view()
-    }
-
-    #[inline]
-    fn has_focus(&self) -> bool {
-        self.renderable.has_focus()
-    }
-
-    #[inline]
-    fn input_binding(&self, pressed: &[Key]) -> BindingMatch<DynamicMessage> {
-        self.renderable.input_binding(pressed)
-    }
-
-    #[inline]
-    fn tick(&self) -> Option<DynamicMessage> {
-        self.renderable.tick()
-    }
-}
-
 pub struct App {
     controller: InputController,
     components: HashMap<ComponentId, MountedComponent>,
     layout_cache: HashMap<ComponentId, Layout>,
     focused_components: SmallVec<[ComponentId; 2]>,
     tickable_components: SmallVec<[(ComponentId, DynamicMessage); 2]>,
-    links_receiver: Receiver<LinkMessage>,
-    links_sender: Arc<Sender<LinkMessage>>,
+    links_receiver: UnboundedReceiver<LinkMessage>,
+    links_sender: UnboundedSender<LinkMessage>,
     root: Layout,
+    // runtime: Runtime,
 }
 
 impl App {
     pub fn new(root: Layout) -> Self {
-        let (links_sender, links_receiver) = crossbeam_channel::unbounded();
+        let (links_sender, links_receiver) = mpsc::unbounded_channel();
         Self {
             controller: InputController::new(),
             components: HashMap::new(),
@@ -93,7 +43,7 @@ impl App {
             focused_components: SmallVec::new(),
             tickable_components: SmallVec::new(),
             links_receiver,
-            links_sender: Arc::new(links_sender),
+            links_sender,
             root,
         }
     }
@@ -102,11 +52,15 @@ impl App {
         let mut screen = Canvas::new(frontend.size()?);
         let mut poll_state = PollState::Dirty;
         let mut last_drawn = Instant::now() - REDRAW_LATENCY;
+        let mut runtime = RuntimeBuilder::new()
+            .basic_scheduler()
+            .enable_all()
+            .build()?;
+
         loop {
             let screen_size = frontend.size()?;
             let resized = screen_size != screen.size();
 
-            // eprintln!("({:?}, {:?})", poll_state, resized);
             match (poll_state, resized) {
                 (PollState::Dirty, _) | (PollState::Clean, true) => {
                     let now = Instant::now();
@@ -125,7 +79,7 @@ impl App {
                     let num_bytes_presented = frontend.present(&screen)?;
 
                     log::info!(
-                        "Drawn in {:?} | Presented {} bytes in {:?}",
+                        "drawn in {:?} | Presented {} bytes in {:?}",
                         drawn_time,
                         num_bytes_presented,
                         now.elapsed(),
@@ -133,13 +87,15 @@ impl App {
                     last_drawn = Instant::now();
                 }
                 (PollState::Exit, _) => {
-                    return Ok(());
+                    break;
                 }
                 (PollState::Clean, false) => {}
             }
 
-            poll_state = self.poll_events_batch(&mut frontend, last_drawn)?;
+            poll_state = self.poll_events_batch(&mut runtime, &mut frontend, last_drawn)?;
         }
+
+        Ok(())
     }
 
     #[inline]
@@ -233,19 +189,20 @@ impl App {
     #[inline]
     fn poll_events_batch(
         &mut self,
+        runtime: &mut Runtime,
         frontend: &mut impl Frontend,
         last_drawn: Instant,
     ) -> Result<PollState> {
         let mut force_redraw = false;
         let mut first_event_time: Option<Instant> = None;
-        let mut dirty = false;
+        let mut poll_state = PollState::Clean;
 
-        while !force_redraw {
-            let timeout = {
+        while !force_redraw && !poll_state.exit() {
+            let timeout_duration = {
                 let since_last_drawn = last_drawn.elapsed();
-                if dirty && since_last_drawn >= REDRAW_LATENCY {
+                if poll_state.dirty() && since_last_drawn >= REDRAW_LATENCY {
                     Duration::from_millis(0)
-                } else if dirty {
+                } else if poll_state.dirty() {
                     REDRAW_LATENCY - since_last_drawn
                 } else {
                     Duration::from_millis(if self.tickable_components.is_empty() {
@@ -255,70 +212,88 @@ impl App {
                     })
                 }
             };
-
-            select! {
-                recv(self.links_receiver) -> links_message_result => {
-                    let (component_id, dyn_message) = match links_message_result? {
-                        LinkMessage::Component(component_id, dyn_message) => {
-                            (component_id, dyn_message)
-                        }
-                        LinkMessage::Exit => return Ok(PollState::Exit),
-                        LinkMessage::RunExclusive(process) => {
-                            let maybe_message = process();
-                            frontend.initialise()?;
-                            // force_redraw = true;
-                            // dirty = true;
-                            if let Some((component_id, dyn_message)) = maybe_message {
-                                (component_id, dyn_message)
-                            } else {
-                                return Ok(PollState::Dirty)
+            let select_result: Result<()> = runtime.block_on(async {
+                futures::select! {
+                    links_message_result = self.links_receiver.recv().fuse() => {
+                        match links_message_result.expect("At least one sender exists.") {
+                            LinkMessage::Component(component_id, dyn_message) => {
+                                if self
+                                    .components
+                                    .get_mut(&component_id)
+                                    .map(|component| component.update(dyn_message))
+                                    .unwrap_or_else(|| {
+                                        log::debug!(
+                                            "Received message for nonexistent component (id: {}).",
+                                            component_id,
+                                        );
+                                        false
+                                    })
+                                {
+                                    poll_state = PollState::Dirty;
+                                }
                             }
-                        },
-                    };
-                    dirty |= self.components.get_mut(&component_id).map(|component| component.update(dyn_message)).unwrap_or_else(|| {
-                        log::debug!(
-                            "Received message for nonexistent component (id: {}).",
-                            component_id,
-                        );
-                        false
-                    });
-                }
-                recv(frontend.events()) -> event => {
-                    match event? {
-                        key => {
-                            self.handle_event(key)?;
-                            dirty = true; // handle_event should return whether we need to rerender
-                        }
-                    };
-                    force_redraw = dirty
-                        && first_event_time.get_or_insert_with(Instant::now).elapsed()
-                        >= SUSTAINED_IO_REDRAW_LATENCY;
-                }
-                default(timeout) => {
-                    for (component_id, dyn_message) in self.tickable_components.drain(..) {
-                        dirty = true;
-                        match self.components.get_mut(&component_id) {
-                            Some(component) => {
-                                component.update(dyn_message);
-                            },
-                            None => {
-                                log::debug!(
-                                    "Received message for nonexistent component (id: {}).",
-                                    component_id,
-                                );
+                            LinkMessage::Exit => {
+                                poll_state = PollState::Exit;
                             }
-                        }
+                            LinkMessage::RunExclusive(process) => {
+                                let maybe_message = process();
+                                frontend.initialise()?;
+                                force_redraw = true;
+                                poll_state = PollState::Dirty;
+                                if let Some((component_id, dyn_message)) = maybe_message {
+                                    self
+                                        .components
+                                        .get_mut(&component_id)
+                                        .map(|component| component.update(dyn_message))
+                                        .unwrap_or_else(|| {
+                                            log::debug!(
+                                                "Received message for nonexistent component (id: {}).",
+                                                component_id,
+                                            );
+                                            false
+                                        });
+                                }
+                            }
+                        };
+                        Ok(())
                     }
-                    force_redraw = true;
+                    event = frontend.event_stream().next().fuse() => {
+                        let event = event.expect("At least one sender exists.")?;
+                        match event {
+                            key => {
+                                self.handle_event(key)?;
+                                poll_state = PollState::Dirty; // handle_event should return whether we need to rerender
+                            }
+                        };
+                        force_redraw = poll_state.dirty()
+                            && first_event_time.get_or_insert_with(Instant::now).elapsed()
+                            >= SUSTAINED_IO_REDRAW_LATENCY;
+                        Ok(())
+                    }
+                    _ = tokio::time::delay_for(timeout_duration).fuse() => {
+                        for (component_id, dyn_message) in self.tickable_components.drain(..) {
+                            poll_state = PollState::Dirty;
+                            match self.components.get_mut(&component_id) {
+                                Some(component) => {
+                                    component.update(dyn_message);
+                                },
+                                None => {
+                                    log::debug!(
+                                        "Received message for nonexistent component (id: {}).",
+                                        component_id,
+                                    );
+                                }
+                            }
+                        }
+                        force_redraw = true;
+                        Ok(())
+                    }
                 }
-            }
+            });
+            select_result?;
         }
 
-        Ok(if dirty {
-            PollState::Dirty
-        } else {
-            PollState::Clean
-        })
+        Ok(poll_state)
     }
 
     #[inline]
@@ -368,6 +343,71 @@ impl App {
     }
 }
 
+#[derive(Debug, PartialEq)]
+enum PollState {
+    Clean,
+    Dirty,
+    Exit,
+}
+
+impl PollState {
+    fn dirty(&self) -> bool {
+        Self::Dirty == *self
+    }
+
+    fn exit(&self) -> bool {
+        Self::Exit == *self
+    }
+}
+
+struct MountedComponent {
+    renderable: Box<dyn Renderable>,
+    should_render: bool,
+    frame: Rect,
+}
+
+impl MountedComponent {
+    #[inline]
+    fn change(&mut self, properties: DynamicProperties) -> bool {
+        self.should_render = self.renderable.change(properties).into() || self.should_render;
+        self.should_render
+    }
+
+    #[inline]
+    fn resize(&mut self, frame: Rect) -> bool {
+        self.should_render = self.renderable.resize(frame).into() || self.should_render;
+        self.frame = frame;
+        self.should_render
+    }
+
+    #[inline]
+    fn update(&mut self, message: DynamicMessage) -> bool {
+        self.should_render = self.renderable.update(message).into() || self.should_render;
+        self.should_render
+    }
+
+    #[inline]
+    fn view(&mut self) -> Layout {
+        self.should_render = false;
+        self.renderable.view()
+    }
+
+    #[inline]
+    fn has_focus(&self) -> bool {
+        self.renderable.has_focus()
+    }
+
+    #[inline]
+    fn input_binding(&self, pressed: &[Key]) -> BindingMatch<DynamicMessage> {
+        self.renderable.input_binding(pressed)
+    }
+
+    #[inline]
+    fn tick(&self) -> Option<DynamicMessage> {
+        self.renderable.tick()
+    }
+}
+
 struct InputController {
     keys: SmallVec<[Key; 8]>,
 }
@@ -381,7 +421,6 @@ impl InputController {
 
     fn push(&mut self, key: Key) {
         self.keys.push(key);
-        log::info!("keys: {:?}", self.keys);
     }
 }
 

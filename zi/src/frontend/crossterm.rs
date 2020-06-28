@@ -1,8 +1,8 @@
-use crossbeam_channel::{self, Receiver};
 use crossterm::{self, queue, QueueableCommand};
+use futures::stream::{FusedStream, StreamExt};
 use std::{
     io::{self, BufWriter, Stdout, Write},
-    thread::{self, JoinHandle},
+    pin::Pin,
 };
 
 use super::{
@@ -24,18 +24,30 @@ pub type Error = crossterm::ErrorKind;
 
 pub struct Crossterm<PainterT: Painter = IncrementalPainter> {
     target: MeteredWriter<BufWriter<Stdout>>,
-    input: Input,
     painter: PainterT,
+    events: Pin<Box<dyn FusedStream<Item = Result<Key>> + Send + 'static>>,
 }
 
 impl<PainterT: Painter> Crossterm<PainterT> {
     pub fn new() -> Result<Self> {
         let mut frontend = Self {
             target: MeteredWriter::new(BufWriter::with_capacity(1 << 20, io::stdout())),
-            input: Input::new(),
             painter: PainterT::create(
                 crossterm::terminal::size()
                     .map(|(width, height)| Size::new(width as usize, height as usize))?,
+            ),
+            events: Box::pin(
+                crossterm::event::EventStream::new()
+                    .filter_map(|event| async move {
+                        match event {
+                            Ok(crossterm::event::Event::Key(key_event)) => {
+                                Some(Ok(map_key(key_event)))
+                            }
+                            Ok(_) => None,
+                            Err(error) => Some(Err(error.into())),
+                        }
+                    })
+                    .fuse(),
             ),
         };
         initialise_tty::<PainterT, _>(&mut frontend.target)?;
@@ -44,6 +56,8 @@ impl<PainterT: Painter> Crossterm<PainterT> {
 }
 
 impl<PainterT: Painter> Frontend for Crossterm<PainterT> {
+    type EventStream = Pin<Box<dyn FusedStream<Item = Result<Key>> + Send + 'static>>;
+
     #[inline]
     fn initialise(&mut self) -> Result<()> {
         self.painter = PainterT::create(self.size()?);
@@ -82,8 +96,8 @@ impl<PainterT: Painter> Frontend for Crossterm<PainterT> {
     }
 
     #[inline]
-    fn events(&self) -> &Receiver<Key> {
-        &self.input.receiver
+    fn event_stream(&mut self) -> &mut Self::EventStream {
+        &mut self.events
     }
 }
 
@@ -108,7 +122,9 @@ fn initialise_tty<PainterT: Painter, TargetT: Write>(target: &mut TargetT) -> Re
         .queue(crossterm::terminal::EnterAlternateScreen)?
         .queue(crossterm::cursor::Hide)?;
     crossterm::terminal::enable_raw_mode()?;
-    queue_set_style(target, &PainterT::INITIAL_STYLE)
+    queue_set_style(target, &PainterT::INITIAL_STYLE)?;
+    // target.flush()?;
+    Ok(())
 }
 
 #[inline]
@@ -162,32 +178,6 @@ fn queue_set_style(target: &mut impl Write, style: &Style) -> Result<()> {
     }
 
     Ok(())
-}
-
-struct Input {
-    receiver: Receiver<Key>,
-    _handle: JoinHandle<()>,
-}
-
-impl Input {
-    pub fn new() -> Self {
-        let (sender, receiver) = crossbeam_channel::bounded(2048);
-        let event_loop = move || loop {
-            match crossterm::event::read() {
-                Ok(crossterm::event::Event::Key(key_event)) => {
-                    sender.send(map_key(key_event)).unwrap();
-                }
-                Ok(_) => {}
-                error => {
-                    error.unwrap();
-                }
-            }
-        };
-        Self {
-            receiver,
-            _handle: thread::spawn(event_loop),
-        }
-    }
 }
 
 #[inline]
