@@ -12,16 +12,26 @@ pub mod painter;
 mod utils;
 
 use crossbeam_channel::Receiver;
-use std::str::FromStr;
+use std::{io, str::FromStr};
 use thiserror::Error;
 
 use crate::terminal::{Canvas, Key, Size};
 
+/// A trait for frontends that draw a [`Canvas`](../terminal/struct.Canvas.html) to the terminal.
 pub trait Frontend {
+    /// Initialises the underlying terminal.
+    ///
+    /// Typically hides the cursor and enters an "alternative screen mode" in
+    /// order to restore the previous terminal content on exit.
+    fn initialise(&mut self) -> Result<()>;
+
+    /// Returns the size of the underlying terminal.
     fn size(&self) -> Result<Size>;
 
+    /// Draws the [`Canvas`](../terminal/struct.Canvas.html) to the terminal.
     fn present(&mut self, canvas: &Canvas) -> Result<usize>;
 
+    /// Returns a channel with user input events.
     fn events(&self) -> &Receiver<Key>;
 }
 
@@ -32,13 +42,12 @@ pub enum Error {
     #[error("{0}")]
     UnknownFrontend(String),
 
-    #[cfg(feature = "frontend-termion")]
-    #[error(transparent)]
-    Termion(#[from] termion::Error),
-
     #[cfg(feature = "frontend-crossterm")]
     #[error(transparent)]
     Crossterm(#[from] crossterm::Error),
+
+    #[error(transparent)]
+    Io(#[from] io::Error),
 }
 
 #[derive(Debug)]

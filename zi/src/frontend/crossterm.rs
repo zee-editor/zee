@@ -6,7 +6,7 @@ use std::{
 };
 
 use super::{
-    painter::{IncrementalPainter, PaintOperation, Painter},
+    painter::{FullPainter, IncrementalPainter, PaintOperation, Painter},
     utils::MeteredWriter,
     Frontend, Result,
 };
@@ -16,8 +16,8 @@ pub fn incremental() -> Result<Crossterm<IncrementalPainter>> {
     Crossterm::<IncrementalPainter>::new()
 }
 
-pub fn full() -> Result<Crossterm<IncrementalPainter>> {
-    Crossterm::<IncrementalPainter>::new()
+pub fn full() -> Result<Crossterm<FullPainter>> {
+    Crossterm::<FullPainter>::new()
 }
 
 pub type Error = crossterm::ErrorKind;
@@ -30,25 +30,26 @@ pub struct Crossterm<PainterT: Painter = IncrementalPainter> {
 
 impl<PainterT: Painter> Crossterm<PainterT> {
     pub fn new() -> Result<Self> {
-        let mut target = MeteredWriter::new(BufWriter::with_capacity(1 << 20, io::stdout()));
-        target
-            .queue(crossterm::terminal::EnterAlternateScreen)?
-            .queue(crossterm::cursor::Hide)?;
-        crossterm::terminal::enable_raw_mode()?;
-        queue_set_style(&mut target, &PainterT::INITIAL_STYLE)?;
-
-        Ok(Self {
-            target,
+        let mut frontend = Self {
+            target: MeteredWriter::new(BufWriter::with_capacity(1 << 20, io::stdout())),
             input: Input::new(),
             painter: PainterT::create(
                 crossterm::terminal::size()
                     .map(|(width, height)| Size::new(width as usize, height as usize))?,
             ),
-        })
+        };
+        initialise_tty::<PainterT, _>(&mut frontend.target)?;
+        Ok(frontend)
     }
 }
 
 impl<PainterT: Painter> Frontend for Crossterm<PainterT> {
+    #[inline]
+    fn initialise(&mut self) -> Result<()> {
+        self.painter = PainterT::create(self.size()?);
+        initialise_tty::<PainterT, _>(&mut self.target)
+    }
+
     #[inline]
     fn size(&self) -> Result<Size> {
         Ok(crossterm::terminal::size()
@@ -99,6 +100,15 @@ impl<PainterT: Painter> Drop for Crossterm<PainterT> {
         crossterm::terminal::disable_raw_mode()
             .expect("Failed to disable raw mode when closing `crossterm` frontend.");
     }
+}
+
+#[inline]
+fn initialise_tty<PainterT: Painter, TargetT: Write>(target: &mut TargetT) -> Result<()> {
+    target
+        .queue(crossterm::terminal::EnterAlternateScreen)?
+        .queue(crossterm::cursor::Hide)?;
+    crossterm::terminal::enable_raw_mode()?;
+    queue_set_style(target, &PainterT::INITIAL_STYLE)
 }
 
 #[inline]

@@ -138,7 +138,7 @@ impl App {
                 (PollState::Clean, false) => {}
             }
 
-            poll_state = self.poll_events_batch(&frontend, last_drawn)?;
+            poll_state = self.poll_events_batch(&mut frontend, last_drawn)?;
         }
     }
 
@@ -233,7 +233,7 @@ impl App {
     #[inline]
     fn poll_events_batch(
         &mut self,
-        frontend: &impl Frontend,
+        frontend: &mut impl Frontend,
         last_drawn: Instant,
     ) -> Result<PollState> {
         let mut force_redraw = false;
@@ -263,23 +263,25 @@ impl App {
                             (component_id, dyn_message)
                         }
                         LinkMessage::Exit => return Ok(PollState::Exit),
-                    };
-                    let Self {
-                        ref mut components,
-                        ..
-                    } = *self;
-                    dirty = match components.get_mut(&component_id) {
-                        Some(component) => {
-                            component.update(dyn_message)
+                        LinkMessage::RunExclusive(process) => {
+                            let maybe_message = process();
+                            frontend.initialise()?;
+                            // force_redraw = true;
+                            // dirty = true;
+                            if let Some((component_id, dyn_message)) = maybe_message {
+                                (component_id, dyn_message)
+                            } else {
+                                return Ok(PollState::Dirty)
+                            }
                         },
-                        None => {
-                            log::debug!(
-                                "Received message for nonexistent component (id: {}).",
-                                component_id,
-                            );
-                            false
-                        }
-                    }
+                    };
+                    dirty |= self.components.get_mut(&component_id).map(|component| component.update(dyn_message)).unwrap_or_else(|| {
+                        log::debug!(
+                            "Received message for nonexistent component (id: {}).",
+                            component_id,
+                        );
+                        false
+                    });
                 }
                 recv(frontend.events()) -> event => {
                     match event? {

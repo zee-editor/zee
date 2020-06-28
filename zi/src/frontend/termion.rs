@@ -9,7 +9,6 @@ use termion::{
     event::Key as TermionKey,
     input::TermRead,
     raw::{IntoRawMode, RawTerminal},
-    screen::AlternateScreen,
 };
 
 use super::{
@@ -27,35 +26,35 @@ pub fn full() -> Result<Termion<FullPainter>> {
     Termion::<FullPainter>::new()
 }
 
-pub type Error = std::io::Error;
-
 pub struct Termion<PainterT: Painter = IncrementalPainter> {
-    target: AlternateScreen<RawTerminal<MeteredWriter<BufWriter<Stdout>>>>,
+    target: RawTerminal<MeteredWriter<BufWriter<Stdout>>>,
     input: Input,
     painter: PainterT,
 }
 
 impl<PainterT: Painter> Termion<PainterT> {
     pub fn new() -> Result<Self> {
-        let mut target = AlternateScreen::from(
-            MeteredWriter::new(BufWriter::with_capacity(1 << 20, io::stdout())).into_raw_mode()?,
-        );
-        write!(target, "{}", termion::cursor::Hide)?;
-        goto_position(&mut target, &PainterT::INITIAL_POSITION)?;
-        write!(target, "{}", PainterT::INITIAL_STYLE)?;
-
-        Ok(Self {
-            target,
+        let mut frontend = Self {
+            target: MeteredWriter::new(BufWriter::with_capacity(1 << 20, io::stdout()))
+                .into_raw_mode()?,
             input: Input::from_reader(termion::get_tty()?),
             painter: PainterT::create(
                 termion::terminal_size()
                     .map(|(width, height)| Size::new(width as usize, height as usize))?,
             ),
-        })
+        };
+        initialise_tty::<PainterT, _>(&mut frontend.target)?;
+        Ok(frontend)
     }
 }
 
 impl<PainterT: Painter> Frontend for Termion<PainterT> {
+    #[inline]
+    fn initialise(&mut self) -> Result<()> {
+        self.painter = PainterT::create(self.size()?);
+        initialise_tty::<PainterT, _>(&mut self.target)
+    }
+
     #[inline]
     fn size(&self) -> Result<Size> {
         Ok(termion::terminal_size()
@@ -74,7 +73,7 @@ impl<PainterT: Painter> Frontend for Termion<PainterT> {
             match operation {
                 PaintOperation::WriteContent(content) => write!(target, "{}", content)?,
                 PaintOperation::SetStyle(style) => write!(target, "{}", style)?,
-                PaintOperation::MoveTo(position) => goto_position(target, &position)?,
+                PaintOperation::MoveTo(position) => write!(target, "{}", goto(&position))?,
             }
             Ok(())
         })?;
@@ -103,13 +102,23 @@ impl<PainterT: Painter> Drop for Termion<PainterT> {
     }
 }
 
-fn goto_position(writer: &mut impl Write, position: &Position) -> Result<()> {
+#[inline]
+fn initialise_tty<PainterT: Painter, TargetT: Write>(target: &mut TargetT) -> Result<()> {
     write!(
-        writer,
-        "{}",
-        termion::cursor::Goto(position.x as u16 + 1, position.y as u16 + 1)
-    )?; // `Goto` uses 1-based indexing
+        target,
+        "{}{}{}{}",
+        termion::screen::ToAlternateScreen,
+        termion::cursor::Hide,
+        goto(&PainterT::INITIAL_POSITION),
+        PainterT::INITIAL_STYLE
+    )?;
     Ok(())
+}
+
+#[inline]
+fn goto(position: &Position) -> termion::cursor::Goto {
+    // `Goto` uses 1-based indexing
+    termion::cursor::Goto(position.x as u16 + 1, position.y as u16 + 1)
 }
 
 impl Display for Style {

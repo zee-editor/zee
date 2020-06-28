@@ -87,10 +87,9 @@ impl Component for Select {
             }
         };
         if current_selected != new_selected {
-            self.properties
-                .on_change
-                .as_mut()
-                .map(|on_change| on_change.emit(new_selected));
+            if let Some(on_change) = self.properties.on_change.as_mut() {
+                on_change.emit(new_selected)
+            }
         }
         ShouldRender::No
     }
@@ -106,13 +105,9 @@ impl Component for Select {
     }
 
     fn resize(&mut self, frame: Rect) -> ShouldRender {
-        if self.frame != frame {
-            self.frame = frame;
-            self.ensure_selected_item_in_view();
-            ShouldRender::Yes
-        } else {
-            ShouldRender::No
-        }
+        self.frame = frame;
+        self.ensure_selected_item_in_view();
+        ShouldRender::Yes
     }
 
     fn view(&self) -> Layout {

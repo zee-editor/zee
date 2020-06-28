@@ -17,30 +17,77 @@ use std::{
 use self::template::{ComponentId, DynamicMessage};
 use crate::terminal::{Key, Rect};
 
+/// Components are the building blocks of the UI in Zi.
+///
+/// The trait describes stateful components and their lifecycle. This is the
+/// main trait that users of the library will implement to describe their UI.
+/// All components are owned directly by an [`App`](../struct.App.html) which
+/// manages their lifecycle. An `App` instance will create new components,
+/// update them in reaction to user input or to messages from other components
+/// and eventually drop them when a component gone off screen.
+///
+/// Anyone familiar with Yew, Elm or React + Redux should be familiar with all
+/// the high-level concepts. Moreover, the names of some types and functions are
+/// the same as in `Yew`.
+///
+/// A component has to describe how:
+///   - how to create a fresh instance from `Component::Properties` received from their parent (`create` fn)
+///   - how to render it (`view` fn)
+///   - how to update its inter
+///
 pub trait Component: Sized + 'static {
+    /// Messages are used to make components dynamic and interactive. For simple
+    /// components, this will be `()`. Complex ones will typically use
+    /// an enum to declare multiple Message types.
     type Message: Send + 'static;
+
+    /// Properties are the inputs to a Component.
     type Properties: Clone;
 
+    /// Components are created with three pieces of data:
+    ///   - their Properties
+    ///   - the current position and size on the screen
+    ///   - a `ComponentLink` which can be used to send messages and create callbacks for triggering updates
+    ///
+    /// Conceptually, there's an "update" method for each one of these:
+    ///   - `change` when the Properties change
+    ///   - `resize` when their current position and size on the screen changes
+    ///   - `update` when the a message was sent to the component
     fn create(properties: Self::Properties, frame: Rect, link: ComponentLink<Self>) -> Self;
 
+    /// Returns the current visual layout of the component.
     fn view(&self) -> Layout;
 
+    /// When the parent of a Component is re-rendered, it will either be re-created or
+    /// receive new properties in the `change` lifecycle method. Component's can choose
+    /// to re-render if the new properties are different than the previously
+    /// received properties.
+    ///
+    /// Root components don't have a parent and subsequently, their `change`
+    /// method will never be called. Components which don't have properties
+    /// should always return false.
     fn change(&mut self, _properties: Self::Properties) -> ShouldRender {
         ShouldRender::No
     }
 
+    /// This method is called when a component's position and size on the screen changes.
     fn resize(&mut self, _frame: Rect) -> ShouldRender {
         ShouldRender::No
     }
 
+    /// Components handle messages in their `update` method and commonly use this method
+    /// to update their state and (optionally) re-render themselves.
     fn update(&mut self, _message: Self::Message) -> ShouldRender {
         ShouldRender::No
     }
 
+    /// Whether the component is currently focused.
     fn has_focus(&self) -> bool {
         false
     }
 
+    /// If the component is currently focused (see `has_focus`), `input_binding`
+    /// will be called on every keyboard events.
     fn input_binding(&self, _pressed: &[Key]) -> BindingMatch<Self::Message> {
         BindingMatch {
             transition: BindingTransition::Clear,
@@ -113,6 +160,18 @@ impl<ComponentT: Component> ComponentLink<ComponentT> {
             .expect("App needs to outlive components");
     }
 
+    pub fn run_exclusive(
+        &self,
+        process: impl FnOnce() -> Option<ComponentT::Message> + Send + 'static,
+    ) {
+        let component_id = self.component_id;
+        self.sender
+            .send(LinkMessage::RunExclusive(Box::new(move || {
+                process().map(|message| (component_id, DynamicMessage(Box::new(message))))
+            })))
+            .expect("App needs to outlive components");
+    }
+
     pub(crate) fn new(sender: Arc<Sender<LinkMessage>>, component_id: ComponentId) -> Self {
         assert_eq!(TypeId::of::<ComponentT>(), component_id.type_id());
         Self {
@@ -171,6 +230,7 @@ pub struct BindingMatch<Message> {
 pub(crate) enum LinkMessage {
     Component(ComponentId, DynamicMessage),
     Exit,
+    RunExclusive(Box<dyn FnOnce() -> Option<(ComponentId, DynamicMessage)> + Send + 'static>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
