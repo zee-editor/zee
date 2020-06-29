@@ -17,8 +17,8 @@ use crate::{
         BindingMatch, BindingTransition, LinkMessage, ShouldRender,
     },
     error::Result,
-    frontend::Frontend,
-    terminal::{Canvas, Key, Position, Rect},
+    frontend::{Event, Frontend},
+    terminal::{Canvas, Key, Position, Rect, Size},
 };
 
 pub struct App {
@@ -30,7 +30,6 @@ pub struct App {
     links_receiver: UnboundedReceiver<LinkMessage>,
     links_sender: UnboundedSender<LinkMessage>,
     root: Layout,
-    // runtime: Runtime,
 }
 
 impl App {
@@ -50,7 +49,7 @@ impl App {
 
     pub fn run_event_loop(&mut self, mut frontend: impl Frontend) -> Result<()> {
         let mut screen = Canvas::new(frontend.size()?);
-        let mut poll_state = PollState::Dirty;
+        let mut poll_state = PollState::Dirty(None);
         let mut last_drawn = Instant::now() - REDRAW_LATENCY;
         let mut runtime = RuntimeBuilder::new()
             .basic_scheduler()
@@ -58,15 +57,13 @@ impl App {
             .build()?;
 
         loop {
-            let screen_size = frontend.size()?;
-            let resized = screen_size != screen.size();
-
-            match (poll_state, resized) {
-                (PollState::Dirty, _) | (PollState::Clean, true) => {
+            match poll_state {
+                PollState::Dirty(new_size) => {
                     let now = Instant::now();
 
                     // Draw
-                    if resized {
+                    if let Some(screen_size) = new_size {
+                        eprintln!("resized to {}", screen_size);
                         screen.resize(screen_size);
                     }
 
@@ -86,10 +83,10 @@ impl App {
                     );
                     last_drawn = Instant::now();
                 }
-                (PollState::Exit, _) => {
+                PollState::Exit => {
                     break;
                 }
-                (PollState::Clean, false) => {}
+                _ => {}
             }
 
             poll_state = self.poll_events_batch(&mut runtime, &mut frontend, last_drawn)?;
@@ -229,7 +226,7 @@ impl App {
                                         false
                                     })
                                 {
-                                    poll_state = PollState::Dirty;
+                                    poll_state = PollState::Dirty(None);
                                 }
                             }
                             LinkMessage::Exit => {
@@ -239,7 +236,7 @@ impl App {
                                 let maybe_message = process();
                                 frontend.initialise()?;
                                 force_redraw = true;
-                                poll_state = PollState::Dirty;
+                                poll_state = PollState::Dirty(None);
                                 if let Some((component_id, dyn_message)) = maybe_message {
                                     self
                                         .components
@@ -259,20 +256,22 @@ impl App {
                     }
                     event = frontend.event_stream().next().fuse() => {
                         let event = event.expect("At least one sender exists.")?;
-                        match event {
-                            key => {
+                        poll_state = match event {
+                            Event::Key(key) => {
                                 self.handle_event(key)?;
-                                poll_state = PollState::Dirty; // handle_event should return whether we need to rerender
+                                PollState::Dirty(None) // handle_event should return whether we need to rerender
                             }
+                            Event::Resize(size) => PollState::Dirty(Some(size)),
                         };
                         force_redraw = poll_state.dirty()
-                            && first_event_time.get_or_insert_with(Instant::now).elapsed()
-                            >= SUSTAINED_IO_REDRAW_LATENCY;
+                            && (first_event_time.get_or_insert_with(Instant::now).elapsed()
+                                >= SUSTAINED_IO_REDRAW_LATENCY
+                                || poll_state.resized());
                         Ok(())
                     }
                     _ = tokio::time::delay_for(timeout_duration).fuse() => {
                         for (component_id, dyn_message) in self.tickable_components.drain(..) {
-                            poll_state = PollState::Dirty;
+                            poll_state = PollState::Dirty(None);
                             match self.components.get_mut(&component_id) {
                                 Some(component) => {
                                     component.update(dyn_message);
@@ -346,13 +345,23 @@ impl App {
 #[derive(Debug, PartialEq)]
 enum PollState {
     Clean,
-    Dirty,
+    Dirty(Option<Size>),
     Exit,
 }
 
 impl PollState {
     fn dirty(&self) -> bool {
-        Self::Dirty == *self
+        match *self {
+            Self::Dirty(_) => true,
+            _ => false,
+        }
+    }
+
+    fn resized(&self) -> bool {
+        match *self {
+            Self::Dirty(Some(_)) => true,
+            _ => false,
+        }
     }
 
     fn exit(&self) -> bool {

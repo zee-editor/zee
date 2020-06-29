@@ -15,7 +15,7 @@ use crate::terminal::{Canvas, Key, Size};
 
 /// A trait for frontends that draw a [`Canvas`](../terminal/struct.Canvas.html) to the terminal.
 pub trait Frontend {
-    type EventStream: Stream<Item = Result<Key>> + Unpin;
+    type EventStream: Stream<Item = Result<Event>> + Unpin;
 
     /// Initialises the underlying terminal.
     ///
@@ -34,6 +34,12 @@ pub trait Frontend {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Debug)]
+pub enum Event {
+    Key(Key),
+    Resize(Size),
+}
 
 #[derive(Debug, Error)]
 pub enum Error {

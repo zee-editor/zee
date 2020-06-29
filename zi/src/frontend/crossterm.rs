@@ -8,7 +8,7 @@ use std::{
 use super::{
     painter::{FullPainter, IncrementalPainter, PaintOperation, Painter},
     utils::MeteredWriter,
-    Frontend, Result,
+    Event, Frontend, Result,
 };
 use crate::terminal::{Canvas, Colour, Key, Size, Style};
 
@@ -25,7 +25,7 @@ pub type Error = crossterm::ErrorKind;
 pub struct Crossterm<PainterT: Painter = IncrementalPainter> {
     target: MeteredWriter<BufWriter<Stdout>>,
     painter: PainterT,
-    events: Pin<Box<dyn FusedStream<Item = Result<Key>> + Send + 'static>>,
+    events: Pin<Box<dyn FusedStream<Item = Result<Event>> + Send + 'static>>,
 }
 
 impl<PainterT: Painter> Crossterm<PainterT> {
@@ -41,8 +41,11 @@ impl<PainterT: Painter> Crossterm<PainterT> {
                     .filter_map(|event| async move {
                         match event {
                             Ok(crossterm::event::Event::Key(key_event)) => {
-                                Some(Ok(map_key(key_event)))
+                                Some(Ok(Event::Key(map_key(key_event))))
                             }
+                            Ok(crossterm::event::Event::Resize(width, height)) => Some(Ok(
+                                Event::Resize(Size::new(width as usize, height as usize)),
+                            )),
                             Ok(_) => None,
                             Err(error) => Some(Err(error.into())),
                         }
@@ -56,7 +59,7 @@ impl<PainterT: Painter> Crossterm<PainterT> {
 }
 
 impl<PainterT: Painter> Frontend for Crossterm<PainterT> {
-    type EventStream = Pin<Box<dyn FusedStream<Item = Result<Key>> + Send + 'static>>;
+    type EventStream = Pin<Box<dyn FusedStream<Item = Result<Event>> + Send + 'static>>;
 
     #[inline]
     fn initialise(&mut self) -> Result<()> {
