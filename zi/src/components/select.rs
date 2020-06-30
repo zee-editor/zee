@@ -1,11 +1,10 @@
 use std::{cmp, iter};
 
-use super::{
-    layout::{self, FlexDirection, Item, Layout},
-    text::{Text, TextProperties},
-    BindingMatch, BindingTransition, Callback, Component, ComponentLink, ShouldRender,
+use super::text::{Text, TextProperties};
+use crate::{
+    layout, BindingMatch, BindingTransition, Callback, Component, ComponentLink, FlexDirection,
+    Item, Key, Layout, Rect, ShouldRender, Style,
 };
-use crate::terminal::{Key, Rect, Style};
 
 #[derive(Clone, PartialEq)]
 pub struct SelectProperties {

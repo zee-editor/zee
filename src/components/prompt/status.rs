@@ -1,6 +1,6 @@
 use palette::{Gradient, Hsv, LinSrgb};
 use zi::{
-    component::text::{Text, TextAlign, TextProperties},
+    components::text::{Text, TextProperties},
     layout,
     terminal::Style,
     Colour, Component, ComponentLink, Layout, Rect, ShouldRender,

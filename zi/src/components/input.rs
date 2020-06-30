@@ -1,14 +1,11 @@
 use ropey::Rope;
-use std::cmp;
 use unicode_width::UnicodeWidthStr;
 
-use super::{
-    layout::Layout, BindingMatch, BindingTransition, Callback, Component, ComponentLink,
-    ShouldRender,
-};
 use crate::{
-    terminal::{Canvas, Colour, Key, Rect, Style},
+    layout::Layout,
     text::{cursor, CharIndex, TextStorage},
+    BindingMatch, BindingTransition, Callback, Canvas, Colour, Component, ComponentLink, Key, Rect,
+    ShouldRender, Style,
 };
 
 pub use crate::text::Cursor;

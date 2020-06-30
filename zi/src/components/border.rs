@@ -1,10 +1,8 @@
 use std::iter;
 
-use super::{
-    layout::{self, Layout},
-    Callback, Component, ComponentLink, ShouldRender,
+use crate::{
+    layout, Callback, Canvas, Component, ComponentLink, Layout, Rect, ShouldRender, Size, Style,
 };
-use crate::terminal::{Canvas, Rect, Size, Style};
 
 #[derive(Clone)]
 pub struct BorderProperties {

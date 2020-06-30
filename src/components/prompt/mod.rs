@@ -9,7 +9,7 @@ use std::{
     rc::Rc,
 };
 use zi::{
-    component::{
+    components::{
         input::{Cursor, Input, InputChange, InputProperties, InputStyle},
         select::{Select, SelectProperties},
         text::{Text, TextProperties},

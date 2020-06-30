@@ -3,16 +3,13 @@ use std::{cmp, rc::Rc};
 use unicode_width::UnicodeWidthStr;
 
 use zi::{
-    component::{
+    components::{
         input::{Cursor, Input, InputChange, InputProperties, InputStyle},
         select::{Select, SelectProperties},
         text::{Text, TextAlign, TextProperties},
-        Callback,
     },
-    frontend,
-    layout::{self, FlexDirection},
-    App, BindingMatch, BindingTransition, Canvas, Colour, Component, ComponentLink, Key, Layout,
-    Rect, Result, ShouldRender, Style,
+    frontend, layout, App, BindingMatch, BindingTransition, Callback, Canvas, Colour, Component,
+    ComponentLink, FlexDirection, Key, Layout, Rect, Result, ShouldRender, Style,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]

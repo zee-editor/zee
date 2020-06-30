@@ -1,7 +1,6 @@
 use unicode_width::UnicodeWidthStr;
 
-use super::{layout::Layout, Component, ComponentLink, ShouldRender};
-use crate::terminal::{Canvas, Rect, Size, Style};
+use crate::{layout::Layout, Canvas, Component, ComponentLink, Rect, ShouldRender, Size, Style};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum TextAlign {

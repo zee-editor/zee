@@ -1,7 +1,7 @@
 use std::cmp;
 use unicode_width::UnicodeWidthStr;
 use zi::{
-    component::border::{Border, BorderProperties},
+    components::border::{Border, BorderProperties},
     frontend, layout, App, BindingMatch, BindingTransition, Canvas, Colour, Component,
     ComponentLink, Key, Layout, Rect, Result, ShouldRender, Size, Style,
 };
