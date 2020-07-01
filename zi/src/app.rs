@@ -1,4 +1,4 @@
-use futures::{self, stream::StreamExt, FutureExt};
+use futures::{self, stream::StreamExt};
 use smallvec::SmallVec;
 use std::{
     collections::HashMap,
@@ -27,22 +27,22 @@ pub struct App {
     layout_cache: HashMap<ComponentId, Layout>,
     focused_components: SmallVec<[ComponentId; 2]>,
     tickable_components: SmallVec<[(ComponentId, DynamicMessage); 2]>,
-    links_receiver: UnboundedReceiver<LinkMessage>,
-    links_sender: UnboundedSender<LinkMessage>,
+    link_receiver: UnboundedReceiver<LinkMessage>,
+    link_sender: UnboundedSender<LinkMessage>,
     root: Layout,
 }
 
 impl App {
     pub fn new(root: Layout) -> Self {
-        let (links_sender, links_receiver) = mpsc::unbounded_channel();
+        let (link_sender, link_receiver) = mpsc::unbounded_channel();
         Self {
             controller: InputController::new(),
             components: HashMap::new(),
             layout_cache: HashMap::new(),
             focused_components: SmallVec::new(),
             tickable_components: SmallVec::new(),
-            links_receiver,
-            links_sender,
+            link_receiver,
+            link_sender,
             root,
         }
     }
@@ -105,7 +105,7 @@ impl App {
             ref mut layout_cache,
             ref mut focused_components,
             ref mut tickable_components,
-            ref links_sender,
+            ref link_sender,
             ..
         } = *self;
         let mut first = true;
@@ -143,7 +143,7 @@ impl App {
                     let mut new_component = false;
                     let component = components.entry(component_id).or_insert_with(|| {
                         new_component = true;
-                        let renderable = template.create(component_id, frame, links_sender.clone());
+                        let renderable = template.create(component_id, frame, link_sender.clone());
                         MountedComponent {
                             renderable,
                             frame,
@@ -209,67 +209,26 @@ impl App {
                     })
                 }
             };
-            let select_result: Result<()> = runtime.block_on(async {
-                futures::select! {
-                    links_message_result = self.links_receiver.recv().fuse() => {
-                        match links_message_result.expect("At least one sender exists.") {
-                            LinkMessage::Component(component_id, dyn_message) => {
-                                if self
-                                    .components
-                                    .get_mut(&component_id)
-                                    .map(|component| component.update(dyn_message))
-                                    .unwrap_or_else(|| {
-                                        log::debug!(
-                                            "Received message for nonexistent component (id: {}).",
-                                            component_id,
-                                        );
-                                        false
-                                    })
-                                {
-                                    poll_state = PollState::Dirty(None);
-                                }
-                            }
-                            LinkMessage::Exit => {
-                                poll_state = PollState::Exit;
-                            }
-                            LinkMessage::RunExclusive(process) => {
-                                let maybe_message = process();
-                                frontend.initialise()?;
-                                force_redraw = true;
-                                poll_state = PollState::Dirty(None);
-                                if let Some((component_id, dyn_message)) = maybe_message {
-                                    self
-                                        .components
-                                        .get_mut(&component_id)
-                                        .map(|component| component.update(dyn_message))
-                                        .unwrap_or_else(|| {
-                                            log::debug!(
-                                                "Received message for nonexistent component (id: {}).",
-                                                component_id,
-                                            );
-                                            false
-                                        });
-                                }
-                            }
-                        };
+            (runtime.block_on(async {
+                tokio::select! {
+                    link_message = self.link_receiver.recv() => {
+                        poll_state = self.handle_link_message(
+                            frontend,
+                            link_message.expect("At least one sender exists."),
+                        )?;
                         Ok(())
                     }
-                    event = frontend.event_stream().next().fuse() => {
-                        let event = event.expect("At least one sender exists.")?;
-                        poll_state = match event {
-                            Event::Key(key) => {
-                                self.handle_event(key)?;
-                                PollState::Dirty(None) // handle_event should return whether we need to rerender
-                            }
-                            Event::Resize(size) => PollState::Dirty(Some(size)),
-                        };
+                    input_event = frontend.event_stream().next() => {
+                        poll_state = self.handle_input_event(input_event.expect(
+                            "At least one sender exists.",
+                        )?)?;
                         force_redraw = poll_state.dirty()
                             && (first_event_time.get_or_insert_with(Instant::now).elapsed()
                                 >= SUSTAINED_IO_REDRAW_LATENCY
                                 || poll_state.resized());
                         Ok(())
                     }
-                    _ = tokio::time::delay_for(timeout_duration).fuse() => {
+                    _ = tokio::time::delay_for(timeout_duration) => {
                         for (component_id, dyn_message) in self.tickable_components.drain(..) {
                             poll_state = PollState::Dirty(None);
                             match self.components.get_mut(&component_id) {
@@ -288,15 +247,72 @@ impl App {
                         Ok(())
                     }
                 }
-            });
-            select_result?;
+            }) as Result<()>)?;
         }
 
         Ok(poll_state)
     }
 
     #[inline]
-    fn handle_event(&mut self, key: Key) -> Result<()> {
+    fn handle_link_message(
+        &mut self,
+        frontend: &mut impl Frontend,
+        message: LinkMessage,
+    ) -> Result<PollState> {
+        Ok(match message {
+            LinkMessage::Component(component_id, dyn_message) => {
+                if self
+                    .components
+                    .get_mut(&component_id)
+                    .map(|component| component.update(dyn_message))
+                    .unwrap_or_else(|| {
+                        log::debug!(
+                            "Received message for nonexistent component (id: {}).",
+                            component_id,
+                        );
+                        false
+                    })
+                {
+                    PollState::Dirty(None)
+                } else {
+                    PollState::Clean
+                }
+            }
+            LinkMessage::Exit => PollState::Exit,
+            LinkMessage::RunExclusive(process) => {
+                let maybe_message = process();
+                frontend.initialise()?;
+                // force_redraw = true;
+                if let Some((component_id, dyn_message)) = maybe_message {
+                    self.components
+                        .get_mut(&component_id)
+                        .map(|component| component.update(dyn_message))
+                        .unwrap_or_else(|| {
+                            log::debug!(
+                                "Received message for nonexistent component (id: {}).",
+                                component_id,
+                            );
+                            false
+                        });
+                }
+                PollState::Dirty(None)
+            }
+        })
+    }
+
+    #[inline]
+    fn handle_input_event(&mut self, event: Event) -> Result<PollState> {
+        Ok(match event {
+            Event::Key(key) => {
+                self.handle_key(key)?;
+                PollState::Dirty(None) // handle_event should return whether we need to rerender
+            }
+            Event::Resize(size) => PollState::Dirty(Some(size)),
+        })
+    }
+
+    #[inline]
+    fn handle_key(&mut self, key: Key) -> Result<()> {
         let Self {
             ref mut components,
             ref focused_components,

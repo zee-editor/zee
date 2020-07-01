@@ -22,6 +22,8 @@ pub(crate) struct ComponentId {
     type_name: &'static str,
 }
 
+// `PartialEq` is impl'ed manually as `type_name` is only used for
+// debugging and is ignored when testing for equality.
 impl PartialEq for ComponentId {
     fn eq(&self, other: &Self) -> bool {
         self.type_id == other.type_id && self.id == other.id
