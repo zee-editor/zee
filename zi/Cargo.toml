@@ -19,7 +19,11 @@ unicode-segmentation = "1.6.0"
 unicode-width = "0.1.7"
 
 # Optional dependencies
-crossterm = { version = "0.17.5", features = ["event-stream"], optional = true }
+[dependencies.crossterm]
+optional = true
+features = ["event-stream"]
+git = "https://github.com/crossterm-rs/crossterm.git"
+rev = "c5fc1a14931a2a11379b0c88024bdb40a5fecf77"
 
 [dev-dependencies]
 colorous = "1.0.2"

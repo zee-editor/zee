@@ -1,5 +1,5 @@
 use crossterm::{self, queue, QueueableCommand};
-use futures::stream::{FusedStream, StreamExt};
+use futures::stream::{Stream, StreamExt};
 use std::{
     io::{self, BufWriter, Stdout, Write},
     pin::Pin,
@@ -25,7 +25,7 @@ pub type Error = crossterm::ErrorKind;
 pub struct Crossterm<PainterT: Painter = IncrementalPainter> {
     target: MeteredWriter<BufWriter<Stdout>>,
     painter: PainterT,
-    events: Pin<Box<dyn FusedStream<Item = Result<Event>> + Send + 'static>>,
+    events: Option<Pin<Box<dyn Stream<Item = Result<Event>> + Send + 'static>>>,
 }
 
 impl<PainterT: Painter> Crossterm<PainterT> {
@@ -36,22 +36,7 @@ impl<PainterT: Painter> Crossterm<PainterT> {
                 crossterm::terminal::size()
                     .map(|(width, height)| Size::new(width as usize, height as usize))?,
             ),
-            events: Box::pin(
-                crossterm::event::EventStream::new()
-                    .filter_map(|event| async move {
-                        match event {
-                            Ok(crossterm::event::Event::Key(key_event)) => {
-                                Some(Ok(Event::Key(map_key(key_event))))
-                            }
-                            Ok(crossterm::event::Event::Resize(width, height)) => Some(Ok(
-                                Event::Resize(Size::new(width as usize, height as usize)),
-                            )),
-                            Ok(_) => None,
-                            Err(error) => Some(Err(error.into())),
-                        }
-                    })
-                    .fuse(),
-            ),
+            events: Some(new_event_stream()),
         };
         initialise_tty::<PainterT, _>(&mut frontend.target)?;
         Ok(frontend)
@@ -59,13 +44,7 @@ impl<PainterT: Painter> Crossterm<PainterT> {
 }
 
 impl<PainterT: Painter> Frontend for Crossterm<PainterT> {
-    type EventStream = Pin<Box<dyn FusedStream<Item = Result<Event>> + Send + 'static>>;
-
-    #[inline]
-    fn initialise(&mut self) -> Result<()> {
-        self.painter = PainterT::create(self.size()?);
-        initialise_tty::<PainterT, _>(&mut self.target)
-    }
+    type EventStream = Pin<Box<dyn Stream<Item = Result<Event>> + Send + 'static>>;
 
     #[inline]
     fn size(&self) -> Result<Size> {
@@ -100,7 +79,20 @@ impl<PainterT: Painter> Frontend for Crossterm<PainterT> {
 
     #[inline]
     fn event_stream(&mut self) -> &mut Self::EventStream {
-        &mut self.events
+        self.events.as_mut().expect("Frontend events are suspended")
+    }
+
+    #[inline]
+    fn suspend(&mut self) -> Result<()> {
+        self.events = None;
+        Ok(())
+    }
+
+    #[inline]
+    fn resume(&mut self) -> Result<()> {
+        self.painter = PainterT::create(self.size()?);
+        self.events = Some(new_event_stream());
+        initialise_tty::<PainterT, _>(&mut self.target)
     }
 }
 
@@ -126,7 +118,7 @@ fn initialise_tty<PainterT: Painter, TargetT: Write>(target: &mut TargetT) -> Re
         .queue(crossterm::cursor::Hide)?;
     crossterm::terminal::enable_raw_mode()?;
     queue_set_style(target, &PainterT::INITIAL_STYLE)?;
-    // target.flush()?;
+    target.flush()?;
     Ok(())
 }
 
@@ -181,6 +173,26 @@ fn queue_set_style(target: &mut impl Write, style: &Style) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[inline]
+fn new_event_stream() -> <Crossterm as Frontend>::EventStream {
+    Box::pin(
+        crossterm::event::EventStream::new()
+            .filter_map(|event| async move {
+                match event {
+                    Ok(crossterm::event::Event::Key(key_event)) => {
+                        Some(Ok(Event::Key(map_key(key_event))))
+                    }
+                    Ok(crossterm::event::Event::Resize(width, height)) => Some(Ok(Event::Resize(
+                        Size::new(width as usize, height as usize),
+                    ))),
+                    Ok(_) => None,
+                    Err(error) => Some(Err(error.into())),
+                }
+            })
+            .fuse(),
+    )
 }
 
 #[inline]

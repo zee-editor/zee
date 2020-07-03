@@ -9,10 +9,9 @@ pub mod text;
 pub use app::App;
 pub use component::{
     layout::{
-        self, auto, column, column_iter, component, container, fixed, row, row_iter, FlexBasis,
-        FlexDirection, Item,
+        self, auto, column, component, container, fixed, row, FlexBasis, FlexDirection, Item,
     },
     BindingMatch, BindingTransition, Callback, Component, ComponentLink, Layout, ShouldRender,
 };
 pub use error::{Error, Result};
-pub use terminal::{Canvas, Colour, Key, Position, Rect, Size, Style};
+pub use terminal::{Background, Canvas, Colour, Foreground, Key, Position, Rect, Size, Style};

@@ -63,7 +63,7 @@ impl App {
 
                     // Draw
                     if let Some(screen_size) = new_size {
-                        eprintln!("resized to {}", screen_size);
+                        log::debug!("Screen resized {} -> {}", screen.size(), screen_size);
                         screen.resize(screen_size);
                     }
 
@@ -75,8 +75,8 @@ impl App {
                     let now = Instant::now();
                     let num_bytes_presented = frontend.present(&screen)?;
 
-                    log::info!(
-                        "drawn in {:?} | Presented {} bytes in {:?}",
+                    log::debug!(
+                        "Frame drawn in {:?} | Presented {} bytes in {:?}",
                         drawn_time,
                         num_bytes_presented,
                         now.elapsed(),
@@ -280,8 +280,9 @@ impl App {
             }
             LinkMessage::Exit => PollState::Exit,
             LinkMessage::RunExclusive(process) => {
+                frontend.suspend()?;
                 let maybe_message = process();
-                frontend.initialise()?;
+                frontend.resume()?;
                 // force_redraw = true;
                 if let Some((component_id, dyn_message)) = maybe_message {
                     self.components

@@ -14,10 +14,8 @@ use zi::{
         select::{Select, SelectProperties},
         text::{Text, TextProperties},
     },
-    layout::{self, FlexDirection},
-    terminal::{Background, Foreground, Key, Style},
-    BindingMatch, BindingTransition, Callback, Component, ComponentLink, Layout, Rect,
-    ShouldRender,
+    layout, Background, BindingMatch, BindingTransition, Callback, Component, ComponentLink,
+    FlexDirection, Foreground, Key, Layout, Rect, ShouldRender, Style,
 };
 
 use self::{
