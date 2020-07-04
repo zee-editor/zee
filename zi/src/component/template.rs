@@ -1,7 +1,6 @@
 use std::{
     any::{Any, TypeId},
     hash::{Hash, Hasher},
-    sync::Arc,
 };
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -67,7 +66,7 @@ impl std::fmt::Display for ComponentId {
 
 pub(crate) struct DynamicMessage(pub(crate) Box<dyn Any + Send + 'static>);
 pub(crate) struct DynamicProperties(Box<dyn Any + 'static>);
-pub struct DynamicTemplate(pub(crate) Box<dyn Template>);
+pub(crate) struct DynamicTemplate(pub(crate) Box<dyn Template>);
 
 impl Clone for DynamicTemplate {
     fn clone(&self) -> Self {

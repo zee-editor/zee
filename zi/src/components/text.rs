@@ -144,7 +144,7 @@ impl Component for Text {
             position_y += 1;
         }
 
-        Layout::Canvas(canvas)
+        canvas.into()
     }
 }
 

@@ -131,7 +131,7 @@ impl App {
                 break;
             };
 
-            layout.crawl(
+            layout.0.crawl(
                 frame2,
                 position_hash,
                 &mut |LaidComponent {

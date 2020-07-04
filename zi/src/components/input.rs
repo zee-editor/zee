@@ -154,7 +154,7 @@ impl Component for Input {
             char_offset += len_chars;
         }
 
-        Layout::Canvas(canvas)
+        canvas.into()
     }
 
     fn has_focus(&self) -> bool {

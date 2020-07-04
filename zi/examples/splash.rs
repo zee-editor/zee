@@ -106,7 +106,7 @@ impl Component for Splash {
             middle_y += 1;
         }
 
-        Layout::Canvas(canvas)
+        canvas.into()
     }
 }
 

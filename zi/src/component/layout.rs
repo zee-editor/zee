@@ -11,56 +11,60 @@ use super::{
 };
 use crate::terminal::{Canvas, Position, Rect, Size};
 
+/// Vertical layout with child components laid out from top to bottom.
 #[inline]
-pub fn column(children: impl ToSmallVec<Item>) -> Layout {
+pub fn column(children: impl Into<Items>) -> Layout {
     container(FlexDirection::Column, children)
 }
 
 #[inline]
-pub fn column_iter(children: impl Iterator<Item = Item>) -> Layout {
+pub fn column_iter(children: impl IntoIterator<Item = Item>) -> Layout {
     container_iter(FlexDirection::Column, children)
 }
 
 #[inline]
-pub fn column_reverse_iter(children: impl Iterator<Item = Item>) -> Layout {
+pub fn column_reverse_iter(children: impl IntoIterator<Item = Item>) -> Layout {
     container_iter(FlexDirection::ColumnReverse, children)
 }
 
 #[inline]
-pub fn row(children: impl ToSmallVec<Item>) -> Layout {
+pub fn row(children: impl Into<Items>) -> Layout {
     container(FlexDirection::Row, children)
 }
 
 #[inline]
-pub fn row_iter(children: impl Iterator<Item = Item>) -> Layout {
+pub fn row_iter(children: impl IntoIterator<Item = Item>) -> Layout {
     container_iter(FlexDirection::Row, children)
 }
 
 #[inline]
-pub fn row_reverse_iter(children: impl Iterator<Item = Item>) -> Layout {
+pub fn row_reverse_iter(children: impl IntoIterator<Item = Item>) -> Layout {
     container_iter(FlexDirection::RowReverse, children)
 }
 
 #[inline]
-pub fn container(direction: FlexDirection, children: impl ToSmallVec<Item>) -> Layout {
-    Layout::Container(Box::new(Container {
+pub fn container(direction: FlexDirection, children: impl Into<Items>) -> Layout {
+    Layout(LayoutNode::Container(Box::new(Container {
         direction,
-        children: children.to_smallvec(),
-    }))
+        children: children.into().0,
+    })))
 }
 
 #[inline]
-pub fn container_iter(direction: FlexDirection, children: impl Iterator<Item = Item>) -> Layout {
-    Layout::Container(Box::new(Container {
+pub fn container_iter(
+    direction: FlexDirection,
+    children: impl IntoIterator<Item = Item>,
+) -> Layout {
+    Layout(LayoutNode::Container(Box::new(Container {
         direction,
-        children: children.collect(),
-    }))
+        children: children.into_iter().collect(),
+    })))
 }
 
 #[inline]
 pub fn component<ComponentT: Component>(properties: ComponentT::Properties) -> Layout {
-    Layout::Component(DynamicTemplate(Box::new(ComponentDef::<ComponentT>::new(
-        None, properties,
+    Layout(LayoutNode::Component(DynamicTemplate(Box::new(
+        ComponentDef::<ComponentT>::new(None, properties),
     ))))
 }
 
@@ -69,9 +73,8 @@ pub fn component_with_key<ComponentT: Component>(
     key: usize,
     properties: ComponentT::Properties,
 ) -> Layout {
-    Layout::Component(DynamicTemplate(Box::new(ComponentDef::<ComponentT>::new(
-        Some(key.into()),
-        properties,
+    Layout(LayoutNode::Component(DynamicTemplate(Box::new(
+        ComponentDef::<ComponentT>::new(Some(key.into()), properties),
     ))))
 }
 
@@ -80,9 +83,8 @@ pub fn component_with_key_str<ComponentT: Component>(
     key: &str,
     properties: ComponentT::Properties,
 ) -> Layout {
-    Layout::Component(DynamicTemplate(Box::new(ComponentDef::<ComponentT>::new(
-        Some(key.into()),
-        properties,
+    Layout(LayoutNode::Component(DynamicTemplate(Box::new(
+        ComponentDef::<ComponentT>::new(Some(key.into()), properties),
     ))))
 }
 
@@ -120,13 +122,16 @@ impl From<&str> for ComponentKey {
 }
 
 #[derive(Clone)]
-pub enum Layout {
+pub struct Layout(pub(crate) LayoutNode);
+
+#[derive(Clone)]
+pub(crate) enum LayoutNode {
     Container(Box<Container>),
     Component(DynamicTemplate),
     Canvas(Canvas),
 }
 
-impl Layout {
+impl LayoutNode {
     pub(crate) fn crawl(
         &mut self,
         frame: Rect,
@@ -145,7 +150,7 @@ impl Layout {
                             .collect();
                     for (child, frame) in container.children.iter_mut().rev().zip(frames) {
                         // hasher.write_u64(Self::CONTAINER_ITEM_HASH);
-                        child.node.crawl(frame, hasher.finish(), view_fn, draw_fn);
+                        child.node.0.crawl(frame, hasher.finish(), view_fn, draw_fn);
                     }
                 } else {
                     let frames: SmallVec<[_; ARRAY_SIZE]> =
@@ -153,7 +158,7 @@ impl Layout {
                             .collect();
                     for (child, frame) in container.children.iter_mut().zip(frames) {
                         // hasher.write_u64(Self::CONTAINER_ITEM_HASH);
-                        child.node.crawl(frame, hasher.finish(), view_fn, draw_fn);
+                        child.node.0.crawl(frame, hasher.finish(), view_fn, draw_fn);
                     }
                 }
             }
@@ -186,7 +191,7 @@ impl Layout {
 
 impl From<Canvas> for Layout {
     fn from(canvas: Canvas) -> Self {
-        Self::Canvas(canvas)
+        Self(LayoutNode::Canvas(canvas))
     }
 }
 
@@ -248,55 +253,55 @@ pub(crate) struct LaidCanvas<'a> {
     pub(crate) canvas: &'a Canvas,
 }
 
-pub const ARRAY_SIZE: usize = 4;
+pub struct Items(SmallVec<[Item; ARRAY_SIZE]>);
+const ARRAY_SIZE: usize = 4;
 
-pub trait ToSmallVec<T> {
-    fn to_smallvec(self) -> SmallVec<[T; ARRAY_SIZE]>;
-}
-
-// impl<IteratorT> ToSmallVec<Item> for IteratorT
-// where
-//     IteratorT: Iterator<Item = Item>,
-// {
-//     fn to_smallvec(self) -> SmallVec<[Item; ARRAY_SIZE]> {
-//         self.collect()
-//     }
-// }
-
-impl ToSmallVec<Item> for [Item; 0] {
-    fn to_smallvec(self) -> SmallVec<[Item; ARRAY_SIZE]> {
-        SmallVec::new()
+impl From<SmallVec<[Item; ARRAY_SIZE]>> for Items {
+    #[inline]
+    fn from(array: SmallVec<[Item; ARRAY_SIZE]>) -> Items {
+        Self(array)
     }
 }
 
-impl ToSmallVec<Item> for [Item; 1] {
-    fn to_smallvec(self) -> SmallVec<[Item; ARRAY_SIZE]> {
-        match self {
-            [x0] => smallvec![x0],
+impl From<[Item; 0]> for Items {
+    #[inline]
+    fn from(_array: [Item; 0]) -> Items {
+        Self(SmallVec::new())
+    }
+}
+
+impl From<[Item; 1]> for Items {
+    #[inline]
+    fn from(array: [Item; 1]) -> Items {
+        match array {
+            [x0] => Self(smallvec![x0]),
         }
     }
 }
 
-impl ToSmallVec<Item> for [Item; 2] {
-    fn to_smallvec(self) -> SmallVec<[Item; ARRAY_SIZE]> {
-        match self {
-            [x0, x1] => smallvec![x0, x1],
+impl From<[Item; 2]> for Items {
+    #[inline]
+    fn from(array: [Item; 2]) -> Items {
+        match array {
+            [x0, x1] => Self(smallvec![x0, x1]),
         }
     }
 }
 
-impl ToSmallVec<Item> for [Item; 3] {
-    fn to_smallvec(self) -> SmallVec<[Item; ARRAY_SIZE]> {
-        match self {
-            [x0, x1, x2] => smallvec![x0, x1, x2],
+impl From<[Item; 3]> for Items {
+    #[inline]
+    fn from(array: [Item; 3]) -> Items {
+        match array {
+            [x0, x1, x2] => Self(smallvec![x0, x1, x2]),
         }
     }
 }
 
-impl ToSmallVec<Item> for [Item; 4] {
-    fn to_smallvec(self) -> SmallVec<[Item; ARRAY_SIZE]> {
-        match self {
-            [x0, x1, x2, x3] => smallvec![x0, x1, x2, x3],
+impl From<[Item; 4]> for Items {
+    #[inline]
+    fn from(array: [Item; 4]) -> Items {
+        match array {
+            [x0, x1, x2, x3] => Self(smallvec![x0, x1, x2, x3]),
         }
     }
 }
