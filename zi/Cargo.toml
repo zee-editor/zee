@@ -28,6 +28,7 @@ rev = "c5fc1a14931a2a11379b0c88024bdb40a5fecf77"
 [dev-dependencies]
 colorous = "1.0.2"
 criterion = "0.3.2"
+env_logger = "0.7.1"
 num-complex = "0.2.4"
 rayon = "1.3.0"
 

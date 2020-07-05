@@ -1,3 +1,5 @@
+//! Defines the `Component` trait and related types.
+
 pub mod layout;
 pub(crate) mod template;
 
@@ -95,7 +97,9 @@ pub trait Component: Sized + 'static {
     }
 }
 
-pub struct Callback<InputT, OutputT = ()>(Rc<dyn Fn(InputT) -> OutputT>);
+/// Callback wrapper. Useful for passing callbacks in child components
+/// `Properties`. An `Rc` wrapper is used to make it cloneable.
+pub struct Callback<InputT, OutputT = ()>(pub Rc<dyn Fn(InputT) -> OutputT>);
 
 impl<InputT, OutputT> Clone for Callback<InputT, OutputT> {
     fn clone(&self) -> Self {
@@ -104,8 +108,9 @@ impl<InputT, OutputT> Clone for Callback<InputT, OutputT> {
 }
 
 impl<InputT, OutputT> PartialEq for Callback<InputT, OutputT> {
-    fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.0, &other.0)
+    fn eq(&self, _other: &Self) -> bool {
+        false
+        // Rc::ptr_eq(&self.0, &other.0)
     }
 }
 
@@ -124,6 +129,11 @@ where
     }
 }
 
+/// A context for sending messages to a component or the runtime.
+///
+/// It can be used in a multi-threaded environment (implements `Sync` and
+/// `Send`). Additionally, it can send messages to the runtime, in particular
+/// it's used to gracefully stop a running [`App`](struct.App.html).
 #[derive(Debug)]
 pub struct ComponentLink<ComponentT> {
     sender: UnboundedSender<LinkMessage>,
@@ -132,6 +142,7 @@ pub struct ComponentLink<ComponentT> {
 }
 
 impl<ComponentT: Component> ComponentLink<ComponentT> {
+    /// Sends a message to the component.
     pub fn send(&self, message: ComponentT::Message) {
         self.sender
             .send(LinkMessage::Component(
@@ -142,6 +153,8 @@ impl<ComponentT: Component> ComponentLink<ComponentT> {
             .expect("App receiver needs to outlive senders for inter-component messages");
     }
 
+    /// Creates a `Callback` which will send a message to the linked component's
+    /// update method when invoked.
     pub fn callback<InputT>(
         &self,
         callback: impl Fn(InputT) -> ComponentT::Message + 'static,
@@ -150,6 +163,11 @@ impl<ComponentT: Component> ComponentLink<ComponentT> {
         Callback(Rc::new(move |input| link.send(callback(input))))
     }
 
+    /// Sends a message to the `App` runtime requesting it to stop executing.
+    ///
+    /// This method only sends a message and returns immediately, the app will
+    /// stop asynchronously and may deliver other pending messages before
+    /// exiting.
     pub fn exit(&self) {
         self.sender
             .send(LinkMessage::Exit)
@@ -157,6 +175,9 @@ impl<ComponentT: Component> ComponentLink<ComponentT> {
             .expect("App needs to outlive components");
     }
 
+    /// Runs a closure that requires exclusive access to the backend (i.e.
+    /// typically to stdin / stdout). For example spawning an external editor to
+    /// collect some text.
     pub fn run_exclusive(
         &self,
         process: impl FnOnce() -> Option<ComponentT::Message> + Send + 'static,
@@ -190,6 +211,7 @@ impl<ComponentT> Clone for ComponentLink<ComponentT> {
     }
 }
 
+/// Type to indicate whether a component should be rendered again.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShouldRender {
     Yes,
@@ -223,6 +245,15 @@ pub enum BindingTransition {
 pub struct BindingMatch<Message> {
     pub transition: BindingTransition,
     pub message: Option<Message>,
+}
+
+impl<Message> BindingMatch<Message> {
+    pub fn clear(message: impl Into<Option<Message>>) -> Self {
+        Self {
+            transition: BindingTransition::Clear,
+            message: message.into(),
+        }
+    }
 }
 
 pub(crate) enum LinkMessage {

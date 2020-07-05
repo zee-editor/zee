@@ -1,3 +1,6 @@
+//! The `App` application runtime, which runs the event loop and draws your
+//! components.
+
 use futures::{self, stream::StreamExt};
 use smallvec::SmallVec;
 use std::{
@@ -21,6 +24,8 @@ use crate::{
     terminal::{Canvas, Key, Position, Rect, Size},
 };
 
+/// The `App` application runtime, which runs the event loop and draws your
+/// components.
 pub struct App {
     controller: InputController,
     components: HashMap<ComponentId, MountedComponent>,
@@ -33,6 +38,17 @@ pub struct App {
 }
 
 impl App {
+    /// Creates a new application runtime. You should provide an initial layout
+    /// containing the root components.
+    ///
+    /// ```
+    /// # use zi::prelude::*;
+    /// use zi::components::text::{Text, TextProperties};
+    ///
+    /// let mut app = App::new(layout::component::<Text>(
+    ///    TextProperties::new().content("Hello, world!"),
+    /// ));
+    /// ```
     pub fn new(root: Layout) -> Self {
         let (link_sender, link_receiver) = mpsc::unbounded_channel();
         Self {
@@ -47,6 +63,23 @@ impl App {
         }
     }
 
+    /// Starts the event loop. This is the main entry point of a Zi application.
+    /// It draws and presents the components to the backend, handles user input
+    /// and delivers messages to components. This method returns either when
+    /// prompted using the [`exit`](struct.ComponentLink.html#method.exit)
+    /// method on [ComponentLink](struct.ComponentLink.html) or on error.
+    ///
+    /// ```no_run
+    /// # use zi::prelude::*;
+    /// # use zi::components::text::{Text, TextProperties};
+    /// # fn main() -> zi::Result<()> {
+    /// # let mut app = App::new(layout::component::<Text>(
+    /// #     TextProperties::new().content("Hello, world!"),
+    /// # ));
+    /// app.run_event_loop(zi::frontend::default()?)?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn run_event_loop(&mut self, mut frontend: impl Frontend) -> Result<()> {
         let mut screen = Canvas::new(frontend.size()?);
         let mut poll_state = PollState::Dirty(None);
@@ -55,6 +88,7 @@ impl App {
             .basic_scheduler()
             .enable_all()
             .build()?;
+        let mut num_frame = 0;
 
         loop {
             match poll_state {
@@ -68,7 +102,7 @@ impl App {
                     }
 
                     let frame = Rect::new(Position::new(0, 0), screen.size());
-                    self.draw(&mut screen, frame);
+                    let statistics = self.draw(&mut screen, frame);
                     let drawn_time = now.elapsed();
 
                     // Present
@@ -76,12 +110,15 @@ impl App {
                     let num_bytes_presented = frontend.present(&screen)?;
 
                     log::debug!(
-                        "Frame drawn in {:?} | Presented {} bytes in {:?}",
-                        drawn_time,
+                        "Frame {} drawn in {:.2}ms, presented {} bytes in {:.2}ms: {}",
+                        num_frame,
+                        drawn_time.as_secs_f64() * 1000.0,
                         num_bytes_presented,
-                        now.elapsed(),
+                        now.elapsed().as_secs_f64() * 1000.0,
+                        statistics,
                     );
                     last_drawn = Instant::now();
+                    num_frame += 1;
                 }
                 PollState::Exit => {
                     break;
@@ -96,7 +133,9 @@ impl App {
     }
 
     #[inline]
-    fn draw(&mut self, screen: &mut Canvas, frame: Rect) {
+    fn draw(&mut self, screen: &mut Canvas, frame: Rect) -> DrawStatistics {
+        let mut statistics = DrawStatistics::default();
+
         self.focused_components.clear();
         self.tickable_components.clear();
 
@@ -122,7 +161,7 @@ impl App {
                 let layout = layout_cache
                     .entry(component_id)
                     .or_insert_with(|| component.view());
-                let changed = component.should_render.into();
+                let changed = component.should_render;
                 if changed {
                     *layout = component.view()
                 }
@@ -139,6 +178,8 @@ impl App {
                           position_hash,
                           template,
                       }| {
+                    statistics.total += 1;
+
                     let component_id = template.generate_id(position_hash);
                     let mut new_component = false;
                     let component = components.entry(component_id).or_insert_with(|| {
@@ -152,12 +193,20 @@ impl App {
                     });
 
                     if !new_component {
+                        let mut changed = false;
                         if parent_changed {
-                            component.change(template.dynamic_properties());
+                            changed = component.change(template.dynamic_properties());
                         }
                         if frame != component.frame {
-                            component.resize(frame);
+                            changed = component.resize(frame) || changed;
                         }
+                        if changed {
+                            statistics.changed += 1;
+                        } else {
+                            statistics.nop += 1;
+                        }
+                    } else {
+                        statistics.new += 1;
                     }
 
                     if component.has_focus() {
@@ -180,6 +229,8 @@ impl App {
                 },
             );
         }
+
+        statistics
     }
 
     /// Poll as many events as we can respecting REDRAW_LATENCY and REDRAW_LATENCY_SUSTAINED_IO
@@ -261,7 +312,7 @@ impl App {
     ) -> Result<PollState> {
         Ok(match message {
             LinkMessage::Component(component_id, dyn_message) => {
-                if self
+                let should_render = self
                     .components
                     .get_mut(&component_id)
                     .map(|component| component.update(dyn_message))
@@ -271,8 +322,8 @@ impl App {
                             component_id,
                         );
                         false
-                    })
-                {
+                    });
+                if should_render {
                     PollState::Dirty(None)
                 } else {
                     PollState::Clean
@@ -471,6 +522,25 @@ impl std::fmt::Display for InputController {
 
 const REDRAW_LATENCY: Duration = Duration::from_millis(10);
 const SUSTAINED_IO_REDRAW_LATENCY: Duration = Duration::from_millis(100);
+
+#[derive(Default)]
+struct DrawStatistics {
+    total: usize,
+    new: usize,
+    changed: usize,
+    deleted: usize,
+    nop: usize,
+}
+
+impl std::fmt::Display for DrawStatistics {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            formatter,
+            "{} components: {} new {} upd {} del {} nop",
+            self.total, self.new, self.changed, self.deleted, self.nop
+        )
+    }
+}
 
 #[cfg(test)]
 mod tests {

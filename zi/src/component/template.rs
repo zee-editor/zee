@@ -209,7 +209,7 @@ pub(crate) struct ComponentDef<ComponentT: Component> {
 impl<ComponentT: Component> Clone for ComponentDef<ComponentT> {
     fn clone(&self) -> Self {
         Self {
-            key: self.key.clone(),
+            key: self.key,
             properties: self.properties.clone(),
         }
     }

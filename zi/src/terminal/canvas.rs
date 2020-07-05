@@ -6,14 +6,20 @@ use unicode_width::UnicodeWidthStr;
 use super::{Position, Size};
 use crate::terminal::Rect;
 
+/// An extended grapheme cluster represented as a `SmallString`.
 pub type GraphemeCluster = SmallString<[u8; 16]>;
 
+/// A "text element", which consists of an extended grapheme cluster and
+/// associated styling.
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Textel {
     pub grapheme: GraphemeCluster,
     pub style: Style,
 }
 
+/// A lightweight abstract terminal. All components in Zi ultimately draw to a
+/// `Canvas`, typically via their child components or directly in the case of
+/// lower level components.
 #[derive(Debug, Clone)]
 pub struct Canvas {
     buffer: Vec<Option<Textel>>,
@@ -22,6 +28,14 @@ pub struct Canvas {
 }
 
 impl Canvas {
+    /// A lightweight abstract terminal. All components in Zi ultimately draw to a
+    /// `Canvas`, typically via their child components or directly in the case of
+    /// lower level components.
+    ///
+    /// ```
+    /// # use zi::{Canvas, Size};
+    /// let canvas = Canvas::new(Size::new(10, 20));
+    /// ```
     pub fn new(size: Size) -> Self {
         Self {
             buffer: iter::repeat(Textel::default())
@@ -167,6 +181,8 @@ impl Canvas {
     }
 }
 
+/// Specifies how content should be styled. This represents a subset of the ANSI
+/// available styles which is widely supported by terminal emulators.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Style {
     pub background: Background,
@@ -176,6 +192,8 @@ pub struct Style {
 }
 
 impl Style {
+    /// Default style, white on black. This function exists as
+    /// `Default::default()` is not const.
     pub const fn default() -> Self {
         Style::normal(Colour::black(), Colour::white())
     }
@@ -228,19 +246,22 @@ impl Default for Style {
     }
 }
 
+/// An RGB encoded colour, 1-byte per channel.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Colour {
     pub red: u8,
-    pub blue: u8,
     pub green: u8,
+    pub blue: u8,
 }
 
 impl Colour {
+    /// Creates a colour from the provided RGB values.
     #[inline]
     pub const fn rgb(red: u8, green: u8, blue: u8) -> Self {
         Self { red, green, blue }
     }
 
+    /// Returns black.
     #[inline]
     pub const fn black() -> Self {
         Self {
@@ -250,6 +271,7 @@ impl Colour {
         }
     }
 
+    /// Returns white.
     #[inline]
     pub const fn white() -> Self {
         Self {
@@ -260,7 +282,10 @@ impl Colour {
     }
 }
 
+/// Type alias for background colours.
 pub type Background = Colour;
+
+/// Type alias for foreground colours.
 pub type Foreground = Colour;
 
 #[inline]
@@ -283,8 +308,10 @@ fn clear_textel(textel: &mut Option<Textel>, style: Style, value: &str) {
     }
 }
 
-const UPPER_HALF_BLOCK: &str = "▀";
-
+/// Wraps a [`Canvas`](terminal/struct.Canvas.html) and exposes a grid of square
+/// "pixels". The size of the grid `(2 * height, width)` of the dimensions of the
+/// wrapped canvas. This is implemented using Unicode's upper half block
+/// character.
 pub struct SquarePixelGrid {
     canvas: Canvas,
 }
@@ -303,6 +330,8 @@ impl SquarePixelGrid {
         Self { canvas }
     }
 
+    /// Returns the size of this square pixel grid. The grid has the same width
+    /// as the wrapped canvas and twice the height.
     #[inline]
     pub fn size(&self) -> Size {
         let canvas_size = self.canvas.size();
@@ -328,6 +357,8 @@ impl SquarePixelGrid {
         self.canvas
     }
 }
+
+const UPPER_HALF_BLOCK: &str = "▀";
 
 #[cfg(test)]
 mod tests {

@@ -1,3 +1,5 @@
+//! Module with utilities to convert a `Canvas` to a set of abstract paint operations.
+
 use unicode_width::UnicodeWidthStr;
 
 use super::Result;

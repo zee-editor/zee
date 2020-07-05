@@ -128,17 +128,18 @@ impl Component for SplashGrid {
     }
 
     fn view(&self) -> Layout {
-        layout::component::<Border>(BorderProperties {
-            style: self.theme.credits,
-            title: None,
-            component: layout::column([layout::auto(layout::component::<Splash>(Properties {
-                theme: self.theme.clone(),
-                logo: SPLASH_LOGO.into(),
-                tagline: SPLASH_TAGLINE.into(),
-                credits: SPLASH_CREDITS.into(),
-                offset: 0,
-            }))]),
-        })
+        layout::component::<Border>(
+            BorderProperties::new(layout::column([layout::auto(layout::component::<Splash>(
+                Properties {
+                    theme: self.theme.clone(),
+                    logo: SPLASH_LOGO.into(),
+                    tagline: SPLASH_TAGLINE.into(),
+                    credits: SPLASH_CREDITS.into(),
+                    offset: 0,
+                },
+            ))]))
+            .style(self.theme.credits),
+        )
     }
 
     fn has_focus(&self) -> bool {

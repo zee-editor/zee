@@ -1,3 +1,5 @@
+//! The `Layout` type and flexbox-like utilities for laying out components.
+
 use smallvec::{smallvec, SmallVec};
 use std::{
     cmp,
@@ -11,37 +13,67 @@ use super::{
 };
 use crate::terminal::{Canvas, Position, Rect, Size};
 
-/// Vertical layout with child components laid out from top to bottom.
+/// Creates a container with vertical layout. Child components are laid out from top to
+/// bottom. Pass in the children as an array of items.
 #[inline]
 pub fn column(children: impl Into<Items>) -> Layout {
     container(FlexDirection::Column, children)
 }
 
+/// Creates a container with vertical layout. Child components are laid out from
+/// top to bottom. Pass in the children as an something that can be converted to
+/// an iterator of items.
 #[inline]
 pub fn column_iter(children: impl IntoIterator<Item = Item>) -> Layout {
     container_iter(FlexDirection::Column, children)
 }
 
+/// Creates a container with reversed vertical layout. Child components are laid
+/// out from bottom to top. Pass in the children as an array of items.
+#[inline]
+pub fn column_reverse(children: impl Into<Items>) -> Layout {
+    container(FlexDirection::ColumnReverse, children)
+}
+
+/// Creates a container with reversed vertical layout. Child components are laid
+/// out from bottom to top. Pass in the children as an something that can be
+/// converted to an iterator of items.
 #[inline]
 pub fn column_reverse_iter(children: impl IntoIterator<Item = Item>) -> Layout {
     container_iter(FlexDirection::ColumnReverse, children)
 }
 
+/// Creates a container with horizontal layout. Child components are laid out
+/// from left to right. Pass in the children as an array of items.
 #[inline]
 pub fn row(children: impl Into<Items>) -> Layout {
     container(FlexDirection::Row, children)
 }
 
+/// Creates a container with reversed horizontal layout. Child components are
+/// laid out from right to left. Pass in the children as an array of items.
+#[inline]
+pub fn row_reverse(children: impl Into<Items>) -> Layout {
+    container(FlexDirection::RowReverse, children)
+}
+
+/// Creates a container with horizontal layout. Child components are laid out
+/// from left to right. Pass in the children as an something that can be
+/// converted to an iterator of items.
 #[inline]
 pub fn row_iter(children: impl IntoIterator<Item = Item>) -> Layout {
     container_iter(FlexDirection::Row, children)
 }
 
+/// Creates a container with reversed horizontal layout. Child components are
+/// laid out from right to left. Pass in the children as an something that can
+/// be converted to an iterator of items.
 #[inline]
 pub fn row_reverse_iter(children: impl IntoIterator<Item = Item>) -> Layout {
     container_iter(FlexDirection::RowReverse, children)
 }
 
+/// Creates a container from an array of items.
 #[inline]
 pub fn container(direction: FlexDirection, children: impl Into<Items>) -> Layout {
     Layout(LayoutNode::Container(Box::new(Container {
@@ -50,6 +82,8 @@ pub fn container(direction: FlexDirection, children: impl Into<Items>) -> Layout
     })))
 }
 
+/// Creates a container from something that can be converted to an iterator of
+/// items.
 #[inline]
 pub fn container_iter(
     direction: FlexDirection,
@@ -61,6 +95,7 @@ pub fn container_iter(
     })))
 }
 
+/// Create a component definition from `Properties`.
 #[inline]
 pub fn component<ComponentT: Component>(properties: ComponentT::Properties) -> Layout {
     Layout(LayoutNode::Component(DynamicTemplate(Box::new(
@@ -68,9 +103,13 @@ pub fn component<ComponentT: Component>(properties: ComponentT::Properties) -> L
     ))))
 }
 
+/// Creates a component definition from `Properties` with a custom identity
+/// specified by a usize key (in addition to the component's ancestors). Useful to
+/// avoid rerendering components of the same type in a container when changing
+/// the number of items in the container.
 #[inline]
 pub fn component_with_key<ComponentT: Component>(
-    key: usize,
+    key: impl Into<ComponentKey>,
     properties: ComponentT::Properties,
 ) -> Layout {
     Layout(LayoutNode::Component(DynamicTemplate(Box::new(
@@ -78,6 +117,10 @@ pub fn component_with_key<ComponentT: Component>(
     ))))
 }
 
+/// Creates a component definition from `Properties` with a custom identity
+/// specified by a &str key (in addition to the component's ancestors). Useful to
+/// avoid rerendering components of the same type in a container when changing
+/// the number of items in the container.
 #[inline]
 pub fn component_with_key_str<ComponentT: Component>(
     key: &str,
@@ -88,6 +131,8 @@ pub fn component_with_key_str<ComponentT: Component>(
     ))))
 }
 
+/// Creates an item that will share the available space equally with other
+/// sibling items with `FlexBasis::auto`.
 #[inline]
 pub fn auto(layout: Layout) -> Item {
     Item {
@@ -96,6 +141,7 @@ pub fn auto(layout: Layout) -> Item {
     }
 }
 
+/// Creates an item that will have a fixed size.
 #[inline]
 pub fn fixed(size: usize, layout: Layout) -> Item {
     Item {
@@ -104,6 +150,7 @@ pub fn fixed(size: usize, layout: Layout) -> Item {
     }
 }
 
+/// Wrapper type for user defined component identity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ComponentKey(usize);
 
@@ -121,6 +168,12 @@ impl From<&str> for ComponentKey {
     }
 }
 
+/// A layout tree.
+///
+/// Each node in the layout tree is one of a:
+///   - container
+///   - component
+///   - canvas
 #[derive(Clone)]
 pub struct Layout(pub(crate) LayoutNode);
 
@@ -164,7 +217,9 @@ impl LayoutNode {
             }
             Self::Component(template) => {
                 template.component_type_id().hash(&mut hasher);
-                template.key().map(|key| key.hash(&mut hasher));
+                if let Some(key) = template.key() {
+                    key.hash(&mut hasher);
+                }
                 view_fn(LaidComponent {
                     frame,
                     position_hash: hasher.finish(),
@@ -172,21 +227,15 @@ impl LayoutNode {
                 });
             }
             Self::Canvas(canvas) => {
-                hasher.write_u64(Self::CANVAS_HASH);
-                draw_fn(LaidCanvas {
-                    frame,
-                    position_hash: hasher.finish(),
-                    canvas,
-                });
+                draw_fn(LaidCanvas { frame, canvas });
             }
         };
     }
 
-    // Some random numbers to initialise the hash (0 & 1 would also do, but
-    // hopefully this is less pathological if a simpler hash the `DefaultHasher`
-    // was used).
+    // Some random number to initialise the hash (0 would also do, but hopefully
+    // this is less pathological if a simpler hash the `DefaultHasher` was
+    // used).
     const CONTAINER_HASH: u64 = 0x5aa2d5349a05cde8;
-    const CANVAS_HASH: u64 = 0x38c0758c1492cbf1;
 }
 
 impl From<Canvas> for Layout {
@@ -195,26 +244,32 @@ impl From<Canvas> for Layout {
     }
 }
 
+/// A layout container.
 #[derive(Clone)]
 pub struct Container {
     children: SmallVec<[Item; ARRAY_SIZE]>,
     direction: FlexDirection,
 }
 
+/// An item inside a container.
 #[derive(Clone)]
 pub struct Item {
     node: Layout,
     flex: FlexBasis,
 }
 
+/// Enum to control the size of an item inside a container.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum FlexBasis {
     Auto,
     Fixed(usize),
 }
 
+/// Enum to control how items are placed in a container. It defines the main
+/// axis and the direction (normal or reversed).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum FlexDirection {
+    /// T
     Column,
     ColumnReverse,
     Row,
@@ -249,7 +304,6 @@ pub(crate) struct LaidComponent<'a> {
 
 pub(crate) struct LaidCanvas<'a> {
     pub(crate) frame: Rect,
-    pub(crate) position_hash: u64,
     pub(crate) canvas: &'a Canvas,
 }
 
@@ -302,6 +356,42 @@ impl From<[Item; 4]> for Items {
     fn from(array: [Item; 4]) -> Items {
         match array {
             [x0, x1, x2, x3] => Self(smallvec![x0, x1, x2, x3]),
+        }
+    }
+}
+
+impl From<[Item; 5]> for Items {
+    #[inline]
+    fn from(array: [Item; 5]) -> Items {
+        match array {
+            [x0, x1, x2, x3, x4] => Self(smallvec![x0, x1, x2, x3, x4]),
+        }
+    }
+}
+
+impl From<[Item; 6]> for Items {
+    #[inline]
+    fn from(array: [Item; 6]) -> Items {
+        match array {
+            [x0, x1, x2, x3, x4, x5] => Self(smallvec![x0, x1, x2, x3, x4, x5]),
+        }
+    }
+}
+
+impl From<[Item; 7]> for Items {
+    #[inline]
+    fn from(array: [Item; 7]) -> Items {
+        match array {
+            [x0, x1, x2, x3, x4, x5, x6] => Self(smallvec![x0, x1, x2, x3, x4, x5, x6]),
+        }
+    }
+}
+
+impl From<[Item; 8]> for Items {
+    #[inline]
+    fn from(array: [Item; 8]) -> Items {
+        match array {
+            [x0, x1, x2, x3, x4, x5, x6, x7] => Self(smallvec![x0, x1, x2, x3, x4, x5, x6, x7]),
         }
     }
 }

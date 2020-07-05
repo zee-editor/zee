@@ -13,13 +13,19 @@ pub struct Cursor {
     visual_horizontal_offset: Option<usize>,
 }
 
-impl Cursor {
-    pub fn new() -> Self {
+impl Default for Cursor {
+    fn default() -> Self {
         Self {
             range: CharIndex(0)..CharIndex(1),
             visual_horizontal_offset: None,
             selection: None,
         }
+    }
+}
+
+impl Cursor {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     #[cfg(test)]
@@ -119,11 +125,7 @@ impl Cursor {
     pub fn move_to_end_of_line<'a>(&mut self, text: &'a impl TextStorage<'a>) {
         self.range = {
             let line_index = text.char_to_line(
-                cmp::min(
-                    text.len_chars().0.saturating_sub(1).into(),
-                    self.range.start.0,
-                )
-                .into(),
+                cmp::min(text.len_chars().0.saturating_sub(1), self.range.start.0).into(),
             );
             let line_length = text.line(line_index).len_chars();
             let char_index = text.line_to_char(line_index);

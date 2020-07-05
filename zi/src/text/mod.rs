@@ -1,6 +1,6 @@
 pub mod cursor;
 pub mod rope;
-pub mod string;
+// pub mod string;
 
 pub use cursor::Cursor;
 

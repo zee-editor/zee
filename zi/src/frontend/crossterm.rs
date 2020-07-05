@@ -1,3 +1,5 @@
+//! Terminal frontend implementation using [crossterm](https://docs.rs/crossterm)
+
 use crossterm::{self, queue, QueueableCommand};
 use futures::stream::{Stream, StreamExt};
 use std::{
@@ -12,16 +14,22 @@ use super::{
 };
 use crate::terminal::{Canvas, Colour, Key, Size, Style};
 
+/// Creates a new frontend with an incremental painter. It only draws those
+/// parts of the terminal that have changed since last drawn.
 pub fn incremental() -> Result<Crossterm<IncrementalPainter>> {
     Crossterm::<IncrementalPainter>::new()
 }
 
+/// Creates a new frontend with an incremental painter. It only draws those
+/// parts of the terminal that have changed since last drawn.
 pub fn full() -> Result<Crossterm<FullPainter>> {
     Crossterm::<FullPainter>::new()
 }
 
+/// Crossterm error type
 pub type Error = crossterm::ErrorKind;
 
+/// Frontend based on [crossterm](https://docs.rs/crossterm)
 pub struct Crossterm<PainterT: Painter = IncrementalPainter> {
     target: MeteredWriter<BufWriter<Stdout>>,
     painter: PainterT,
@@ -29,6 +37,11 @@ pub struct Crossterm<PainterT: Painter = IncrementalPainter> {
 }
 
 impl<PainterT: Painter> Crossterm<PainterT> {
+    /// Create a new frontend instance.
+    ///
+    /// This method initialises the underlying tty device, enables raw mode,
+    /// hides the cursor and enters alternative screen mode. Additionally, an
+    /// async event stream with input events from stdin is started.
     pub fn new() -> Result<Self> {
         let mut frontend = Self {
             target: MeteredWriter::new(BufWriter::with_capacity(1 << 20, io::stdout())),

@@ -20,7 +20,7 @@ pub struct CheckboxProperties {
 
 #[derive(Debug)]
 pub struct Checkbox {
-    properties: <Self as Component>::Properties,
+    properties: CheckboxProperties,
     frame: Rect,
 }
 
@@ -47,18 +47,18 @@ impl Component for Checkbox {
     }
 
     fn view(&self) -> Layout {
-        let Self {
-            frame,
-            properties: Self::Properties { style, checked },
-        } = *self;
-
-        let mut canvas = Canvas::new(frame.size);
-        canvas.clear(style);
-        match checked {
-            true => canvas.draw_str(0, 0, style, CHECKED),
-            false => canvas.draw_str(0, 0, style, UNCHECKED),
-        };
-
+        let mut canvas = Canvas::new(self.frame.size);
+        canvas.clear(self.properties.style);
+        canvas.draw_str(
+            0,
+            0,
+            self.properties.style,
+            if self.properties.checked {
+                CHECKED
+            } else {
+                UNCHECKED
+            },
+        );
         canvas.into()
     }
 }
@@ -294,8 +294,6 @@ impl Component for TodoMvc {
     }
 
     fn update(&mut self, message: Self::Message) -> ShouldRender {
-        eprintln!("Message: {:?}", message);
-
         match message {
             Message::Edit => {
                 self.editing = false;
@@ -500,6 +498,7 @@ const LOGO: &str = r#"
 "#;
 
 fn main() -> Result<()> {
+    env_logger::init();
     let mut app = App::new(layout::component::<TodoMvc>(Default::default()));
     app.run_event_loop(frontend::default()?)
 }
