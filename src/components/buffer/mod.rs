@@ -20,7 +20,7 @@ use super::{
     edit_tree_viewer::{EditTreeViewer, Theme as EditTreeViewerTheme},
 };
 use crate::{
-    editor2::Context,
+    editor::Context,
     error::Result,
     mode::Mode,
     syntax::{
@@ -154,6 +154,13 @@ impl Buffer {
             Message::CopySelection => self.copy_selection(),
             Message::CutSelection => self.cut_selection(),
             Message::InsertTab if DISABLE_TABS => {
+                let diff = self
+                    .cursor
+                    .insert_chars(&mut self.text, iter::repeat(' ').take(TAB_WIDTH));
+                self.cursor.move_right_n(&self.text, TAB_WIDTH);
+                diff
+            }
+            Message::InsertTab if !DISABLE_TABS => {
                 let diff = self
                     .cursor
                     .insert_chars(&mut self.text, iter::repeat(' ').take(TAB_WIDTH));
@@ -475,6 +482,7 @@ impl Buffer {
     }
 }
 
+#[derive(Debug)]
 pub enum Message {
     // Movement
     Up,
@@ -671,48 +679,45 @@ impl Component for Buffer {
     fn input_binding(&self, pressed: &[Key]) -> BindingMatch<Self::Message> {
         let transition = BindingTransition::Clear;
         let message = match pressed {
-            &[Key::Ctrl('p')] | &[Key::Up] => Message::Up,
-            &[Key::Ctrl('n')] | &[Key::Down] => Message::Down,
-            &[Key::Ctrl('b')] | &[Key::Left] => Message::Left,
-            &[Key::Ctrl('f')] | &[Key::Right] => Message::Right,
-            &[Key::Ctrl('v')] | &[Key::PageDown] => Message::PageDown,
-            &[Key::Alt('v')] | &[Key::PageUp] => Message::PageUp,
-            &[Key::Ctrl('a')] | &[Key::Home] => Message::StartOfLine,
-            &[Key::Ctrl('e')] | &[Key::End] => Message::EndOfLine,
-            &[Key::Alt('<')] => Message::StartOfBuffer,
-            &[Key::Alt('>')] => Message::EndOfBuffer,
-            &[Key::Ctrl('l')] => Message::CenterCursorVisually,
+            // Cursor movement
+            [Key::Ctrl('p')] | [Key::Up] => Message::Up,
+            [Key::Ctrl('n')] | [Key::Down] => Message::Down,
+            [Key::Ctrl('b')] | [Key::Left] => Message::Left,
+            [Key::Ctrl('f')] | [Key::Right] => Message::Right,
+            [Key::Ctrl('v')] | [Key::PageDown] => Message::PageDown,
+            [Key::Alt('v')] | [Key::PageUp] => Message::PageUp,
+            [Key::Ctrl('a')] | [Key::Home] => Message::StartOfLine,
+            [Key::Ctrl('e')] | [Key::End] => Message::EndOfLine,
+            [Key::Alt('<')] => Message::StartOfBuffer,
+            [Key::Alt('>')] => Message::EndOfBuffer,
+            [Key::Ctrl('l')] => Message::CenterCursorVisually,
 
             // Editing
-            &[Key::Null] => Message::BeginSelection,
-            &[Key::Ctrl('g')] => Message::ClearSelection,
-            &[Key::Ctrl('x'), Key::Char('h')] => Message::SelectAll,
-            &[Key::Alt('w')] => Message::CopySelection,
-            &[Key::Ctrl('w')] => Message::CutSelection,
-            &[Key::Ctrl('y')] => Message::Yank,
-            &[Key::Ctrl('d')] | &[Key::Delete] => Message::DeleteForward,
-            &[Key::Backspace] => Message::DeleteBackward,
-            &[Key::Ctrl('k')] => Message::DeleteLine,
-            &[Key::Char('\n')] => Message::InsertNewLine,
-            &[Key::Char('\t')] => Message::InsertTab,
-            &[Key::Char(character)]
-                if character != '\n' && (!DISABLE_TABS || character != '\t') =>
-            {
-                Message::InsertChar(character)
-            }
+            [Key::Null] => Message::BeginSelection,
+            [Key::Ctrl('g')] => Message::ClearSelection,
+            [Key::Ctrl('x'), Key::Char('h')] => Message::SelectAll,
+            [Key::Alt('w')] => Message::CopySelection,
+            [Key::Ctrl('w')] => Message::CutSelection,
+            [Key::Ctrl('y')] => Message::Yank,
+            [Key::Ctrl('d')] | [Key::Delete] => Message::DeleteForward,
+            [Key::Backspace] => Message::DeleteBackward,
+            [Key::Ctrl('k')] => Message::DeleteLine,
+            [Key::Char('\n')] => Message::InsertNewLine,
+            [Key::Char('\t')] if DISABLE_TABS => Message::InsertTab,
+            &[Key::Char(character)] if character != '\n' => Message::InsertChar(character),
 
             // Undo / Redo
-            &[Key::Ctrl('x'), Key::Char('u')] | &[Key::Ctrl('x'), Key::Ctrl('u')] => {
+            [Key::Ctrl('x'), Key::Char('u')] | [Key::Ctrl('x'), Key::Ctrl('u')] => {
                 Message::ToggleEditTree
             }
-            &[Key::Ctrl('/')] | &[Key::Ctrl('z')] => Message::Undo,
-            &[Key::Ctrl('q')] => Message::Redo,
+            [Key::Ctrl('/')] | [Key::Ctrl('z')] => Message::Undo,
+            [Key::Ctrl('q')] => Message::Redo,
 
             // Buffer
-            &[Key::Ctrl('x'), Key::Ctrl('s')] | &[Key::Ctrl('x'), Key::Char('s')] => {
+            [Key::Ctrl('x'), Key::Ctrl('s')] | [Key::Ctrl('x'), Key::Char('s')] => {
                 Message::SaveBuffer
             }
-            &[Key::Ctrl('x')] => {
+            [Key::Ctrl('x')] => {
                 return {
                     BindingMatch {
                         transition: BindingTransition::Continue,

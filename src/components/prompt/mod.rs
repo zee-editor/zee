@@ -23,7 +23,7 @@ use self::{
     status::{Status, StatusProperties},
 };
 use crate::{
-    editor2::Context,
+    editor::Context,
     error::Result,
     task::TaskId,
     utils::{self},

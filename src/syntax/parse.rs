@@ -1,6 +1,7 @@
 use ropey::Rope;
 use smallvec::SmallVec;
 use std::{
+    fmt,
     ops::{Deref, DerefMut, Range},
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -23,6 +24,16 @@ pub struct ParserStatus {
     task_id: TaskId,
     parser: CancelableParser,
     parsed: Option<ParsedSyntax>, // None if the parsing operation has been cancelled
+}
+
+impl fmt::Debug for ParserStatus {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            formatter,
+            "ParserStatus {{ task_id: {:?}, .. }}",
+            self.task_id
+        )
+    }
 }
 
 pub struct ParsedSyntax {

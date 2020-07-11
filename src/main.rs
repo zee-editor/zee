@@ -1,5 +1,5 @@
 mod components;
-mod editor2;
+mod editor;
 mod error;
 mod mode;
 mod settings;
@@ -10,13 +10,13 @@ mod undo;
 mod utils;
 
 use clap;
-use flexi_logger::{opt_format, Logger};
+use flexi_logger::Logger;
 use std::{env, path::PathBuf, rc::Rc};
 use structopt::StructOpt;
 use zi::{layout, App};
 
 use crate::{
-    editor2::{Context, Editor},
+    editor::{Context, Editor},
     error::Result,
     task::TaskPool,
 };
@@ -44,7 +44,6 @@ struct Args {
 fn configure_logging() -> Result<()> {
     Logger::with_env_or_str("myprog=debug, mylib=debug")
         .log_to_file()
-        .format(opt_format)
         .suppress_timestamp()
         .start()
         .map_err(anyhow::Error::from)?;
