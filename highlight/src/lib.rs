@@ -4,7 +4,6 @@ mod selector;
 use fnv::FnvHashMap;
 use lazy_static::lazy_static;
 use serde_derive::{self, Deserialize, Serialize};
-use serde_json;
 use std::{cmp, collections::HashMap, convert::TryFrom};
 
 use error::Result;
