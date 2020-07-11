@@ -1,5 +1,4 @@
 use anyhow::anyhow;
-use dirs;
 use serde_derive::{Deserialize, Serialize};
 use std::{
     fs::{self, File},

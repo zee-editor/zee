@@ -255,6 +255,7 @@ mod tests {
         tree.insert(position, " so...\n");
         let position = tree.len_chars() - 1;
         tree.insert(position, "dunno.");
+        tree.new_revision(OpaqueDiff::empty(), Cursor::end_of_buffer(&tree));
 
         assert_eq!("The flowers are... so...\ndunno.\n", &tree.to_string());
         tree.undo();
@@ -279,12 +280,9 @@ mod tests {
 
         assert_eq!("The flowers are... so...\ndunno.\n", &tree.to_string());
         tree.undo();
-        tree.undo();
         assert_eq!("The flowers are...\n", &tree.to_string());
         tree.redo();
-        tree.redo();
         assert_eq!("The flowers are... so...\ndunno.\n", &tree.to_string());
-        tree.undo();
         tree.undo();
         assert_eq!("The flowers are...\n", &tree.to_string());
         tree.undo();

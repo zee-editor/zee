@@ -9,7 +9,6 @@ mod task;
 mod undo;
 mod utils;
 
-use clap;
 use flexi_logger::Logger;
 use std::{env, path::PathBuf, rc::Rc};
 use structopt::StructOpt;

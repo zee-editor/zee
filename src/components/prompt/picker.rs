@@ -13,7 +13,7 @@ use crate::{
 pub struct FilePicker {
     paths: Vec<PathBuf>,
     filtered: Vec<(usize, i64)>, // (index, score)
-    matcher: SkimMatcherV2,
+    matcher: Box<SkimMatcherV2>, // Boxed as it's big and we store a FilePicker in an enum variant
     prefix: PathBuf,
 }
 
@@ -129,7 +129,7 @@ fn directory_files_iter(path: impl AsRef<Path>) -> Result<impl Iterator<Item = R
         fs::read_dir(path.as_ref().parent().unwrap_or_else(|| path.as_ref())).map(|walk| {
             walk.map(|entry| {
                 entry
-                    .map(|entry| entry.path().to_path_buf())
+                    .map(|entry| entry.path())
                     .context("Cannot read entry while walking directory")
             })
         })?,

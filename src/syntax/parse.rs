@@ -71,9 +71,8 @@ impl SyntaxTree {
     }
 
     pub fn ensure_tree(&mut self, task_pool: &TaskPool, tree_fn: impl FnOnce() -> Rope) {
-        match (self.tree.as_ref(), self.current_parse_task.as_ref()) {
-            (None, None) => self.spawn_parse_task(task_pool, tree_fn(), true),
-            _ => {}
+        if let (None, None) = (self.tree.as_ref(), self.current_parse_task.as_ref()) {
+            self.spawn_parse_task(task_pool, tree_fn(), true);
         }
     }
 

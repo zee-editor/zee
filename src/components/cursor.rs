@@ -354,10 +354,6 @@ impl DeleteOperation {
             deleted: Rope::new(),
         }
     }
-
-    pub fn is_empty(&self) -> bool {
-        self.deleted.len_bytes() == 0 && self.diff.is_empty()
-    }
 }
 
 /// Finds the previous grapheme boundary before the given char position.

@@ -211,7 +211,7 @@ impl Theme {
                     text_current_line: normal(lighter_background, default_foreground),
                     cursor_focused: normal(light_foreground, default_background),
                     cursor_unfocused: normal(comments, default_background),
-                    selection_background: selection_background,
+                    selection_background,
                     code_invalid: underline(default_background, variables),
                     code_constant: normal(default_background, strings),
                     code_keyword: normal(default_background, variables),

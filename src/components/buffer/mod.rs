@@ -547,11 +547,11 @@ impl Component for Buffer {
     type Properties = Properties;
 
     fn create(properties: Self::Properties, frame: Rect, link: ComponentLink<Self>) -> Self {
-        let link2 = link.clone();
+        let link_clone = link.clone();
         let mut syntax = properties
             .mode
             .language()
-            .map(move |language| SyntaxTree::new(link2.clone(), *language));
+            .map(move |language| SyntaxTree::new(link_clone, *language));
         if let Some(syntax) = syntax.as_mut() {
             syntax.ensure_tree(&properties.context.task_pool, || properties.content.clone());
         };
@@ -605,8 +605,7 @@ impl Component for Buffer {
         text_canvas.clear(self.properties.theme.syntax.text);
         let visual_cursor_x = self.draw_text(&mut text_canvas);
 
-        let mut edit_tree_viewer_canvas = None;
-        if self.viewing_edit_tree {
+        let edit_tree_viewer_canvas = if self.viewing_edit_tree {
             let mut canvas = Canvas::new(
                 self.frame
                     .inner_rect(SideOffsets2D::new(
@@ -622,8 +621,10 @@ impl Component for Buffer {
                 &self.text,
                 &self.properties.theme.edit_tree_viewer,
             );
-            edit_tree_viewer_canvas = Some(layout::fixed(32, canvas.into()));
-        }
+            Some(layout::fixed(32, canvas.into()))
+        } else {
+            None
+        };
         layout::column([
             layout::auto(layout::row_iter(
                 iter::once(edit_tree_viewer_canvas)

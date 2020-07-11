@@ -8,7 +8,7 @@ use std::{
     rc::Rc,
 };
 use zi::{
-    layout, BindingMatch, BindingTransition, Colour, Component, ComponentLink, Key, Layout, Rect,
+    layout, BindingMatch, BindingTransition, Component, ComponentLink, Key, Layout, Rect,
     ShouldRender,
 };
 
@@ -49,7 +49,7 @@ pub struct Context {
 pub struct Editor {
     context: Rc<Context>,
     link: ComponentLink<Self>,
-    themes: &'static [(Theme, &'static str); 30],
+    themes: &'static [(Theme, &'static str)],
     theme_index: usize,
     prompt_state: PromptState,
     prompt_height: usize,
@@ -165,6 +165,9 @@ impl Component for Editor {
             Message::ClosePane if !self.buffers.is_empty() => {
                 self.buffers.remove(self.focused);
             }
+            Message::Quit => {
+                self.link.exit();
+            }
             _ => return cleared_prompt.into(),
         }
         ShouldRender::Yes
@@ -210,21 +213,15 @@ impl Component for Editor {
     fn input_binding(&self, pressed: &[Key]) -> BindingMatch<Self::Message> {
         let transition = BindingTransition::Clear;
         let message = match pressed {
-            &[Key::Ctrl('x'), Key::Char('o')] | &[Key::Ctrl('x'), Key::Ctrl('o')] => {
+            [Key::Ctrl('x'), Key::Char('o')] | [Key::Ctrl('x'), Key::Ctrl('o')] => {
                 Message::FocusNextComponent
             }
-            &[Key::Ctrl('x'), Key::Char('O')] | &[Key::Ctrl('x'), Key::Ctrl('O')] => {
+            [Key::Ctrl('x'), Key::Char('O')] | [Key::Ctrl('x'), Key::Ctrl('O')] => {
                 Message::FocusPreviousComponent
             }
-            &[Key::Ctrl('x'), Key::Char('0')] => Message::ClosePane,
-            &[Key::Ctrl('t')] => Self::Message::ChangeTheme,
-            &[Key::Ctrl('x'), Key::Ctrl('c')] => {
-                self.link.exit();
-                return BindingMatch {
-                    transition,
-                    message: None,
-                };
-            }
+            [Key::Ctrl('x'), Key::Char('0')] => Message::ClosePane,
+            [Key::Ctrl('t')] => Message::ChangeTheme,
+            [Key::Ctrl('x'), Key::Ctrl('c')] => Message::Quit,
             _ => {
                 return BindingMatch {
                     transition: BindingTransition::Continue,
@@ -238,6 +235,3 @@ impl Component for Editor {
         }
     }
 }
-
-const DARK0_SOFT: Colour = Colour::rgb(50, 48, 47);
-const LIGHT2: Colour = Colour::rgb(213, 196, 161);

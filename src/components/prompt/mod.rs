@@ -115,12 +115,10 @@ impl Prompt {
         self.current_task_id = Some(self.properties.context.task_pool.spawn(move |task_id| {
             let path_str = input.to_string();
             link.send(Message::FileListingDone(
-                picker::pick_from_directory(&mut file_picker, path_str)
-                    .map(|_| FileListingDone {
-                        task_id,
-                        file_picker,
-                    })
-                    .map_err(|error| error.into()),
+                picker::pick_from_directory(&mut file_picker, path_str).map(|_| FileListingDone {
+                    task_id,
+                    file_picker,
+                }),
             ))
         }))
     }
@@ -132,12 +130,10 @@ impl Prompt {
         self.current_task_id = Some(self.properties.context.task_pool.spawn(move |task_id| {
             let path_str = input.to_string();
             link.send(Message::FileListingDone(
-                picker::pick_from_repository(&mut file_picker, path_str)
-                    .map(|_| FileListingDone {
-                        task_id,
-                        file_picker,
-                    })
-                    .map_err(|error| error.into()),
+                picker::pick_from_repository(&mut file_picker, path_str).map(|_| FileListingDone {
+                    task_id,
+                    file_picker,
+                }),
             ))
         }));
     }
@@ -426,18 +422,18 @@ impl Component for Prompt {
         let mut transition = BindingTransition::Clear;
         let message = match pressed {
             // Path navigation
-            &[Key::Ctrl('g')] => Message::Clear,
-            &[Key::Ctrl('x'), Key::Ctrl('f')] => Message::ListFilesInDirectory,
-            &[Key::Ctrl('x'), Key::Ctrl('v')] => Message::ListFilesInRepository,
-            &[Key::Ctrl('x')] => {
+            [Key::Ctrl('g')] => Message::Clear,
+            [Key::Ctrl('x'), Key::Ctrl('f')] => Message::ListFilesInDirectory,
+            [Key::Ctrl('x'), Key::Ctrl('v')] => Message::ListFilesInRepository,
+            [Key::Ctrl('x')] => {
                 transition = BindingTransition::Continue;
                 Message::Nop
             }
-            &[Key::Char('\n')] => Message::OpenFile,
+            [Key::Char('\n')] => Message::OpenFile,
 
             // Path navigation
-            &[Key::Ctrl('l')] => Message::SelectParentDirectory,
-            &[Key::Char('\t')] => Message::AutocompletePath,
+            [Key::Ctrl('l')] => Message::SelectParentDirectory,
+            [Key::Char('\t')] => Message::AutocompletePath,
 
             _ => Message::Nop,
         };

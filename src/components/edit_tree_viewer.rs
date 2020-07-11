@@ -1,22 +1,7 @@
-use maplit::hashmap;
-use once_cell::sync::Lazy;
-use smallvec::{smallvec, SmallVec};
 use std::{cmp, iter};
-use zi::{Canvas, Key, Position, Rect, Size, Style};
+use zi::{Canvas, Style};
 
-// use super::{
-//     BindingMatch, Bindings, Component, Context, HashBindings,
-// };
-use crate::{
-    error::Result,
-    undo::{self, EditTree},
-};
-
-#[derive(Clone, Debug)]
-pub enum Action {
-    Up,
-    Down,
-}
+use crate::undo::{self, EditTree};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Theme {
@@ -27,26 +12,12 @@ pub struct Theme {
     pub alternate_connector: Style,
 }
 
-// static BINDINGS: Lazy<HashBindings<Action>> = Lazy::new(|| {
-//     HashBindings::new(hashmap! {
-//         smallvec![Key::Char('p')] => Action::Up,
-//         smallvec![Key::Ctrl('n')] => Action::Down,
-//     })
-// });
-
 pub struct EditTreeViewer;
 
 impl EditTreeViewer {
     pub fn draw(&mut self, screen: &mut Canvas, tree: &EditTree, theme: &Theme) {
         screen.clear(theme.current_revision);
 
-        // let Context {
-        //     ref frame,
-        //     ref theme,
-        //     ..
-        // } = *context;
-
-        // log::info!("Frame: {:?}", context.frame);
         // let middle_x = frame.size.width / 2;
         // let middle_y = frame.size.height / 2;
 
@@ -137,6 +108,10 @@ impl EditTreeViewer {
                 }
             }
             let mut pairs = revision.children.windows(2);
+
+            // Clippy suggests writing this while as for loop instead, which is
+            // not possible as the slice pattern is refutable.
+            #[allow(clippy::while_let_on_iterator)]
             while let Some(&[ref left, ref right]) = pairs.next() {
                 let formatted_left = &formatted_tree[left.index];
                 let formatted_right = &formatted_tree[right.index];
@@ -181,11 +156,4 @@ impl EditTreeViewer {
             // }
         }
     }
-
-    // pub fn reduce(&mut self, action: Action, context: &Context) -> Result<()> {
-    //     match action {
-    //         Action::Up => Ok(()),
-    //         Action::Down => Ok(()),
-    //     }
-    // }
 }
