@@ -1,4 +1,4 @@
-use cc;
+use cc::Build;
 use std::path::PathBuf;
 
 fn compile_tree_sitter_typescript() {
@@ -7,7 +7,7 @@ fn compile_tree_sitter_typescript() {
     let dir: PathBuf = ["languages", "tree-sitter-typescript", "typescript", "src"]
         .iter()
         .collect();
-    cc::Build::new()
+    Build::new()
         .include(&dir)
         .flag("-w")
         .file(dir.join("parser.c"))
@@ -21,7 +21,7 @@ fn compile_tree_sitter_tsx() {
     let dir: PathBuf = ["languages", "tree-sitter-typescript", "tsx", "src"]
         .iter()
         .collect();
-    cc::Build::new()
+    Build::new()
         .include(&dir)
         .flag("-w")
         .file(dir.join("parser.c"))
@@ -33,7 +33,7 @@ fn compile_tree_sitter_c_lib_no_scanner(name: &str) {
     println!("cargo:rustc-link-lib=static={}", name);
 
     let dir: PathBuf = ["languages", name, "src"].iter().collect();
-    cc::Build::new()
+    Build::new()
         .include(&dir)
         .flag("-w")
         .file(dir.join("parser.c"))
@@ -44,7 +44,7 @@ fn compile_tree_sitter_c_lib(name: &str) {
     println!("cargo:rustc-link-lib=static={}", name);
 
     let dir: PathBuf = ["languages", name, "src"].iter().collect();
-    cc::Build::new()
+    Build::new()
         .include(&dir)
         .flag("-w")
         .file(dir.join("parser.c"))
@@ -59,13 +59,13 @@ fn compile_tree_sitter_cpp_lib(name: &str) {
     println!("cargo:rustc-link-lib=static={}", parser_lib);
 
     let dir: PathBuf = ["languages", name, "src"].iter().collect();
-    cc::Build::new()
+    Build::new()
         .cpp(true)
         .flag("-w")
         .include(&dir)
         .file(dir.join("scanner.cc"))
         .compile(&scanner_lib);
-    cc::Build::new()
+    Build::new()
         .flag("-w")
         .include(&dir)
         .file(dir.join("parser.c"))
