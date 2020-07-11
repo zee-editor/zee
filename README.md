@@ -2,8 +2,8 @@
   <img alt="Zi logo" src="https://user-images.githubusercontent.com/797170/76172978-08909000-6193-11ea-9ed3-4c40d3a4c74b.png">
 </p>
 <p align="center">
-  <a href="https://travis-ci.com/mcobzarenco/zee">
-    <img alt="Build Status" src="https://travis-ci.com/mcobzarenco/zee.svg?branch=master">
+  <a href="https://github.com/mcobzarenco/zee/actions?query=workflow%3ABuild">
+    <img alt="Build Status" src="https://github.com/mcobzarenco/zi/workflows/Build/badge.svg">
   </a>
   <a href="https://crates.io/crates/zee">
     <img alt="Crates.io" src="https://img.shields.io/crates/v/zee.svg">
