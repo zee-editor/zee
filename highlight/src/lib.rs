@@ -4,7 +4,6 @@ mod selector;
 use fnv::FnvHashMap;
 use lazy_static::lazy_static;
 use serde_derive::{self, Deserialize, Serialize};
-use serde_json;
 use std::{cmp, collections::HashMap, convert::TryFrom};
 
 use error::Result;
@@ -88,14 +87,14 @@ impl HighlightRules {
                     }
 
                     // Are the `nth-child` constrains also satisfied?
-                    if selector_nth_children
+                    let nth_child_not_satisfied = selector_nth_children
                         .iter()
                         .zip(nth_children[span_range()].iter())
                         .any(|(&nth_child_selector, &node_sibling_index)| {
                             nth_child_selector >= 0
                                 && nth_child_selector as u16 != node_sibling_index
-                        })
-                    {
+                        });
+                    if nth_child_not_satisfied {
                         continue;
                     }
 

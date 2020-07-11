@@ -1,48 +1,97 @@
-use super::{Component, Context, HashBindings, Scheduler};
-use crate::terminal::{Screen, Style};
 use once_cell::sync::Lazy;
 use pkg_version::{pkg_version_major, pkg_version_minor, pkg_version_patch};
-use std::cmp;
+use std::{borrow::Cow, cmp};
+use unicode_width::UnicodeWidthStr;
+use zi::{Canvas, Component, ComponentLink, Layout, Rect, ShouldRender, Size, Style};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Theme {
     pub logo: Style,
     pub tagline: Style,
     pub credits: Style,
 }
 
-#[derive(Debug, Default)]
-pub struct Splash;
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Properties {
+    pub theme: Cow<'static, Theme>,
+}
+
+#[derive(Debug)]
+pub struct Splash {
+    properties: Properties,
+    frame: Rect,
+}
 
 impl Component for Splash {
-    type Action = ();
-    type Bindings = HashBindings<()>;
+    type Message = ();
+    type Properties = Properties;
+
+    fn create(properties: Self::Properties, frame: Rect, _link: ComponentLink<Self>) -> Self {
+        Self { properties, frame }
+    }
+
+    fn change(&mut self, properties: Self::Properties) -> ShouldRender {
+        if self.properties != properties {
+            self.properties = properties;
+            ShouldRender::Yes
+        } else {
+            ShouldRender::No
+        }
+    }
+
+    fn resize(&mut self, frame: Rect) -> ShouldRender {
+        self.frame = frame;
+        ShouldRender::Yes
+    }
 
     #[inline]
-    fn draw(&mut self, screen: &mut Screen, _: &mut Scheduler<Self::Action>, context: &Context) {
-        let theme = &context.theme.splash;
+    fn view(&self) -> Layout {
+        let Self {
+            properties: Properties { ref theme },
+            frame,
+        } = *self;
+        let logo_size = text_block_size(LOGO);
+        let tagline_size = text_block_size(TAGLINE);
+        let credits_size = text_block_size(&CREDITS);
 
-        screen.clear_region(context.frame, theme.logo);
+        let mut canvas = Canvas::new(frame.size);
+        canvas.clear(theme.logo);
 
-        let middle_x = context.frame.origin.x + (context.frame.size.width / 2).saturating_sub(28);
-        let mut middle_y =
-            context.frame.origin.y + cmp::min(8, context.frame.size.height.saturating_sub(22));
-        for line in SPLASH_LOGO.lines() {
-            screen.draw_str(middle_x, middle_y, theme.logo, line);
+        // Draw logo
+        let middle_x = (frame.size.width / 2).saturating_sub(logo_size.width / 2);
+        let mut middle_y = cmp::min(8, frame.size.height.saturating_sub(logo_size.height));
+        for line in LOGO.lines() {
+            canvas.draw_str(middle_x, middle_y, theme.logo, line);
             middle_y += 1;
         }
-        for line in SPLASH_TAGLINE.lines() {
-            screen.draw_str(middle_x, middle_y, theme.tagline, line);
+
+        // Draw tagline
+        middle_y += 2;
+        let middle_x = (frame.size.width / 2).saturating_sub(tagline_size.width / 2);
+        for line in TAGLINE.lines() {
+            canvas.draw_str(middle_x, middle_y, theme.tagline, line);
             middle_y += 1;
         }
-        for line in SPLASH_CREDITS.lines() {
-            screen.draw_str(middle_x, middle_y, theme.credits, line);
+
+        // Draw credits
+        middle_y += 1;
+        let middle_x = (frame.size.width / 2).saturating_sub(credits_size.width / 2);
+        for line in CREDITS.lines() {
+            canvas.draw_str(middle_x, middle_y, theme.credits, line);
             middle_y += 1;
         }
+
+        canvas.into()
     }
 }
 
-const SPLASH_LOGO: &str = r#"
+fn text_block_size(text: &str) -> Size {
+    let width = text.lines().map(UnicodeWidthStr::width).max().unwrap_or(0);
+    let height = text.lines().count();
+    Size::new(width, height)
+}
+
+const LOGO: &str = r#"
 zzzzzzzzzzzzzzzzz     eeeeeeeeeeee         eeeeeeeeeeee
 z:::::::::::::::z   ee::::::::::::ee     ee::::::::::::ee
 z::::::::::::::z   e::::::eeeee:::::ee  e::::::eeeee:::::ee
@@ -56,18 +105,14 @@ zzzzzzzz::::::z   e::::::e     e:::::e e::::::e     e:::::e
 z:::::::::::::::z   ee:::::::::::::e     ee:::::::::::::e
 zzzzzzzzzzzzzzzzz     eeeeeeeeeeeeee       eeeeeeeeeeeeee
 "#;
-const SPLASH_TAGLINE: &str = r#"
+const TAGLINE: &str = "a modern editor for the terminal";
 
-             a modern editor for the terminal
-
-"#;
-
-static SPLASH_CREDITS: Lazy<String> = Lazy::new(|| {
+static CREDITS: Lazy<String> = Lazy::new(|| {
     format!(
         r#"
-                      version {}.{}.{}
-               by Marius Cobzarenco et al.
-       zee is open source and freely distributable"#,
+               version {}.{}.{}
+        by Marius Cobzarenco et al.
+zee is open source and freely distributable"#,
         MAJOR, MINOR, PATCH
     )
 });

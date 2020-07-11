@@ -1,4 +1,4 @@
-use crate::terminal::Colour;
+use zi::Colour;
 
 /// Represents a base16 theme.
 ///

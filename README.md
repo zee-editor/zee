@@ -1,12 +1,18 @@
-# zee
-A modern editor for the terminal (written in Rust). It is highly experimental code.
+<p align="center">
+  <img alt="Zi logo" src="https://user-images.githubusercontent.com/797170/76172978-08909000-6193-11ea-9ed3-4c40d3a4c74b.png">
+</p>
+<p align="center">
+  <a href="https://github.com/mcobzarenco/zee/actions?query=workflow%3ABuild">
+    <img alt="Build Status" src="https://github.com/mcobzarenco/zi/workflows/Build/badge.svg">
+  </a>
+  <a href="https://crates.io/crates/zee">
+    <img alt="Crates.io" src="https://img.shields.io/crates/v/zee.svg">
+  </a>
+</p>
 
-[![Build Status](https://travis-ci.com/mcobzarenco/zee.svg?branch=master)](https://travis-ci.com/mcobzarenco/zee)
-[![Crate](https://meritbadge.herokuapp.com/zee)](https://crates.io/crates/zee)
+Zee is a modern editor for the terminal, written in Rust. It is highly experimental code.
 
-![image](https://user-images.githubusercontent.com/797170/76172978-08909000-6193-11ea-9ed3-4c40d3a4c74b.png)
-
-Here's what it looks like at the moment
+In the old tradition of text editor demos, here's what it currently looks like editing its own source code
 
 ![Peek 2020-03-09 00-16](https://user-images.githubusercontent.com/797170/76173969-0bdc4980-619c-11ea-9f24-7899e2722910.gif)
 
@@ -83,3 +89,20 @@ The following keybindings are available:
  - `C-x o`, `C-x C-o` switch focus to the next buffer
  - `C-x C-c` quit
  - `C-t` cycle through the available themes
+
+## license
+
+This project is licensed under either of
+
+ * Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+   http://www.apache.org/licenses/LICENSE-2.0)
+ * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+   http://opensource.org/licenses/MIT)
+
+at your option.
+
+#### contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion by you, as defined in the Apache-2.0 license, shall be dual
+licensed as above, without any additional terms or conditions.

@@ -1,13 +1,13 @@
 pub mod base16;
+pub use self::base16::Base16Theme;
+
+use zi::terminal::{Colour, Style};
 
 use super::{
-    buffer::Theme as BufferTheme, prompt::Theme as PromptTheme, splash::Theme as SplashTheme,
+    buffer::Theme as BufferTheme, edit_tree_viewer::Theme as EditTreeViewerTheme,
+    prompt::Theme as PromptTheme, splash::Theme as SplashTheme,
 };
-use crate::{
-    syntax::highlight::Theme as SyntaxTheme,
-    terminal::{Background, Colour, Foreground, Style},
-};
-pub use base16::Base16Theme;
+use crate::syntax::highlight::Theme as SyntaxTheme;
 
 pub const THEMES: [(Theme, &str); 30] = [
     (Theme::gruvbox(), "zee-gruvbox"),
@@ -118,7 +118,7 @@ impl Theme {
                     text_current_line: normal(DARK0_HARD, LIGHT1),
                     cursor_focused: normal(LIGHT0, DARK0),
                     cursor_unfocused: normal(GRAY_245, DARK0_HARD),
-                    selection_background: Background(DARK0_HARD),
+                    selection_background: DARK0_HARD,
                     code_invalid: underline(DARK0_SOFT, BRIGHT_RED),
                     code_constant: normal(DARK0_SOFT, BRIGHT_GREEN),
                     code_keyword: bold(DARK0_SOFT, BRIGHT_RED),
@@ -132,6 +132,13 @@ impl Theme {
                     code_comment_doc: normal(DARK0_SOFT, LIGHT4),
                     code_link: underline(DARK0_SOFT, LIGHT3),
                     code_type: normal(DARK0_SOFT, BRIGHT_YELLOW),
+                },
+                edit_tree_viewer: EditTreeViewerTheme {
+                    current_revision: bold(DARK0, BRIGHT_RED),
+                    master_revision: bold(DARK0, LIGHT1),
+                    master_connector: bold(DARK0, LIGHT1),
+                    alternate_revision: normal(DARK0, DARK4),
+                    alternate_connector: normal(DARK0, DARK4),
                 },
                 border: normal(DARK0_HARD, GRAY_245),
                 status_base: normal(DARK0_SOFT, DARK0),
@@ -153,10 +160,10 @@ impl Theme {
                 input: normal(DARK0_HARD, NEUTRAL_YELLOW),
                 action: normal(BRIGHT_BLUE, DARK0_HARD),
                 cursor: normal(LIGHT0, DARK0),
-                item_focused_background: Background(DARK0_HARD),
-                item_unfocused_background: Background(DARK0),
-                item_file_foreground: Foreground(LIGHT1),
-                item_directory_foreground: Foreground(BRIGHT_RED),
+                item_focused_background: DARK0_HARD,
+                item_unfocused_background: DARK0,
+                item_file_foreground: LIGHT1,
+                item_directory_foreground: BRIGHT_RED,
             },
         }
     }
@@ -204,7 +211,7 @@ impl Theme {
                     text_current_line: normal(lighter_background, default_foreground),
                     cursor_focused: normal(light_foreground, default_background),
                     cursor_unfocused: normal(comments, default_background),
-                    selection_background: Background(selection_background),
+                    selection_background,
                     code_invalid: underline(default_background, variables),
                     code_constant: normal(default_background, strings),
                     code_keyword: normal(default_background, variables),
@@ -218,6 +225,13 @@ impl Theme {
                     code_comment_doc: bold(default_background, comments),
                     code_link: underline(default_background, constants),
                     code_type: normal(default_background, classes),
+                },
+                edit_tree_viewer: EditTreeViewerTheme {
+                    current_revision: bold(default_background, embedded),
+                    master_revision: bold(default_background, variables),
+                    master_connector: bold(default_background, default_foreground),
+                    alternate_revision: normal(default_background, default_foreground),
+                    alternate_connector: normal(default_background, comments),
                 },
                 border: normal(lighter_background, dark_foreground),
                 status_base: normal(lighter_background, default_background),
@@ -239,10 +253,10 @@ impl Theme {
                 input: normal(default_background, classes),
                 action: normal(functions, default_background),
                 cursor: normal(light_foreground, default_background),
-                item_focused_background: Background(default_background),
-                item_unfocused_background: Background(lighter_background),
-                item_file_foreground: Foreground(default_foreground),
-                item_directory_foreground: Foreground(keywords),
+                item_focused_background: default_background,
+                item_unfocused_background: lighter_background,
+                item_file_foreground: default_foreground,
+                item_directory_foreground: keywords,
             },
         }
     }
@@ -250,7 +264,7 @@ impl Theme {
 
 #[allow(dead_code)]
 pub mod gruvbox {
-    use crate::terminal::Colour;
+    use zi::Colour;
 
     // Gruvbox colours
     pub const DARK0_HARD: Colour = Colour::rgb(29, 32, 33);
@@ -299,15 +313,15 @@ pub mod gruvbox {
 
 #[inline]
 const fn normal(background: Colour, foreground: Colour) -> Style {
-    Style::normal(Background(background), Foreground(foreground))
+    Style::normal(background, foreground)
 }
 
 #[inline]
 const fn bold(background: Colour, foreground: Colour) -> Style {
-    Style::bold(Background(background), Foreground(foreground))
+    Style::bold(background, foreground)
 }
 
 #[inline]
 const fn underline(background: Colour, foreground: Colour) -> Style {
-    Style::underline(Background(background), Foreground(foreground))
+    Style::underline(background, foreground)
 }

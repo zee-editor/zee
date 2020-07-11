@@ -1,9 +1,8 @@
-use crate::{
-    components::cursor::{CharIndex, Cursor},
-    terminal::{Background, Style},
-};
+use zi::terminal::{Background, Style};
 
-#[derive(Clone, Debug)]
+use crate::components::cursor::{CharIndex, Cursor};
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct Theme {
     pub text: Style,
     pub text_current_line: Style,

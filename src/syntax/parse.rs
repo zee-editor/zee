@@ -1,6 +1,7 @@
 use ropey::Rope;
 use smallvec::SmallVec;
 use std::{
+    fmt,
     ops::{Deref, DerefMut, Range},
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -11,12 +12,12 @@ use tree_sitter::{
     InputEdit as TreeSitterInputEdit, Language, Node, Parser, Point as TreeSitterPoint, Tree,
     TreeCursor,
 };
+use zi::ComponentLink;
 
 use crate::{
-    components::buffer::{Action, AsyncAction},
-    error::{Error, Result},
+    components::buffer::{Buffer, Message},
     smallstring::SmallString,
-    task::{Scheduler, TaskId},
+    task::{TaskId, TaskPool},
 };
 
 pub struct ParserStatus {
@@ -25,12 +26,23 @@ pub struct ParserStatus {
     parsed: Option<ParsedSyntax>, // None if the parsing operation has been cancelled
 }
 
+impl fmt::Debug for ParserStatus {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            formatter,
+            "ParserStatus {{ task_id: {:?}, .. }}",
+            self.task_id
+        )
+    }
+}
+
 pub struct ParsedSyntax {
     tree: Tree,
     text: Rope,
 }
 
 pub struct SyntaxTree {
+    link: ComponentLink<Buffer>,
     language: Language,
     parsers: Vec<CancelableParser>,
     pub tree: Option<Tree>,
@@ -38,8 +50,9 @@ pub struct SyntaxTree {
 }
 
 impl SyntaxTree {
-    pub fn new(language: Language) -> Self {
+    pub fn new(link: ComponentLink<Buffer>, language: Language) -> Self {
         Self {
+            link,
             language,
             parsers: vec![],
             tree: None,
@@ -57,34 +70,25 @@ impl SyntaxTree {
         })
     }
 
-    pub fn ensure_tree(
-        &mut self,
-        scheduler: &mut Scheduler<Action>,
-        tree_fn: impl FnOnce() -> Rope,
-    ) -> Result<()> {
-        match (self.tree.as_ref(), self.current_parse_task.as_ref()) {
-            (None, None) => self.spawn_parse_task(scheduler, tree_fn(), true),
-            _ => Ok(()),
+    pub fn ensure_tree(&mut self, task_pool: &TaskPool, tree_fn: impl FnOnce() -> Rope) {
+        if let (None, None) = (self.tree.as_ref(), self.current_parse_task.as_ref()) {
+            self.spawn_parse_task(task_pool, tree_fn(), true);
         }
     }
 
-    pub fn spawn_parse_task(
-        &mut self,
-        scheduler: &mut Scheduler<Action>,
-        text: Rope,
-        fresh: bool,
-    ) -> Result<()> {
-        let mut parser = self.parsers.pop().map(Ok).unwrap_or_else(|| -> Result<_> {
+    pub fn spawn_parse_task(&mut self, task_pool: &TaskPool, text: Rope, fresh: bool) {
+        let mut parser = self.parsers.pop().unwrap_or_else(|| {
             let mut parser = Parser::new();
             parser
                 .set_language(self.language)
-                .map_err(Error::IncompatibleLanguageGrammar)?;
-            Ok(CancelableParser::new(parser))
-        })?;
+                .expect("Incompatible language grammar");
+            CancelableParser::new(parser)
+        });
 
         let cancel_flag = parser.cancel_flag().clone();
         let tree = self.tree.clone();
-        let task_id = scheduler.spawn(move |task_id| {
+        let link = self.link.clone();
+        let task_id = task_pool.spawn(move |task_id| {
             let maybe_tree = parser.parse_with(
                 &mut |byte_index, _| {
                     let (chunk, chunk_byte_idx, _, _) = text.chunk_at_byte(byte_index);
@@ -96,24 +100,23 @@ impl SyntaxTree {
             );
             // Reset the parser for later reuse
             parser.reset();
-            Action::Async(Ok(match maybe_tree {
-                Some(tree) => AsyncAction::ParseSyntax(ParserStatus {
+            link.send(Message::ParseSyntax(match maybe_tree {
+                Some(tree) => Ok(ParserStatus {
                     task_id,
                     parser,
                     parsed: Some(ParsedSyntax { tree, text }),
                 }),
-                None => AsyncAction::ParseSyntax(ParserStatus {
+                None => Ok(ParserStatus {
                     task_id,
                     parser,
                     parsed: None,
                 }),
             }))
-        })?;
+        });
         if let Some((_, old_cancel_flag)) = self.current_parse_task.as_ref() {
             old_cancel_flag.set();
         }
         self.current_parse_task = Some((task_id, cancel_flag));
-        Ok(())
     }
 
     pub fn handle_parse_syntax_done(&mut self, status: ParserStatus) {

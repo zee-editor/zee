@@ -1,0 +1,15 @@
+#!/bin/bash
+set -ex
+
+function check () {
+    cargo fmt -- --check
+    cargo clippy --offline --locked --all-targets -- -D warnings
+    cargo test --offline --locked --all-targets
+}
+
+cd "$(dirname "$0")/.."
+ROOT="$PWD"
+
+check
+pushd "$ROOT/grammar" && check() && popd
+pushd "$ROOT/highlight" && check() && popd
