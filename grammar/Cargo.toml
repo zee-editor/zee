@@ -12,5 +12,5 @@ once_cell = "1.3.1"
 tree-sitter = "0.6.3"
 
 [build-dependencies]
-cc = "1.0.47"
+cc = { version = "1.0.47", features = ["parallel"] }
 tree-sitter = "0.6.3"
