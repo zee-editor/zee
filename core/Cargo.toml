@@ -1,0 +1,44 @@
+[package]
+name = "zee"
+version = "0.1.2"
+authors = ["Marius Cobzarenco <marius@reinfer.io>"]
+description = "A modern editor for the terminal"
+readme = "README.md"
+homepage = "https://github.com/mcobzarenco/zee"
+license = "MIT OR Apache-2.0"
+edition = "2018"
+
+[dependencies]
+anyhow = "1.0.26"
+clap = "2.33.0"
+crossbeam-channel = "0.4.0"
+dirs = "2.0.2"
+euclid = "0.20.4"
+flexi_logger = "0.15.1"
+fuzzy-matcher = "0.3.1"
+git2 = "0.11.0"
+ignore = "0.4.10"
+log = "0.4.8"
+maplit = "1.0.2"
+num_cpus = "1.11.1"
+once_cell = "1.3.1"
+palette = "0.5.0"
+pkg-version = "1.0.0"
+rayon = "1.2.1"
+ropey = "1.1.0"
+serde = "1.0.103"
+serde_derive = "1.0.103"
+size_format = "1.0.2"
+smallvec = "1.0.0"
+structopt = "0.3.4"
+thiserror = "1.0.11"
+toml = "0.5.6"
+tree-sitter = "0.6.3"
+ttmap = "0.1.0"
+unicode-segmentation = "1.6.0"
+unicode-width = "0.1.6"
+zi = "0.1.0"
+
+# Local crates
+zee-grammar = { version = "0.1.3", path = "../grammar" }
+zee-highlight = { version = "0.1.2", path = "../highlight" }
