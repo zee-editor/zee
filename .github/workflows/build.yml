@@ -28,8 +28,18 @@ jobs:
         profile: minimal
         toolchain: stable
         override: true
+    - uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: nightly
+        override: false
+        components: rustfmt
+    - name: rustup
+      run: rustup default;rustup toolchain list
+    - name: clang
+      run: sudo apt install -y clang lld
     - name: Check formatting
-      run: cargo fmt -- --check
+      run: cargo +nightly fmt -- --check
     - name: Check clippy
       run: cargo clippy --locked --all-targets -- -D warnings
     - name: Run tests
