@@ -1,26 +1,14 @@
 use ropey::{str_utils::byte_to_char_idx, Rope, RopeSlice};
-use std::{cmp, ops::Range};
+use std::{
+    cmp,
+    ops::{Add, Range, Sub},
+};
 use unicode_segmentation::{GraphemeCursor, GraphemeIncomplete};
 
 use crate::{
     syntax::OpaqueDiff,
     utils::{self, ensure_trailing_newline_with_content, RopeGraphemes},
 };
-
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Eq, Ord)]
-pub struct CharIndex(pub usize);
-
-impl From<usize> for CharIndex {
-    fn from(index: usize) -> Self {
-        Self(index)
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Eq, Ord)]
-pub struct ByteIndex(pub usize);
-
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Eq, Ord)]
-pub struct LineIndex(pub usize);
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Cursor {
@@ -145,7 +133,7 @@ impl Cursor {
             ));
             let line_length = text.line(line_index).len_chars();
             let char_index = text.line_to_char(line_index);
-            CharIndex((char_index + line_length).saturating_sub(1))
+            CharIndex(char_index + line_length).saturating_sub(CharIndex(1))
                 ..CharIndex(char_index + line_length)
         };
         self.visual_horizontal_offset = None;
@@ -171,27 +159,18 @@ impl Cursor {
     pub fn insert_chars(
         &mut self,
         text: &mut Rope,
-        characters: impl Iterator<Item = char>,
+        characters: impl IntoIterator<Item = char>,
     ) -> OpaqueDiff {
         let mut num_bytes = 0;
-        characters.enumerate().for_each(|(offset, character)| {
-            text.insert_char(self.range.start.0 + offset, character);
-            num_bytes += character.len_utf8();
-        });
+        characters
+            .into_iter()
+            .enumerate()
+            .for_each(|(offset, character)| {
+                text.insert_char(self.range.start.0 + offset, character);
+                num_bytes += character.len_utf8();
+            });
         ensure_trailing_newline_with_content(text);
         OpaqueDiff::new(text.char_to_byte(self.range.start.0), 0, num_bytes)
-    }
-
-    pub fn insert_slice(&mut self, text: &mut Rope, slice: RopeSlice) -> OpaqueDiff {
-        let mut cursor_start = self.range.start;
-        let diff = OpaqueDiff::new(text.char_to_byte(cursor_start.0), 0, slice.len_bytes());
-        for chunk in slice.chunks() {
-            text.insert(cursor_start.0, chunk);
-            cursor_start.0 += chunk.chars().count();
-        }
-        // TODO: make sure cursor start is aligned to grapheme boundary
-        self.range = cursor_start..next_grapheme_boundary(&text.slice(..), cursor_start);
-        diff
     }
 
     pub fn delete(&mut self, text: &mut Rope) -> DeleteOperation {
@@ -356,8 +335,45 @@ impl DeleteOperation {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Eq, Ord)]
+pub struct CharIndex(pub usize);
+
+impl From<usize> for CharIndex {
+    fn from(index: usize) -> Self {
+        Self(index)
+    }
+}
+
+impl From<CharIndex> for usize {
+    fn from(value: CharIndex) -> Self {
+        value.0
+    }
+}
+
+impl CharIndex {
+    fn saturating_sub(self, other: Self) -> Self {
+        Self(usize::saturating_sub(self.0, other.0))
+    }
+}
+
+impl Add for CharIndex {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        Self(self.0 + other.0)
+    }
+}
+
+impl Sub for CharIndex {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self {
+        Self(self.0 - other.0)
+    }
+}
+
 /// Finds the previous grapheme boundary before the given char position.
-pub fn prev_grapheme_boundary(slice: &RopeSlice, char_index: CharIndex) -> CharIndex {
+fn prev_grapheme_boundary(slice: &RopeSlice, char_index: CharIndex) -> CharIndex {
     // Bounds check
     debug_assert!(char_index.0 <= slice.len_chars());
 
@@ -429,4 +445,68 @@ pub fn next_grapheme_boundary(slice: &RopeSlice, char_index: CharIndex) -> CharI
             _ => unreachable!(),
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use ropey::Rope;
+
+    use super::*;
+
+    #[test]
+    fn move_right_empty() {
+        let text = Rope::from("\n");
+        let mut cursor = Cursor::new();
+        cursor.move_right(&text);
+        assert_eq!(Cursor::new(), cursor);
+    }
+
+    #[test]
+    fn move_right_at_the_end() {
+        let text = Rope::from(TEXT);
+        let mut cursor = Cursor::new();
+        cursor.move_to_end_of_buffer(&text);
+        let cursor_at_end = cursor.clone();
+        cursor.move_right(&text);
+        assert_eq!(cursor_at_end, cursor);
+    }
+
+    #[test]
+    fn move_left_at_the_begining() {
+        let text = Rope::from(TEXT);
+        let mut cursor = Cursor::new();
+        cursor.move_left(&text);
+        assert_eq!(Cursor::new(), cursor);
+    }
+
+    #[test]
+    fn move_wide_grapheme() {
+        let text = Rope::from(MULTI_CHAR_EMOJI);
+        let mut cursor = Cursor::new();
+        cursor.move_to_start_of_buffer(&text);
+        assert_eq!(CharIndex(0)..CharIndex(text.len_chars()), cursor.range);
+    }
+
+    #[test]
+    fn prev_grapheme_1() {
+        let text = Rope::from(MULTI_CHAR_EMOJI);
+        let grapheme_start =
+            prev_grapheme_boundary(&text.slice(..), CharIndex(text.len_chars() - 1)).0;
+        assert_eq!(0, grapheme_start);
+    }
+
+    #[test]
+    fn end_grapheme_1() {
+        let text = Rope::from(MULTI_CHAR_EMOJI);
+        let grapheme_end = next_grapheme_boundary(&text.slice(..), CharIndex(0)).0;
+        assert_eq!(text.len_chars(), grapheme_end);
+    }
+
+    const TEXT: &str = r#"
+Basic Latin
+    ! " # $ % & ' ( ) *+,-./012ABCDEFGHI` a m  t u v z { | } ~
+CJK
+    豈 更 車 Ⅷ
+"#;
+    const MULTI_CHAR_EMOJI: &str = r#"👨‍👨‍👧‍👧"#;
 }
