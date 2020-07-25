@@ -1,5 +1,6 @@
 use size_format::SizeFormatterBinary;
 use std::{borrow::Cow, path::PathBuf};
+use unicode_width::UnicodeWidthStr;
 use zi::{Canvas, Component, ComponentLink, Layout, Rect, ShouldRender};
 
 use super::{ModifiedStatus, RepositoryRc, Theme};
@@ -92,7 +93,7 @@ impl Component for StatusBar {
             },
             match has_unsaved_changes {
                 ModifiedStatus::Unchanged => " - ",
-                ModifiedStatus::Changed | ModifiedStatus::Saving => " ☲ ",
+                ModifiedStatus::Changed | ModifiedStatus::Saving => " ❄ ",
             },
         );
 
@@ -113,8 +114,8 @@ impl Component for StatusBar {
                 .as_ref()
                 .map(
                     |path| match path.file_name().and_then(|file_name| file_name.to_str()) {
-                        Some(file_name) => format!("{} ", file_name),
-                        None => format!("{} ", path.display()),
+                        Some(file_name) => format!(" {} ", file_name),
+                        None => format!(" {} ", path.display()),
                     },
                 )
                 .unwrap_or_else(String::new),
@@ -145,7 +146,10 @@ impl Component for StatusBar {
             }
         );
         canvas.draw_str(
-            frame.size.width.saturating_sub(line_status.len()),
+            frame
+                .size
+                .width
+                .saturating_sub(UnicodeWidthStr::width(line_status.as_str())),
             0,
             theme.status_position_in_file,
             &line_status,
