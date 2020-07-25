@@ -1,2 +1,0 @@
-[build]
-rustflags = ["-Ctarget-cpu=native", "-Clinker-plugin-lto", "-Clinker=clang", "-Clink-arg=-fuse-ld=lld"]

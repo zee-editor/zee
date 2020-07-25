@@ -1,0 +1,7 @@
+[build]
+rustflags = ["-Ctarget-cpu=native"]
+
+# Cross lang lto seems to play badly with incremental compilation. It would be
+# nice if it were possible to set rustflags per profile.
+# See https://github.com/rust-lang/cargo/issues/7878
+# rustflags = ["-Ctarget-cpu=native", "-Clinker-plugin-lto", "-Clinker=clang", "-Clink-arg=-fuse-ld=lld"]

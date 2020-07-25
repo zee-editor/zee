@@ -34,10 +34,6 @@ jobs:
         toolchain: nightly
         override: false
         components: rustfmt
-    - name: rustup
-      run: rustup default;rustup toolchain list
-    - name: clang
-      run: sudo apt install -y clang lld
     - name: Check formatting
       run: cargo +nightly fmt -- --check
     - name: Check clippy
