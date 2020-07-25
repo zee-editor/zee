@@ -5,10 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{
-    error::{Context as _Context, Result},
-    utils::{self},
-};
+use crate::error::{Context as _Context, Result};
 
 pub struct FilePicker {
     paths: Vec<PathBuf>,
@@ -79,7 +76,7 @@ impl FilePicker {
         } = *self;
         paths.clear();
         paths.extend(paths_iter);
-        utils::clear_path_buf(prefix);
+        prefix.clear();
         prefix.push(prefix_path);
         self.set_filter(filter);
     }

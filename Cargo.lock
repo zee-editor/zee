@@ -1549,7 +1549,7 @@ dependencies = [
  "unicode-width 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "zee-grammar 0.1.3",
  "zee-highlight 0.1.2",
- "zi 0.1.2",
+ "zi 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1583,6 +1583,7 @@ dependencies = [
 [[package]]
 name = "zi"
 version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "crossterm 0.17.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "euclid 0.20.14 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1780,3 +1781,4 @@ dependencies = [
 "checksum x11-clipboard 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)" = "e5e937afd03b64b7be4f959cc044e09260a47241b71e56933f37db097bf7859d"
 "checksum xcb 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)" = "62056f63138b39116f82a540c983cc11f1c90cd70b3d492a70c25eaa50bd22a6"
 "checksum yansi 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)" = "9fc79f4a1e39857fc00c3f662cbf2651c771f00e9c15fe2abc341806bd46bd71"
+"checksum zi 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "1462164f2ba012961b5de6e8e66d023f82412e12d804cee0f4d05b2cccb50fd6"
