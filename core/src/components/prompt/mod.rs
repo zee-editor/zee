@@ -140,44 +140,56 @@ impl Prompt {
 
     #[inline]
     fn set_input_to_cwd(&mut self) {
-        // let mut current_working_dir = self
-        //     .properties
-        //     .context
-        //     .current_working_dir
-        //     .parent()
-        //     .unwrap_or(&self.properties.context.current_working_dir)
-        //     .to_str()
-        //     .unwrap_or("")
-        //     .chars()
-        //     .collect::<String>();
-        // current_working_dir.push('/');
-        // current_working_dir.push('\n');
-        // self.input = current_working_dir.into();
-        self.cursor.delete_line(&mut self.input);
-        self.cursor.insert_chars(
-            &mut self.input,
-            self.properties
-                .context
-                .current_working_dir
-                .parent()
-                .unwrap_or(&self.properties.context.current_working_dir)
-                .to_str()
-                .unwrap_or("")
-                .chars(),
-        );
+        let mut current_working_dir: String = self
+            .properties
+            .context
+            .current_working_dir
+            .to_string_lossy()
+            .into();
+        current_working_dir.push('/');
+        current_working_dir.push('\n');
+        self.input = current_working_dir.into();
+
         self.cursor.move_to_end_of_line(&self.input);
-        self.cursor.insert_char(&mut self.input, '/');
-        self.cursor.move_right(&self.input);
+
+        // self.cursor.delete_line(&mut self.input);
+        // self.cursor.insert_chars(
+        //     &mut self.input,
+        //     self.properties
+        //         .context
+        //         .current_working_dir
+        //         .parent()
+        //         .unwrap_or(&self.properties.context.current_working_dir)
+        //         .to_str()
+        //         .unwrap_or("")
+        //         .chars(),
+        // );
+        // self.cursor.move_to_end_of_line(&self.input);
+        // self.cursor.insert_char(&mut self.input, '/');
+        // self.cursor.move_right(&self.input);
     }
 
-    #[inline]
-    fn clear_state(&mut self) {
-        self.state = State::Inactive;
-        self.cursor = Cursor::new();
-        self.input.remove(..);
-        self.current_task_id = None;
-        self.file_index = 0;
-        Rc::make_mut(&mut self.file_picker).clear();
+    fn transition_to(&mut self, state: State) {
+        use State::*;
+        match state {
+            Inactive => {
+                self.current_task_id = None;
+                self.cursor = Cursor::new();
+                self.file_index = 0;
+                self.input.remove(..);
+                Rc::make_mut(&mut self.file_picker).clear();
+            }
+            PickingFileFromRepo => {
+                self.set_input_to_cwd();
+                self.pick_from_repository();
+            }
+            PickingFileFromDirectory => {
+                self.set_input_to_cwd();
+                self.pick_from_directory();
+            }
+        }
+        self.state = state;
+        self.emit_change();
     }
 
     #[inline]
@@ -220,22 +232,15 @@ impl Component for Prompt {
     fn update(&mut self, message: Message) -> ShouldRender {
         let input_changed = match message {
             Message::Clear => {
-                self.clear_state();
-                self.emit_change();
+                self.transition_to(State::Inactive);
                 false
             }
             Message::ListFilesInDirectory if !self.is_active() => {
-                self.state = State::PickingFileFromDirectory;
-                self.emit_change();
-                self.set_input_to_cwd();
-                self.pick_from_directory();
+                self.transition_to(State::PickingFileFromDirectory);
                 false
             }
             Message::ListFilesInRepository if !self.is_active() => {
-                self.state = State::PickingFileFromRepo;
-                self.emit_change();
-                self.set_input_to_cwd();
-                self.pick_from_repository();
+                self.transition_to(State::PickingFileFromRepo);
                 false
             }
             Message::OpenFile if self.is_active() => {
@@ -243,8 +248,7 @@ impl Component for Prompt {
                 self.properties
                     .on_open_file
                     .emit(PathBuf::from(path_str.trim()));
-                self.clear_state();
-                self.emit_change();
+                self.transition_to(State::Inactive);
                 false
             }
             Message::SelectParentDirectory if self.is_active() => {
@@ -421,7 +425,6 @@ impl Component for Prompt {
     fn input_binding(&self, pressed: &[Key]) -> BindingMatch<Self::Message> {
         let mut transition = BindingTransition::Clear;
         let message = match pressed {
-            // Path navigation
             [Key::Ctrl('g')] => Message::Clear,
             [Key::Ctrl('x'), Key::Ctrl('f')] => Message::ListFilesInDirectory,
             [Key::Ctrl('x'), Key::Ctrl('v')] => Message::ListFilesInRepository,
@@ -429,9 +432,9 @@ impl Component for Prompt {
                 transition = BindingTransition::Continue;
                 Message::Nop
             }
-            [Key::Char('\n')] => Message::OpenFile,
 
             // Path navigation
+            [Key::Char('\n')] => Message::OpenFile,
             [Key::Ctrl('l')] => Message::SelectParentDirectory,
             [Key::Char('\t')] => Message::AutocompletePath,
 

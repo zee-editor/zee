@@ -1,3 +1,6 @@
+#![allow(clippy::reversed_empty_ranges)]
+
+mod clipboard;
 mod components;
 mod editor;
 mod error;
@@ -82,6 +85,7 @@ fn start_editor() -> Result<()> {
         current_working_dir: current_dir,
         settings,
         task_pool: TaskPool::new()?,
+        clipboard: clipboard::create()?,
     });
     let mut app = App::new(layout::component::<Editor>(context));
 

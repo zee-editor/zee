@@ -1,8 +1,6 @@
 # TODO List
  - [ ] Undo / redo
  - [ ] Display a prompt message when saving a buffer
- - [ ] Copy / paste between different buffers (clipboard in context)
- - [ ] Copy / paste to system clipboard (behind feature flag?)
  - [ ] Intuitive change of focus when closing windows
  - [ ] Decouple frames from buffers and add a buffer switcher
  - [ ] Show possible commands with the entered prefix after an interval
@@ -13,14 +11,17 @@
  - [ ] File picker looks at the whole repo (if in repo, otherwise current dir)
  - [ ] Comment / uncomment region
  - [ ] Should pressing Enter in file picker open the file? (new files)
+ - [ ] Text wrapping (until a min size and then switch to overflow, like Emacs)
  - [ ] Autoindent
  - [ ] rustfmt on save
  - [ ] flake8 errors on save
  - [ ] search
  - [ ] regex search
  - [ ] zi: auto generated ids
- - [ ] zi: garbage collect unmounted components
  - [ ] zi: unique focus controller
+ - [x] Copy / paste between different buffers (clipboard in context)
+ - [x] Copy / paste to system clipboard (behind feature flag?)
+ - [x] zi: garbage collect unmounted components
  - [x] Unify handle_action and task_done
  - [x] Input controller (and more emacs-y key bindings)
  - [x] Add frontend based on `crossterm`

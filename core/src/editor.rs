@@ -6,6 +6,7 @@ use std::{
     io::{self, BufReader},
     path::PathBuf,
     rc::Rc,
+    sync::Arc,
 };
 use zi::{
     layout, BindingMatch, BindingTransition, Component, ComponentLink, Key, Layout, Rect,
@@ -13,6 +14,7 @@ use zi::{
 };
 
 use crate::{
+    clipboard::Clipboard,
     components::{
         buffer::{Buffer, Properties as BufferProperties, RepositoryRc},
         prompt::{
@@ -44,6 +46,7 @@ pub struct Context {
     pub current_working_dir: PathBuf,
     pub settings: Settings,
     pub task_pool: TaskPool,
+    pub clipboard: Arc<dyn Clipboard>,
 }
 
 pub struct Editor {

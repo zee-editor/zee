@@ -60,7 +60,6 @@ pub struct Buffer {
     link: ComponentLink<Self>,
 
     text: EditTree,
-    clipboard: Option<Rope>,
     has_unsaved_changes: ModifiedStatus,
     cursor: Cursor,
     line_offset: usize,
@@ -145,14 +144,14 @@ impl Buffer {
         let diff = match message {
             Message::DeleteForward => {
                 let operation = self.cursor.delete(&mut self.text);
-                self.clipboard = Some(operation.deleted);
+                // self.clipboard = Some(operation.deleted);
                 operation.diff
             }
             Message::DeleteBackward => self.cursor.backspace(&mut self.text).diff,
             Message::DeleteLine => self.delete_line(),
-            Message::Yank => self.yank_line(),
-            Message::CopySelection => self.copy_selection(),
-            Message::CutSelection => self.cut_selection(),
+            Message::Yank => self.paste_from_clipboard(),
+            Message::CopySelection => self.copy_selection_to_clipboard(),
+            Message::CutSelection => self.cut_selection_to_clipboard(),
             Message::InsertTab if DISABLE_TABS => {
                 let diff = self
                     .cursor
@@ -455,30 +454,39 @@ impl Buffer {
 
     fn delete_line(&mut self) -> OpaqueDiff {
         let operation = self.cursor.delete_line(&mut self.text);
-        self.clipboard = Some(operation.deleted);
+        // self.clipboard = Some(operation.deleted);
         operation.diff
     }
 
-    fn yank_line(&mut self) -> OpaqueDiff {
-        match self.clipboard.as_ref() {
-            Some(clipboard) => self
-                .cursor
-                .insert_slice(&mut self.text, clipboard.slice(..)),
-            None => OpaqueDiff::empty(),
-        }
-    }
-
-    fn copy_selection(&mut self) -> OpaqueDiff {
+    fn copy_selection_to_clipboard(&mut self) -> OpaqueDiff {
         let selection = self.cursor.selection();
-        self.clipboard = Some(self.text.slice(selection.start.0..selection.end.0).into());
+        self.properties
+            .context
+            .clipboard
+            .set_contents(self.text.slice(selection.start.0..selection.end.0).into())
+            .unwrap();
         self.cursor.clear_selection();
         OpaqueDiff::empty()
     }
 
-    fn cut_selection(&mut self) -> OpaqueDiff {
+    fn cut_selection_to_clipboard(&mut self) -> OpaqueDiff {
         let operation = self.cursor.delete_selection(&mut self.text);
-        self.clipboard = Some(operation.deleted);
+        self.properties
+            .context
+            .clipboard
+            .set_contents(operation.deleted.into())
+            .unwrap();
         operation.diff
+    }
+
+    fn paste_from_clipboard(&mut self) -> OpaqueDiff {
+        let clipboard_str = self.properties.context.clipboard.get_contents().unwrap();
+        if !clipboard_str.is_empty() {
+            self.cursor
+                .insert_chars(&mut self.text, clipboard_str.chars())
+        } else {
+            OpaqueDiff::empty()
+        }
     }
 }
 
@@ -558,7 +566,6 @@ impl Component for Buffer {
 
         Buffer {
             text: EditTree::new(properties.content.clone()),
-            clipboard: None,
             has_unsaved_changes: ModifiedStatus::Unchanged,
             cursor: Cursor::new(),
             line_offset: 0,
@@ -604,6 +611,7 @@ impl Component for Buffer {
         );
         text_canvas.clear(self.properties.theme.syntax.text);
         let visual_cursor_x = self.draw_text(&mut text_canvas);
+        log::debug!("Cursor at {:?}", self.cursor);
 
         let edit_tree_viewer_canvas = if self.viewing_edit_tree {
             let mut canvas = Canvas::new(
@@ -679,6 +687,7 @@ impl Component for Buffer {
 
     fn input_binding(&self, pressed: &[Key]) -> BindingMatch<Self::Message> {
         let transition = BindingTransition::Clear;
+        log::debug!("{:?}", pressed);
         let message = match pressed {
             // Cursor movement
             [Key::Ctrl('p')] | [Key::Up] => Message::Up,
@@ -694,7 +703,7 @@ impl Component for Buffer {
             [Key::Ctrl('l')] => Message::CenterCursorVisually,
 
             // Editing
-            [Key::Null] => Message::BeginSelection,
+            [Key::Null] | [Key::Ctrl(' ')] => Message::BeginSelection,
             [Key::Ctrl('g')] => Message::ClearSelection,
             [Key::Ctrl('x'), Key::Char('h')] => Message::SelectAll,
             [Key::Alt('w')] => Message::CopySelection,
