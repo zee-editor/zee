@@ -1,22 +1,25 @@
 use ropey::{iter::Chunks, Rope, RopeSlice};
-use smartstring::alias::CompactString;
+use smartstring::alias::String as SmartString;
 use unicode_segmentation::{GraphemeCursor, GraphemeIncomplete};
 use unicode_width::UnicodeWidthStr;
 
 pub fn grapheme_width(slice: &RopeSlice) -> usize {
-    if let Some(text) = slice.as_str() {
+    rope_slice_as_str(slice, |text| {
         if text == "\t" {
-            return TAB_WIDTH;
+            TAB_WIDTH
+        } else {
+            text.chars().filter(|character| *character == '\t').count() * TAB_WIDTH
+                + UnicodeWidthStr::width(text)
         }
-        text.chars().filter(|character| *character == '\t').count() * TAB_WIDTH
-            + UnicodeWidthStr::width(text)
+    })
+}
+
+pub fn rope_slice_as_str<T>(slice: &RopeSlice, closure: impl FnOnce(&str) -> T) -> T {
+    if let Some(text) = slice.as_str() {
+        closure(text)
     } else {
-        let text = slice.chars().collect::<CompactString>();
-        if &text[..] == "\t" {
-            return TAB_WIDTH;
-        }
-        text.chars().filter(|character| *character == '\t').count() * TAB_WIDTH
-            + UnicodeWidthStr::width(&text[..])
+        let text = slice.chars().collect::<SmartString>();
+        closure(text.as_str())
     }
 }
 
@@ -24,20 +27,24 @@ pub fn grapheme_width(slice: &RopeSlice) -> usize {
 pub struct RopeGraphemes<'a> {
     text: RopeSlice<'a>,
     chunks: Chunks<'a>,
-    cur_chunk: &'a str,
-    cur_chunk_start: usize,
+    chunk: &'a str,
+    chunk_byte_start: usize,
+    previous_chunk: &'a str,
+    previous_chunk_byte_start: usize,
     pub cursor: GraphemeCursor,
 }
 
 impl<'a> RopeGraphemes<'a> {
     pub fn new<'b>(slice: &RopeSlice<'b>) -> RopeGraphemes<'b> {
         let mut chunks = slice.chunks();
-        let first_chunk = chunks.next().unwrap_or("");
+        let chunk = chunks.next().unwrap_or("");
         RopeGraphemes {
             text: *slice,
             chunks,
-            cur_chunk: first_chunk,
-            cur_chunk_start: 0,
+            chunk,
+            chunk_byte_start: 0,
+            previous_chunk: "",
+            previous_chunk_byte_start: 0,
             cursor: GraphemeCursor::new(0, slice.len_bytes(), true),
         }
     }
@@ -47,42 +54,47 @@ impl<'a> Iterator for RopeGraphemes<'a> {
     type Item = RopeSlice<'a>;
 
     fn next(&mut self) -> Option<RopeSlice<'a>> {
-        let a = self.cursor.cur_cursor();
-        let b;
+        let byte_start = self.cursor.cur_cursor();
+        let byte_end;
         loop {
-            match self
-                .cursor
-                .next_boundary(self.cur_chunk, self.cur_chunk_start)
-            {
+            match self.cursor.next_boundary(self.chunk, self.chunk_byte_start) {
                 Ok(None) => {
                     return None;
                 }
                 Ok(Some(n)) => {
-                    b = n;
+                    byte_end = n;
                     break;
                 }
                 Err(GraphemeIncomplete::NextChunk) => {
-                    self.cur_chunk_start += self.cur_chunk.len();
-                    self.cur_chunk = self.chunks.next().unwrap_or("");
+                    self.previous_chunk = self.chunk;
+                    self.previous_chunk_byte_start = self.chunk_byte_start;
+                    self.chunk_byte_start += self.chunk.len();
+                    self.chunk = self.chunks.next().unwrap_or("");
                 }
-                error => {
-                    // No so unreachable, I got `Err(PreContext)` on otherwise
-                    // valid and complete utf-8.
-                    eprintln!("{:?}", error);
-                    unreachable!();
+                Err(GraphemeIncomplete::PreContext(context_length)) => {
+                    assert!(context_length <= self.previous_chunk.len());
+                    self.cursor
+                        .provide_context(self.previous_chunk, self.previous_chunk_byte_start);
+                }
+                Err(error) => {
+                    panic!(
+                        "unexpectedly encountered `{:?}` while iterating over grapheme clusters",
+                        error
+                    );
                 }
             }
         }
 
-        if a < self.cur_chunk_start {
-            let a_char = self.text.byte_to_char(a);
-            let b_char = self.text.byte_to_char(b);
+        if byte_start < self.chunk_byte_start {
+            let char_start = self.text.byte_to_char(byte_start);
+            let char_end = self.text.byte_to_char(byte_end);
 
-            Some(self.text.slice(a_char..b_char))
+            Some(self.text.slice(char_start..char_end))
         } else {
-            let a2 = a - self.cur_chunk_start;
-            let b2 = b - self.cur_chunk_start;
-            Some((&self.cur_chunk[a2..b2]).into())
+            let chunk_byte_start = byte_start - self.chunk_byte_start;
+            let chunk_byte_end = byte_end - self.chunk_byte_start;
+
+            Some((&self.chunk[chunk_byte_start..chunk_byte_end]).into())
         }
     }
 }

@@ -7,8 +7,8 @@ use ropey::{Rope, RopeSlice};
 use std::{borrow::Cow, cmp, fs::File, io::BufWriter, iter, path::PathBuf, rc::Rc};
 use zee_highlight::SelectorNodeId;
 use zi::{
-    layout, terminal::Key, BindingMatch, BindingTransition, Canvas, Component, ComponentLink,
-    Layout, Position, Rect, ShouldRender, Size, Style,
+    layout, terminal::GraphemeCluster, terminal::Key, BindingMatch, BindingTransition, Canvas,
+    Component, ComponentLink, Layout, Position, Rect, ShouldRender, Size, Style,
 };
 
 use self::{
@@ -384,8 +384,12 @@ impl Buffer {
             } else if grapheme_width == 0 {
                 screen.draw_str(visual_x, frame.origin.y, style, " ");
             } else {
-                screen.draw_str(visual_x, frame.origin.y, style, &grapheme.to_string());
-                // screen.draw_rope_slice(visual_x, frame.origin.y, style, &grapheme);
+                screen.draw_graphemes(
+                    visual_x,
+                    frame.origin.y,
+                    style,
+                    iter::once(grapheme.chars().collect::<GraphemeCluster>()),
+                );
             }
 
             char_index.0 += grapheme.len_chars();
@@ -454,7 +458,6 @@ impl Buffer {
 
     fn delete_line(&mut self) -> OpaqueDiff {
         let operation = self.cursor.delete_line(&mut self.text);
-        // self.clipboard = Some(operation.deleted);
         operation.diff
     }
 
