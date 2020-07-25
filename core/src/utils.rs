@@ -1,9 +1,8 @@
 use ropey::{iter::Chunks, Rope, RopeSlice};
+use smartstring::alias::CompactString;
 use std::{mem, path::PathBuf};
 use unicode_segmentation::{GraphemeCursor, GraphemeIncomplete};
 use unicode_width::UnicodeWidthStr;
-
-use super::smallstring::SmallString;
 
 pub fn clear_path_buf(path: &mut PathBuf) {
     // PathBuf::clear() is a nightly only thing, is there a nicer way to
@@ -23,7 +22,7 @@ pub fn grapheme_width(slice: &RopeSlice) -> usize {
         text.chars().filter(|character| *character == '\t').count() * TAB_WIDTH
             + UnicodeWidthStr::width(text)
     } else {
-        let text = SmallString::from_rope_slice(slice);
+        let text = slice.chars().collect::<CompactString>();
         if &text[..] == "\t" {
             return TAB_WIDTH;
         }

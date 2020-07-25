@@ -6,7 +6,6 @@ mod editor;
 mod error;
 mod mode;
 mod settings;
-mod smallstring;
 mod syntax;
 mod task;
 mod undo;

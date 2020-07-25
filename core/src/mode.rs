@@ -1,4 +1,5 @@
 use once_cell::sync::Lazy;
+use smartstring::alias::CompactString;
 use std::{ffi::OsStr, path::Path};
 use tree_sitter::Language;
 use zee_grammar as grammar;
@@ -7,10 +8,8 @@ use zee_highlight::{
     JSON_RULES, MARKDOWN_RULES, PYTHON_RULES, RUST_RULES, TSX_RULES, TYPESCRIPT_RULES,
 };
 
-use crate::smallstring::SmallString;
-
 pub struct Mode {
-    pub name: SmallString,
+    pub name: CompactString,
     file: Vec<FilenamePattern>,
     pub parser: Option<SyntaxParser>,
 }
