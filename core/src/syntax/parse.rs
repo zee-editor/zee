@@ -297,6 +297,15 @@ struct CancelableParser {
 
 impl CancelableParser {
     fn new(parser: Parser) -> Self {
+        // A `tree_sitter::Parser` can hold a pointer to a cancellation flag
+        // that it polls periodically. This is polled from C and it is up to the
+        // caller to ensure that the pointer lives at least as long as the
+        // Parser. The call here is safe as Rust guarantees that struct fields
+        // are dropped in the same order as they are declared.
+        //
+        // N.B. the parser cannot be running at the time when the struct is
+        // destroyed, so it can't be polling the flag. It still holds a pointer
+        // to the flag and it'd technically be UB if the flag was dropped first.
         let flag = CancelFlag(Arc::new(AtomicUsize::new(CANCEL_FLAG_UNSET)));
         unsafe {
             parser.set_cancellation_flag(Some(&flag.0));
