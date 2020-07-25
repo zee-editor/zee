@@ -34,6 +34,8 @@ jobs:
         toolchain: nightly
         override: false
         components: rustfmt
+    - name: Install x11 deps
+      run: sudo apt install xorg-dev libxcb-shape0-dev libxcb-xfixes0-dev
     - name: Check formatting
       run: cargo +nightly fmt -- --check
     - name: Check clippy
