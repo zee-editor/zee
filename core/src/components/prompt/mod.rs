@@ -245,10 +245,9 @@ impl Component for Prompt {
             }
             Message::OpenFile if self.is_active() => {
                 let path_str: Cow<str> = self.input.slice(..).into();
-                self.properties
-                    .on_open_file
-                    .emit(PathBuf::from(path_str.trim()));
+                let path = PathBuf::from(path_str.trim());
                 self.transition_to(State::Inactive);
+                self.properties.on_open_file.emit(path);
                 false
             }
             Message::SelectParentDirectory if self.is_active() => {
@@ -303,6 +302,7 @@ impl Component for Prompt {
             {
                 self.file_picker = Rc::new(file_picker);
                 self.current_task_id = None;
+                self.file_index = 0;
                 self.emit_change();
                 false
             }
@@ -361,19 +361,16 @@ impl Component for Prompt {
             } else {
                 Style::normal(background, theme.item_file_foreground)
             };
+            let content = &path.to_string_lossy()[file_picker
+                .prefix()
+                .to_str()
+                .map(|prefix| prefix.len() + 1)
+                .unwrap_or(0)..];
             layout::fixed(
                 1,
-                layout::component_with_key::<Text>(
-                    index,
-                    TextProperties::new()
-                        .content(
-                            &path.to_string_lossy()[file_picker
-                                .prefix()
-                                .to_str()
-                                .map(|prefix| prefix.len() + 1)
-                                .unwrap_or(0)..],
-                        )
-                        .style(style),
+                layout::component_with_key_str::<Text>(
+                    content,
+                    TextProperties::new().content(content).style(style),
                 ),
             )
         };

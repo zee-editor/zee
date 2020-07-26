@@ -1,4 +1,5 @@
 use euclid::default::Vector2D;
+use im::{vector, Vector};
 use ropey::Rope;
 use smallvec::SmallVec;
 use std::ops::{Deref, DerefMut};
@@ -34,8 +35,9 @@ pub struct Reference {
     diff: OpaqueDiff,
 }
 
+#[derive(Debug, Clone)]
 pub struct EditTree {
-    pub revisions: Vec<Revision>,
+    pub revisions: Vector<Revision>,
     pub head_index: usize,
     staged: Rope,
     has_staged_changes: bool,
@@ -45,7 +47,7 @@ impl EditTree {
     pub fn new(mut text: Rope) -> Self {
         utils::ensure_trailing_newline_with_content(&mut text);
         Self {
-            revisions: vec![Revision::root(text.clone())],
+            revisions: vector![Revision::root(text.clone())],
             head_index: 0,
             staged: text,
             has_staged_changes: false,
@@ -66,13 +68,14 @@ impl EditTree {
         }
     }
 
-    pub fn new_revision(&mut self, diff: OpaqueDiff, cursor: Cursor) {
+    pub fn create_revision(&mut self, diff: OpaqueDiff, cursor: Cursor) {
         let parent_to_child_diff = diff;
         let child_to_parent_diff = parent_to_child_diff.reverse();
         // let child_to_parent_diff = diff;
         // let parent_to_child_diff = child_to_parent_diff.reverse();
         let new_revision_index = self.revisions.len();
-        self.revisions.push(Revision {
+
+        self.revisions.push_back(Revision {
             text: self.staged.clone(),
             cursor,
             parent: Some(Reference {
@@ -95,31 +98,18 @@ impl EditTree {
     }
 
     pub fn undo(&mut self) -> Option<(OpaqueDiff, Cursor)> {
-        // log::debug!(
-        //     "undo[start]: hi={} text='{}' staged='{}'",
-        //     self.head_index,
-        //     self.revisions[self.head_index].text,
-        //     self.staged
-        // );
-        if let Some(Reference { ref diff, index }) = self.revisions[self.head_index].parent {
-            let new_revision = &self.revisions[index];
-            self.staged = new_revision.text.clone();
+        if let Some(Reference {
+            ref diff,
+            index: previous_index,
+        }) = self.revisions[self.head_index].parent
+        {
+            let previous_revision = &self.revisions[previous_index];
+            self.staged = previous_revision.text.clone();
+            self.head_index = previous_index;
+
             self.has_staged_changes = false;
-            self.head_index = index;
-            // log::debug!(
-            //     "undo[end]: hi={} text='{}' staged='{}'",
-            //     self.head_index,
-            //     self.revisions[self.head_index].text,
-            //     self.staged
-            // );
-            Some((diff.clone(), new_revision.cursor.clone()))
+            Some((diff.clone(), previous_revision.cursor.clone()))
         } else {
-            // log::debug!(
-            //     "undo[end]: hi={} text='{}' staged='{}'",
-            //     self.head_index,
-            //     self.revisions[self.head_index].text,
-            //     self.staged
-            // );
             None
         }
     }
@@ -152,7 +142,7 @@ impl EditTree {
             })
     }
 
-    pub fn head(&self) -> &Rope {
+    pub fn staged(&self) -> &Rope {
         self.deref()
     }
 }
@@ -178,7 +168,7 @@ pub struct FormattedRevision {
 }
 
 pub fn format_revision(
-    revisions: &[Revision],
+    revisions: &Vector<Revision>,
     formatted: &mut [FormattedRevision],
     index: usize,
     transform: Vector2D<isize>,
@@ -194,7 +184,7 @@ pub fn format_revision(
     let mut subtree_width = 0;
     for (child_index, child) in revision.children.iter().enumerate() {
         if child_index > 0 {
-            subtree_width += 5;
+            subtree_width += 8;
         }
         subtree_width += format_revision(
             revisions,
@@ -225,11 +215,11 @@ mod tests {
     fn insert_with_revisions_and_no_undo() {
         let mut tree = EditTree::new(Rope::new());
         tree.insert(0, "The flowers are...");
-        tree.new_revision(OpaqueDiff::empty(), Cursor::end_of_buffer(&tree));
+        tree.create_revision(OpaqueDiff::empty(), Cursor::end_of_buffer(&tree));
 
         let position = tree.len_chars() - 1; // Before the newline automatically inserted
         tree.insert(position, " so...\n");
-        tree.new_revision(OpaqueDiff::empty(), Cursor::end_of_buffer(&tree));
+        tree.create_revision(OpaqueDiff::empty(), Cursor::end_of_buffer(&tree));
 
         let position = tree.len_chars() - 1;
         tree.insert(position, "dunno.");
@@ -249,13 +239,13 @@ mod tests {
     fn insert_and_undo() {
         let mut tree = EditTree::new(Rope::new());
         tree.insert(0, "The flowers are...");
-        tree.new_revision(OpaqueDiff::empty(), Cursor::end_of_buffer(&tree));
+        tree.create_revision(OpaqueDiff::empty(), Cursor::end_of_buffer(&tree));
 
         let position = tree.len_chars() - 1; // Before the newline automatically inserted
         tree.insert(position, " so...\n");
         let position = tree.len_chars() - 1;
         tree.insert(position, "dunno.");
-        tree.new_revision(OpaqueDiff::empty(), Cursor::end_of_buffer(&tree));
+        tree.create_revision(OpaqueDiff::empty(), Cursor::end_of_buffer(&tree));
 
         assert_eq!("The flowers are... so...\ndunno.\n", &tree.to_string());
         tree.undo();
@@ -270,13 +260,13 @@ mod tests {
     fn undo_redo_idempotent() {
         let mut tree = EditTree::new(Rope::new());
         tree.insert(0, "The flowers are...");
-        tree.new_revision(OpaqueDiff::empty(), Cursor::end_of_buffer(&tree));
+        tree.create_revision(OpaqueDiff::empty(), Cursor::end_of_buffer(&tree));
 
         let position = tree.len_chars() - 1; // Before the newline automatically inserted
         tree.insert(position, " so...\n");
         let position = tree.len_chars() - 1;
         tree.insert(position, "dunno.");
-        tree.new_revision(OpaqueDiff::empty(), Cursor::end_of_buffer(&tree));
+        tree.create_revision(OpaqueDiff::empty(), Cursor::end_of_buffer(&tree));
 
         assert_eq!("The flowers are... so...\ndunno.\n", &tree.to_string());
         tree.undo();

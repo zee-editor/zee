@@ -59,7 +59,7 @@ fn start_editor() -> Result<()> {
     let current_dir = env::current_dir()?;
 
     // Read the current settings. If we cannot for any reason, we'll use the
-    // default ones -- ensure the editor opens in any environment.
+    // default ones to ensure the editor opens in any environment.
     let settings = args
         .settings_path
         .or_else(|| settings::settings_path().map(Some).unwrap_or(None))

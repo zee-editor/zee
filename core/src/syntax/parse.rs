@@ -41,15 +41,44 @@ pub struct ParsedSyntax {
     text: Rope,
 }
 
-pub struct SyntaxTree {
+#[derive(Clone)]
+pub struct ParseTree {
+    pub tree: Tree,
+}
+
+impl ParseTree {
+    pub fn cursor(&self) -> SyntaxCursor {
+        let root_node = self.tree.root_node();
+        SyntaxCursor {
+            cursor: root_node.walk(),
+            root: root_node,
+        }
+    }
+}
+
+impl Deref for ParseTree {
+    type Target = Tree;
+
+    fn deref(&self) -> &Self::Target {
+        &self.tree
+    }
+}
+
+impl DerefMut for ParseTree {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.tree
+    }
+}
+
+pub struct ParserPool {
+    pub tree: Option<ParseTree>,
     link: ComponentLink<Buffer>,
     language: Language,
     parsers: Vec<CancelableParser>,
-    pub tree: Option<Tree>,
     current_parse_task: Option<(TaskId, CancelFlag)>,
 }
 
-impl SyntaxTree {
+impl ParserPool {
     pub fn new(link: ComponentLink<Buffer>, language: Language) -> Self {
         Self {
             link,
@@ -60,23 +89,13 @@ impl SyntaxTree {
         }
     }
 
-    pub fn cursor(&self) -> Option<SyntaxCursor> {
-        self.tree.as_ref().map(|tree| {
-            let root_node = tree.root_node();
-            SyntaxCursor {
-                cursor: root_node.walk(),
-                root: root_node,
-            }
-        })
-    }
-
     pub fn ensure_tree(&mut self, task_pool: &TaskPool, tree_fn: impl FnOnce() -> Rope) {
         if let (None, None) = (self.tree.as_ref(), self.current_parse_task.as_ref()) {
-            self.spawn_parse_task(task_pool, tree_fn(), true);
+            self.spawn(task_pool, tree_fn(), true);
         }
     }
 
-    pub fn spawn_parse_task(&mut self, task_pool: &TaskPool, text: Rope, fresh: bool) {
+    pub fn spawn(&mut self, task_pool: &TaskPool, text: Rope, fresh: bool) {
         let mut parser = self.parsers.pop().unwrap_or_else(|| {
             let mut parser = Parser::new();
             parser
@@ -86,7 +105,7 @@ impl SyntaxTree {
         });
 
         let cancel_flag = parser.cancel_flag().clone();
-        let tree = self.tree.clone();
+        let raw_tree = self.tree.clone().map(|tree| tree.tree);
         let link = self.link.clone();
         let task_id = task_pool.spawn(move |task_id| {
             let maybe_tree = parser.parse_with(
@@ -96,7 +115,7 @@ impl SyntaxTree {
 
                     &chunk.as_bytes()[byte_index - chunk_byte_idx..]
                 },
-                if fresh { None } else { tree.as_ref() },
+                if fresh { None } else { raw_tree.as_ref() },
             );
             // Reset the parser for later reuse
             parser.reset();
@@ -144,7 +163,7 @@ impl SyntaxTree {
         // If the parser task hasn't been cancelled, store the new syntax tree
         if let Some(ParsedSyntax { tree, text }) = parsed {
             assert!(tree.root_node().end_byte() <= text.len_bytes());
-            self.tree = Some(tree);
+            self.tree = Some(ParseTree { tree });
         }
     }
 

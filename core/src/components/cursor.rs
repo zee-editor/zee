@@ -450,6 +450,7 @@ pub fn next_grapheme_boundary(slice: &RopeSlice, char_index: CharIndex) -> CharI
 #[cfg(test)]
 mod tests {
     use ropey::Rope;
+    // use unicode_width::UnicodeWidthStr;
 
     use super::*;
 
@@ -502,6 +503,13 @@ mod tests {
         assert_eq!(text.len_chars(), grapheme_end);
     }
 
+    // #[test]
+    // fn width_grapheme() {
+    //     // assert_eq!(UnicodeWidthStr::width(ROCKET_EMOJI), 2);
+    //     // assert_eq!(UnicodeWidthStr::width(MOUNTAIN_EMOJI), 2);
+    //     assert_eq!(UnicodeWidthStr::width(VORTEX_EMOJI), 2);
+    // }
+
     const TEXT: &str = r#"
 Basic Latin
     ! " # $ % & ' ( ) *+,-./012ABCDEFGHI` a m  t u v z { | } ~
@@ -509,4 +517,7 @@ CJK
     豈 更 車 Ⅷ
 "#;
     const MULTI_CHAR_EMOJI: &str = r#"👨‍👨‍👧‍👧"#;
+    // const MOUNTAIN_EMOJI: &str = r#"⛰"#;
+    // const VORTEX_EMOJI: &str = r#"🌀"#;
+    // const ROCKET_EMOJI: &str = r#"🚀"#;
 }

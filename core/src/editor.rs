@@ -2,6 +2,7 @@ use git2::Repository;
 use ropey::Rope;
 use std::{
     borrow::Cow,
+    cmp,
     fs::File,
     io::{self, BufReader},
     path::PathBuf,
@@ -38,6 +39,7 @@ pub enum Message {
     KeyPressed,
     OpenFile(PathBuf),
     PromptStateChange((PromptState, usize)),
+    LogMessage(String),
     Quit,
 }
 
@@ -94,13 +96,24 @@ impl Editor {
             Rope::from_reader(BufReader::new(File::open(&file_path)?))?
         } else {
             // Optimistically check if we can create it
-            File::open(&file_path).map(|_| ()).or_else(|error| {
-                if error.kind() == io::ErrorKind::NotFound {
-                    Ok(())
-                } else {
-                    Err(error)
-                }
-            })?;
+            File::open(&file_path)
+                .map(|_| ())
+                .or_else(|error| match error.kind() {
+                    io::ErrorKind::NotFound => {
+                        self.prompt_message = "[New file]".into();
+                        Ok(())
+                    }
+                    io::ErrorKind::PermissionDenied => {
+                        self.prompt_message =
+                            format!("Permission denied while opening {}", file_path.display());
+                        Err(error)
+                    }
+                    _ => {
+                        self.prompt_message =
+                            format!("Could not open {} ({})", file_path.display(), error);
+                        Err(error)
+                    }
+                })?;
             Rope::new()
         };
         self.buffers.push(OpenBuffer {
@@ -114,6 +127,7 @@ impl Editor {
                 repo: repo.map(RepositoryRc::new),
                 content: text,
                 file_path: Some(file_path),
+                log_message: self.link.callback(Message::LogMessage),
             },
         });
         self.next_buffer_id += 1;
@@ -151,7 +165,6 @@ impl Component for Editor {
         } else {
             false
         };
-
         match message {
             Message::ChangeTheme => {
                 self.theme_index = (self.theme_index + 1) % self.themes.len();
@@ -162,11 +175,19 @@ impl Component for Editor {
                 self.prompt_state = state;
                 self.prompt_height = height;
             }
-            Message::OpenFile(path) => self.open_file(path).expect("open file"),
+            Message::OpenFile(path) => {
+                if let Err(error) = self.open_file(path) {
+                    self.prompt_message = format!("Could not open file: {}", error.to_string());
+                }
+            }
             Message::FocusNextComponent => self.cycle_focus(CycleFocus::Next),
             Message::FocusPreviousComponent => self.cycle_focus(CycleFocus::Previous),
             Message::ClosePane if !self.buffers.is_empty() => {
                 self.buffers.remove(self.focused);
+                self.focused = cmp::min(self.buffers.len().saturating_sub(1), self.focused);
+            }
+            Message::LogMessage(message) => {
+                self.prompt_message = message;
             }
             Message::Quit => {
                 self.link.exit();
