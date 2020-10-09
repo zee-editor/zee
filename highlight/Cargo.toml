@@ -8,17 +8,17 @@ license = "Apache-2.0"
 edition = "2018"
 
 [dependencies]
-fnv = "1.0.6"
+fnv = "1.0.7"
 lazy_static = "1.4.0"
-log = "0.4.8"
+log = "0.4.11"
 maplit = "1.0.2"
-nom = "5.0.1"
-regex = "1.3.1"
-serde = "1.0.103"
-serde_derive = "1.0.103"
-serde_json = "1.0.42"
-serde_regex = "0.4.0"
-smallvec = { version = "1.0.0", features = ["serde"] }
-tree-sitter = "0.6.3"
+nom = "5.1.2"
+regex = "1.3.9"
+serde = "1.0.116"
+serde_derive = "1.0.116"
+serde_json = "1.0.57"
+serde_regex = "1.1.0"
+smallvec = { version = "1.4.2", features = ["serde"] }
+tree-sitter = "0.16.1"
 
 zee-grammar = { version = "0.1.2", path = "../grammar" }

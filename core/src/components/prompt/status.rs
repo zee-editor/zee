@@ -6,11 +6,9 @@ use zi::{
     Colour, Component, ComponentLink, Layout, Rect, ShouldRender,
 };
 
-use super::State;
-
 #[derive(Clone, PartialEq)]
 pub struct StatusProperties {
-    pub status: State,
+    pub action_name: String,
     pub pending: bool,
     pub style: Style,
 }
@@ -56,24 +54,19 @@ impl Component for Status {
         let Self {
             properties:
                 StatusProperties {
-                    ref status,
+                    ref action_name,
                     style,
                     pending,
                 },
             ..
         } = *self;
 
-        let content = match status {
-            State::PickingFileFromRepo => "repo",
-            State::PickingFileFromDirectory => "open",
-            State::Inactive => "",
-        };
         let style = if pending {
             self.animated_style()
         } else {
             style
         };
-        layout::component::<Text>(TextProperties::new().content(content).style(style))
+        layout::component::<Text>(TextProperties::new().content(action_name).style(style))
     }
 
     fn tick(&self) -> Option<Self::Message> {

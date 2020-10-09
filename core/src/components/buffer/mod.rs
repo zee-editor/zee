@@ -1,6 +1,6 @@
-mod line_info;
-mod status_bar;
-mod textarea;
+pub mod line_info;
+pub mod status_bar;
+pub mod textarea;
 
 use git2::Repository;
 use ropey::Rope;
@@ -9,13 +9,13 @@ use zi::{
     components::text::{Text, TextAlign, TextProperties},
     layout,
     terminal::Key,
-    BindingMatch, BindingTransition, Callback, Component, ComponentLink, Layout, Rect,
-    ShouldRender, Style,
+    BindingMatch, BindingTransition, Callback, Component, ComponentExt, ComponentLink, FlexBasis,
+    Layout, Rect, ShouldRender, Style,
 };
 
 use self::{
     line_info::{LineInfo, Properties as LineInfoProperties},
-    status_bar::{Properties as StatusBarProperties, StatusBar},
+    status_bar::{Properties as StatusBarProperties, StatusBar, Theme as StatusBarTheme},
     textarea::{Properties as TextAreaProperties, TextArea},
 };
 use super::{
@@ -38,18 +38,10 @@ use crate::{
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Theme {
-    pub syntax: SyntaxTheme,
-    pub edit_tree_viewer: EditTreeViewerTheme,
     pub border: Style,
-    pub status_base: Style,
-    pub status_frame_id_focused: Style,
-    pub status_frame_id_unfocused: Style,
-    pub status_is_modified: Style,
-    pub status_is_not_modified: Style,
-    pub status_file_name: Style,
-    pub status_file_size: Style,
-    pub status_position_in_file: Style,
-    pub status_mode: Style,
+    pub edit_tree_viewer: EditTreeViewerTheme,
+    pub status_bar: StatusBarTheme,
+    pub syntax: SyntaxTheme,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -448,7 +440,7 @@ impl Component for Buffer {
 
     fn view(&self) -> Layout {
         // The textarea components that displays text
-        let textarea = layout::component::<TextArea>(TextAreaProperties {
+        let textarea = TextArea::with(TextAreaProperties {
             theme: self.properties.theme.syntax.clone(),
             focused: self.properties.focused,
             text: self.text.staged().clone(),
@@ -459,15 +451,14 @@ impl Component for Buffer {
         });
 
         // Vertical info bar which shows line specific diagnostics
-        let line_info = layout::component::<LineInfo>(LineInfoProperties {
+        let line_info = LineInfo::with(LineInfoProperties {
             style: self.properties.theme.border,
             line_offset: self.line_offset,
             num_lines: self.text.len_lines(),
-            frame_id: self.properties.frame_id,
         });
 
         // The "status bar" which shows information about the file etc.
-        let status_bar = layout::component::<StatusBar>(StatusBarProperties {
+        let status_bar = StatusBar::with(StatusBarProperties {
             current_line_index: self.text.char_to_line(self.cursor.range().start.0),
             file_path: self.properties.file_path.clone(),
             focused: self.properties.focused,
@@ -477,7 +468,7 @@ impl Component for Buffer {
             num_lines: self.text.len_lines(),
             repository: self.properties.repo.clone(),
             size_bytes: self.text.len_bytes() as u64,
-            theme: self.properties.theme.clone(),
+            theme: self.properties.theme.status_bar.clone(),
             // TODO: Fix visual_cursor_x to display the column (i.e. unicode
             // width). It used to be computed by draw_line.
             visual_cursor_x: self.cursor.range().start.0,
@@ -488,27 +479,24 @@ impl Component for Buffer {
             Some(layout::fixed(
                 EDIT_TREE_WIDTH,
                 layout::row([
-                    layout::fixed(
-                        1,
-                        layout::component::<Text>(
-                            TextProperties::new().style(self.properties.theme.border),
-                        ),
+                    Text::item_with(
+                        FlexBasis::Fixed(1),
+                        TextProperties::new().style(self.properties.theme.border),
                     ),
                     layout::auto(layout::column([
-                        layout::auto(layout::component::<EditTreeViewer>(
+                        EditTreeViewer::item_with(
+                            FlexBasis::Auto,
                             EditTreeViewerProperties {
                                 tree: self.text.clone(),
                                 theme: self.properties.theme.edit_tree_viewer.clone(),
                             },
-                        )),
-                        layout::fixed(
-                            1,
-                            layout::component::<Text>(
-                                TextProperties::new()
-                                    .content("Edit Tree Viewer 🌴")
-                                    .style(self.properties.theme.border)
-                                    .align(TextAlign::Centre),
-                            ),
+                        ),
+                        Text::item_with(
+                            FlexBasis::Fixed(1),
+                            TextProperties::new()
+                                .content("Edit Tree Viewer 🌴")
+                                .style(self.properties.theme.border)
+                                .align(TextAlign::Centre),
                         ),
                     ])),
                 ]),
@@ -567,7 +555,7 @@ impl Component for Buffer {
             [Key::Ctrl('x'), Key::Char('u')] | [Key::Ctrl('x'), Key::Ctrl('u')] => {
                 Message::ToggleEditTree
             }
-            [Key::Ctrl('/')] | [Key::Ctrl('z')] => Message::Undo,
+            [Key::Ctrl('_')] | [Key::Ctrl('z')] => Message::Undo,
             [Key::Ctrl('q')] => Message::Redo,
 
             // Buffer

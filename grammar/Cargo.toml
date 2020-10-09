@@ -8,9 +8,9 @@ license = "Apache-2.0"
 edition = "2018"
 
 [dependencies]
-once_cell = "1.3.1"
-tree-sitter = "0.6.3"
+once_cell = "1.4.1"
+tree-sitter = "0.16.1"
 
 [build-dependencies]
-cc = { version = "1.0.47", features = ["parallel"] }
-tree-sitter = "0.6.3"
+cc = { version = "1.0.59", features = ["parallel"] }
+tree-sitter = "0.16.1"
