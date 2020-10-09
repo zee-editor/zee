@@ -5,7 +5,6 @@ pub struct Properties {
     pub style: Style,
     pub line_offset: usize,
     pub num_lines: usize,
-    pub frame_id: usize,
 }
 
 pub struct LineInfo {
@@ -42,7 +41,6 @@ impl Component for LineInfo {
                     style,
                     line_offset,
                     num_lines,
-                    frame_id,
                 },
             frame,
         } = *self;
@@ -54,13 +52,7 @@ impl Component for LineInfo {
                 line_index as usize,
                 style,
                 if line_offset + line_index < num_lines - 1 {
-                    if frame_id > 1 {
-                        "│"
-                    } else {
-                        " "
-                    }
-                } else if frame_id > 1 {
-                    "├"
+                    " "
                 } else {
                     "╶"
                 },

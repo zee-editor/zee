@@ -1,6 +1,6 @@
 use once_cell::sync::Lazy;
 use smartstring::alias::CompactString;
-use std::{ffi::OsStr, path::Path};
+use std::{ffi::OsStr, fmt, path::Path, ptr};
 use tree_sitter::Language;
 use zee_grammar as grammar;
 use zee_highlight::{
@@ -10,8 +10,8 @@ use zee_highlight::{
 
 pub struct Mode {
     pub name: CompactString,
-    file: Vec<FilenamePattern>,
     pub parser: Option<SyntaxParser>,
+    file: Vec<FilenamePattern>,
 }
 
 impl Mode {
@@ -21,6 +21,30 @@ impl Mode {
 
     pub fn highlights(&self) -> Option<&HighlightRules> {
         self.parser.as_ref().map(|parser| &parser.highlights)
+    }
+}
+
+impl PartialEq for Mode {
+    fn eq(&self, other: &Self) -> bool {
+        ptr::eq(self, other)
+    }
+}
+
+impl fmt::Debug for Mode {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter
+            .debug_struct("Mode")
+            .field("name", &self.name)
+            .field(
+                "parser",
+                &if self.parser.is_some() {
+                    "Some(SyntaxParser(...))"
+                } else {
+                    "None"
+                },
+            )
+            .field("file", &self.file)
+            .finish()
     }
 }
 
@@ -47,6 +71,7 @@ impl Default for Mode {
     }
 }
 
+#[derive(Debug)]
 enum FilenamePattern {
     Suffix(String),
     Name(String),
