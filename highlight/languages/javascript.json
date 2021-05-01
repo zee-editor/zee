@@ -18,7 +18,6 @@
     ],
     "member_expression > property_identifier": "variable.other.object.property.unquoted",
     "formal_parameters > identifier": "variable.parameter.function",
-    "formal_parameters > rest_parameter > identifier": "variable.parameter.rest.function",
     "shorthand_property_identifier": [
       {
         "match": "^[$A-Z_]{2,}$",
