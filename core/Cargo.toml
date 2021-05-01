@@ -40,7 +40,7 @@ toml = "0.5.8"
 tree-sitter = "0.17.1"
 unicode-segmentation = "1.7.1"
 unicode-width = "0.1.8"
-zi = { version = "0.1.4", path = "../../zi" }
+zi = "0.1.6"
 
 # Local crates
 zee-grammar = { version = "0.1.3", path = "../grammar" }
