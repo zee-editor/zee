@@ -184,11 +184,6 @@ impl Editor {
         self.prompt_action = PromptAction::Log { message };
         self.prompt_height = self.prompt_action.initial_height();
     }
-
-    fn clear_prompt_action(&mut self) {
-        self.prompt_action = PromptAction::None;
-        self.prompt_height = self.prompt_action.initial_height();
-    }
 }
 
 impl Component for Editor {
@@ -409,9 +404,8 @@ impl Component for Editor {
             // Quit
             [Key::Ctrl('x'), Key::Ctrl('c')] => Message::Quit,
             _ => {
-                match self.prompt_action {
-                    PromptAction::Log { .. } => self.link.send(Message::LogMessage(None)),
-                    _ => {}
+                if let PromptAction::Log { .. } = self.prompt_action {
+                    self.link.send(Message::LogMessage(None));
                 };
                 return BindingMatch {
                     transition: BindingTransition::Continue,
@@ -609,14 +603,11 @@ impl<IdT: Clone + Copy + Display> WindowTree<IdT> {
     pub fn get_focused(&self) -> Option<IdT> {
         let mut window_index = self.focused_index;
         for window in self.nodes.iter() {
-            match window {
-                Node::Window(id) => {
-                    if window_index == WindowIndex(0) {
-                        return Some(*id);
-                    }
-                    window_index = window_index.saturating_decrement();
+            if let Node::Window(id) = window {
+                if window_index == WindowIndex(0) {
+                    return Some(*id);
                 }
-                _ => (),
+                window_index = window_index.saturating_decrement();
             }
         }
         None
