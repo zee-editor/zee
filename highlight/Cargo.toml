@@ -1,6 +1,6 @@
 [package]
 name = "zee-highlight"
-version = "0.1.2"
+version = "0.2.0"
 authors = ["Marius Cobzarenco <marius@reinfer.io>"]
 description = "Utility for highlighting source code with CSS-like rules used by zee"
 homepage = "https://github.com/mcobzarenco/zee/tree/master/highlight"
@@ -21,4 +21,4 @@ serde_regex = "1.1.0"
 smallvec = { version = "1.6.1", features = ["serde"] }
 tree-sitter = "0.19.3"
 
-zee-grammar = { version = "0.1.2", path = "../grammar" }
+zee-grammar = { version = "0.2.0", path = "../grammar" }
