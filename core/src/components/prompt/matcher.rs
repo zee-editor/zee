@@ -1,5 +1,5 @@
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
-use std::{fmt, iter};
+use std::fmt;
 
 pub struct Matcher {
     ranked: Vec<(usize, i64)>,   // (original index, score)
@@ -51,10 +51,6 @@ impl Matcher {
         }));
         ranked.sort_unstable_by_key(|(_, score)| -score);
     }
-
-    pub fn clear(&mut self) {
-        self.set_filter(iter::empty(), "")
-    }
 }
 
 impl std::ops::Index<usize> for Matcher {
@@ -67,5 +63,4 @@ impl std::ops::Index<usize> for Matcher {
 
 fn default_matcher() -> SkimMatcherV2 {
     SkimMatcherV2::default()
-    // .use_cache(false)
 }

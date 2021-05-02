@@ -241,9 +241,9 @@ impl StatusCanvas {
     }
 }
 
-impl Into<Layout> for StatusCanvas {
-    fn into(self) -> Layout {
-        self.canvas.into()
+impl From<StatusCanvas> for Layout {
+    fn from(status_canvas: StatusCanvas) -> Self {
+        status_canvas.canvas.into()
     }
 }
 

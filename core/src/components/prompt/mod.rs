@@ -50,25 +50,17 @@ pub enum Action {
 
 impl Action {
     pub fn is_none(&self) -> bool {
-        use Action::*;
-        match self {
-            None => true,
-            _ => false,
-        }
+        matches!(self, Self::None)
     }
 
     pub fn is_interactive(&self) -> bool {
-        use Action::*;
-        match self {
-            None | Log { .. } => false,
-            _ => true,
-        }
+        !matches!(self, Self::None | Self::Log { .. })
     }
 
     pub fn initial_height(&self) -> usize {
         match self {
-            Action::SwitchBuffer { ref entries, .. } => {
-                1 + std::cmp::min(std::cmp::max(entries.len(), 1), 15)
+            Self::SwitchBuffer { ref entries, .. } => {
+                1 + std::cmp::min(std::cmp::max(entries.len(), 1), PROMPT_MAX_HEIGHT)
             }
             _ => 1,
         }
@@ -95,15 +87,14 @@ pub struct Properties {
 
 pub struct Prompt {
     properties: Properties,
-    link: ComponentLink<Self>,
 }
 
 impl Component for Prompt {
     type Message = ();
     type Properties = Properties;
 
-    fn create(properties: Self::Properties, _frame: Rect, link: ComponentLink<Self>) -> Self {
-        Self { properties, link }
+    fn create(properties: Self::Properties, _frame: Rect, _link: ComponentLink<Self>) -> Self {
+        Self { properties }
     }
 
     fn change(&mut self, properties: Self::Properties) -> ShouldRender {

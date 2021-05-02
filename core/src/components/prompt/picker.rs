@@ -3,7 +3,7 @@ use ignore::WalkBuilder;
 use ropey::Rope;
 use std::{
     borrow::Cow,
-    cmp, fmt, fs, iter,
+    cmp, fmt, fs,
     path::{Path, PathBuf},
     rc::Rc,
 };
@@ -19,13 +19,13 @@ use zi::{
 
 use super::{
     status::{Status, StatusProperties},
-    Theme,
+    Theme, PROMPT_MAX_HEIGHT,
 };
 use crate::{
     editor::Context,
     error::{Context as _Context, Result},
     task::TaskId,
-    utils::{self},
+    utils,
 };
 
 #[derive(Debug)]
@@ -98,7 +98,7 @@ impl FilePicker {
     }
 
     fn height(&self) -> usize {
-        1 + cmp::min(self.listing.num_filtered(), 15)
+        1 + cmp::min(self.listing.num_filtered(), PROMPT_MAX_HEIGHT)
     }
 }
 
@@ -388,10 +388,6 @@ impl FileListing {
                 .map(|score| (index, score))
         }));
         filtered.sort_unstable_by_key(|(_, score)| -score);
-    }
-
-    pub fn clear(&mut self) {
-        self.reset(iter::empty(), "", "")
     }
 
     pub fn reset(
