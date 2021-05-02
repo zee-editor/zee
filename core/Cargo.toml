@@ -43,8 +43,8 @@ unicode-width = "0.1.8"
 zi = "0.1.6"
 
 # Local crates
-zee-grammar = { version = "0.1.3", path = "../grammar" }
-zee-highlight = { version = "0.1.2", path = "../highlight" }
+zee-grammar = { version = "0.2.0", path = "../grammar" }
+zee-highlight = { version = "0.2.0", path = "../highlight" }
 
 # Optional dependencies
 crossclip = { optional = true, version = "0.7.0" }
