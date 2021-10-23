@@ -14,7 +14,7 @@ mod utils;
 use flexi_logger::Logger;
 use std::{env, path::PathBuf, rc::Rc};
 use structopt::StructOpt;
-use zi::{layout, App};
+use zi::ComponentExt;
 
 use crate::{
     editor::{Context, Editor},
@@ -86,12 +86,9 @@ fn start_editor() -> Result<()> {
         task_pool: TaskPool::new()?,
         clipboard: clipboard::create()?,
     });
-    let mut app = App::new(layout::component::<Editor>(context));
 
     // Start the UI loop
-    let frontend =
-        zi::frontend::crossterm::incremental().map_err(|err| -> zi::Error { err.into() })?;
-    app.run_event_loop(frontend)?;
+    zi_term::incremental()?.run_event_loop(Editor::with(context))?;
 
     Ok(())
 }

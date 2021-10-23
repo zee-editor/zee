@@ -1,9 +1,7 @@
 use palette::{Gradient, Hsv, LinSrgb};
 use zi::{
     components::text::{Text, TextProperties},
-    layout,
-    terminal::Style,
-    Colour, Component, ComponentLink, Layout, Rect, ShouldRender,
+    prelude::*,
 };
 
 #[derive(Clone, PartialEq)]
@@ -66,7 +64,7 @@ impl Component for Status {
         } else {
             style
         };
-        layout::component::<Text>(TextProperties::new().content(action_name).style(style))
+        Text::with(TextProperties::new().content(action_name).style(style))
     }
 
     fn tick(&self) -> Option<Self::Message> {

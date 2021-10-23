@@ -7,10 +7,8 @@ use ropey::Rope;
 use std::{borrow::Cow, fs::File, io::BufWriter, iter, path::PathBuf, rc::Rc};
 use zi::{
     components::text::{Text, TextAlign, TextProperties},
-    layout,
-    terminal::Key,
-    BindingMatch, BindingTransition, Callback, Component, ComponentExt, ComponentLink, FlexBasis,
-    Layout, Rect, ShouldRender, Style,
+    prelude::*,
+    Callback,
 };
 
 use self::{
@@ -476,43 +474,35 @@ impl Component for Buffer {
 
         // Edit-tree viewer (aka. undo/redo tree)
         let edit_tree_viewer = if self.viewing_edit_tree {
-            Some(layout::fixed(
-                EDIT_TREE_WIDTH,
-                layout::row([
-                    Text::item_with(
-                        FlexBasis::Fixed(1),
-                        TextProperties::new().style(self.properties.theme.border),
-                    ),
-                    layout::auto(layout::column([
-                        EditTreeViewer::item_with(
-                            FlexBasis::Auto,
-                            EditTreeViewerProperties {
-                                tree: self.text.clone(),
-                                theme: self.properties.theme.edit_tree_viewer.clone(),
-                            },
-                        ),
-                        Text::item_with(
-                            FlexBasis::Fixed(1),
-                            TextProperties::new()
-                                .content("Edit Tree Viewer 🌴")
-                                .style(self.properties.theme.border)
-                                .align(TextAlign::Centre),
-                        ),
-                    ])),
-                ]),
-            ))
+            Some(Item::fixed(EDIT_TREE_WIDTH)(Container::row([
+                Item::fixed(1)(Text::with(
+                    TextProperties::new().style(self.properties.theme.border),
+                )),
+                Item::auto(Container::column([
+                    Item::auto(EditTreeViewer::with(EditTreeViewerProperties {
+                        tree: self.text.clone(),
+                        theme: self.properties.theme.edit_tree_viewer.clone(),
+                    })),
+                    Item::fixed(1)(Text::with(
+                        TextProperties::new()
+                            .content("Edit Tree Viewer 🌴")
+                            .style(self.properties.theme.border)
+                            .align(TextAlign::Centre),
+                    )),
+                ])),
+            ])))
         } else {
             None
         };
 
-        layout::column([
-            layout::auto(layout::row_iter(
+        Layout::column([
+            Item::auto(Layout::row(
                 iter::once(edit_tree_viewer)
-                    .chain(iter::once(Some(layout::fixed(1, line_info))))
-                    .chain(iter::once(Some(layout::auto(textarea))))
+                    .chain(iter::once(Some(Item::fixed(1)(line_info))))
+                    .chain(iter::once(Some(Item::auto(textarea))))
                     .filter_map(|x| x),
             )),
-            layout::fixed(1, status_bar),
+            Item::fixed(1)(status_bar),
         ])
     }
 
@@ -555,7 +545,7 @@ impl Component for Buffer {
             [Key::Ctrl('x'), Key::Char('u')] | [Key::Ctrl('x'), Key::Ctrl('u')] => {
                 Message::ToggleEditTree
             }
-            [Key::Ctrl('_')] | [Key::Ctrl('z')] => Message::Undo,
+            [Key::Ctrl('_')] | [Key::Ctrl('z')] | [Key::Ctrl('/')] => Message::Undo,
             [Key::Ctrl('q')] => Message::Redo,
 
             // Buffer

@@ -7,8 +7,8 @@ use zi::{
         select::{Select, SelectProperties},
         text::{Text, TextAlign, TextProperties},
     },
-    layout, BindingMatch, BindingTransition, Callback, Colour, Component, ComponentExt,
-    ComponentLink, FlexBasis, FlexDirection, Key, Layout, Rect, ShouldRender, Style,
+    BindingMatch, BindingTransition, Callback, Colour, Component, ComponentExt, ComponentLink,
+    Container, FlexBasis, FlexDirection, Item, Key, Layout, Rect, ShouldRender, Style,
 };
 
 use super::{
@@ -177,119 +177,108 @@ impl Component for BufferPicker {
             } else {
                 theme.item_unfocused_background
             };
-            layout::fixed(
-                1,
-                layout::row([
-                    Text::item_with_key(
-                        FlexBasis::Fixed(20),
-                        format!("{}name", entry.id).as_str(),
-                        TextProperties::new()
-                            .content(entry.name.clone())
-                            .style(Style::normal(background, theme.item_file_foreground)),
-                    ),
-                    Text::item_with_key(
-                        FlexBasis::Fixed(16),
-                        format!("{}size", entry.id).as_str(),
-                        TextProperties::new()
-                            .content(format!(
-                                " {} ",
-                                SizeFormatterBinary::new(entry.len_bytes.try_into().unwrap())
-                            ))
-                            .style(Style::normal(background, theme.file_size))
-                            .align(TextAlign::Right),
-                    ),
-                    Text::item_with_key(
-                        FlexBasis::Fixed(16),
-                        format!("{}mode", entry.id).as_str(),
-                        TextProperties::new()
-                            .content(entry.mode.name.clone())
-                            .style(Style::normal(background, theme.mode))
-                            .align(TextAlign::Right),
-                    ),
-                    Text::item_with_key(
-                        FlexBasis::Auto,
-                        format!("{}path", entry.id).as_str(),
-                        TextProperties::new()
-                            .content(
-                                entry
-                                    .path
-                                    .as_ref()
-                                    .map(|entry| format!("    {}", entry.display()))
-                                    .unwrap_or_else(String::new),
-                            )
-                            .style(Style::normal(background, theme.file_size)),
-                    ),
-                ]),
-            )
+            Item::fixed(1)(Container::row([
+                Text::item_with_key(
+                    FlexBasis::Fixed(20),
+                    format!("{}name", entry.id).as_str(),
+                    TextProperties::new()
+                        .content(entry.name.clone())
+                        .style(Style::normal(background, theme.item_file_foreground)),
+                ),
+                Text::item_with_key(
+                    FlexBasis::Fixed(16),
+                    format!("{}size", entry.id).as_str(),
+                    TextProperties::new()
+                        .content(format!(
+                            " {} ",
+                            SizeFormatterBinary::new(entry.len_bytes.try_into().unwrap())
+                        ))
+                        .style(Style::normal(background, theme.file_size))
+                        .align(TextAlign::Right),
+                ),
+                Text::item_with_key(
+                    FlexBasis::Fixed(16),
+                    format!("{}mode", entry.id).as_str(),
+                    TextProperties::new()
+                        .content(entry.mode.name.clone())
+                        .style(Style::normal(background, theme.mode))
+                        .align(TextAlign::Right),
+                ),
+                Text::item_with_key(
+                    FlexBasis::Auto,
+                    format!("{}path", entry.id).as_str(),
+                    TextProperties::new()
+                        .content(
+                            entry
+                                .path
+                                .as_ref()
+                                .map(|entry| format!("    {}", entry.display()))
+                                .unwrap_or_else(String::new),
+                        )
+                        .style(Style::normal(background, theme.file_size)),
+                ),
+            ]))
         };
-        layout::column([
+        Layout::column([
             if self.matcher.num_ranked() == 0 {
-                layout::fixed(
-                    1,
-                    Text::with(
-                        TextProperties::new()
-                            .content(if self.properties.entries.is_empty() {
-                                "No open buffers"
-                            } else {
-                                "No matching buffers"
-                            })
-                            .style(Style::normal(
-                                self.properties.theme.item_unfocused_background,
-                                Colour::rgb(251, 73, 52),
-                                // self.properties.theme.action.background,
-                            )),
-                    ),
+                Text::item_with(
+                    FlexBasis::Fixed(1),
+                    TextProperties::new()
+                        .content(if self.properties.entries.is_empty() {
+                            "No open buffers"
+                        } else {
+                            "No matching buffers"
+                        })
+                        .style(Style::normal(
+                            self.properties.theme.item_unfocused_background,
+                            Colour::rgb(251, 73, 52),
+                            // self.properties.theme.action.background,
+                        )),
                 )
             } else {
-                Select::item_with(
-                    FlexBasis::Auto,
-                    SelectProperties {
-                        background: Style::normal(
-                            self.properties.theme.item_unfocused_background,
-                            self.properties.theme.item_file_foreground,
-                        ),
-                        direction: FlexDirection::ColumnReverse,
-                        item_at: item_at.into(),
-                        focused: true,
-                        num_items: self.matcher.num_ranked(),
-                        selected: self.selected_index,
-                        on_change: self.link.callback(Message::UpdateSelected).into(),
-                        item_size: 1,
-                    },
-                )
+                Item::auto(Select::with(SelectProperties {
+                    background: Style::normal(
+                        self.properties.theme.item_unfocused_background,
+                        self.properties.theme.item_file_foreground,
+                    ),
+                    direction: FlexDirection::ColumnReverse,
+                    item_at: item_at.into(),
+                    focused: true,
+                    num_items: self.matcher.num_ranked(),
+                    selected: self.selected_index,
+                    on_change: self.link.callback(Message::UpdateSelected).into(),
+                    item_size: 1,
+                }))
             },
-            layout::fixed(
-                1,
-                layout::row([
-                    Status::item_with_key(
-                        FlexBasis::Fixed(6),
-                        "status",
-                        StatusProperties {
-                            action_name: "buffer".into(),
-                            pending: self.current_task_id.is_some(),
-                            style: self.properties.theme.action,
-                        },
-                    ),
-                    Text::item_with_key(
-                        FlexBasis::Fixed(1),
-                        "spacer",
-                        TextProperties::new().style(self.properties.theme.input),
-                    ),
-                    layout::auto(input),
-                    Text::item_with_key(
-                        FlexBasis::Fixed(12),
-                        "num-results",
-                        TextProperties::new()
-                            .content(format!(
-                                "{} of {} ",
-                                self.matcher.num_ranked(),
-                                self.properties.entries.len()
-                            ))
-                            .style(self.properties.theme.action.invert())
-                            .align(TextAlign::Right),
-                    ),
-                ]),
-            ),
+            Item::fixed(1)(Container::row([
+                Status::item_with_key(
+                    FlexBasis::Fixed(6),
+                    "status",
+                    StatusProperties {
+                        action_name: "buffer".into(),
+                        pending: self.current_task_id.is_some(),
+                        style: self.properties.theme.action,
+                    },
+                ),
+                Text::item_with_key(
+                    FlexBasis::Fixed(1),
+                    "spacer",
+                    TextProperties::new().style(self.properties.theme.input),
+                ),
+                Item::auto(input),
+                Text::item_with_key(
+                    FlexBasis::Fixed(12),
+                    "num-results",
+                    TextProperties::new()
+                        .content(format!(
+                            "{} of {} ",
+                            self.matcher.num_ranked(),
+                            self.properties.entries.len()
+                        ))
+                        .style(self.properties.theme.action.invert())
+                        .align(TextAlign::Right),
+                ),
+            ])),
         ])
     }
 

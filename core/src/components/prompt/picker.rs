@@ -13,8 +13,8 @@ use zi::{
         select::{Select, SelectProperties},
         text::{Text, TextProperties},
     },
-    layout, BindingMatch, BindingTransition, Callback, Component, ComponentExt, ComponentLink,
-    FlexBasis, FlexDirection, Key, Layout, Rect, ShouldRender, Style,
+    prelude::*,
+    Callback,
 };
 
 use super::{
@@ -252,47 +252,36 @@ impl Component for FilePicker {
                 .to_str()
                 .map(|prefix| prefix.len() + 1)
                 .unwrap_or(0)..];
-            Text::item_with_key(
-                FlexBasis::Fixed(1),
+            Item::fixed(1)(Text::with_key(
                 content,
                 TextProperties::new().content(content).style(style),
-            )
+            ))
         };
-        layout::column([
-            Select::item_with(
-                FlexBasis::Auto,
-                SelectProperties {
-                    background: Style::normal(
-                        self.properties.theme.item_unfocused_background,
-                        self.properties.theme.item_file_foreground,
-                    ),
-                    direction: FlexDirection::ColumnReverse,
-                    item_at: item_at.into(),
-                    focused: true,
-                    num_items: self.listing.num_filtered(),
-                    selected: self.selected_index,
-                    on_change: self.link.callback(Message::ChangeSelectedFile).into(),
-                    item_size: 1,
-                },
-            ),
-            layout::fixed(
-                1,
-                layout::row([
-                    Status::item_with(
-                        FlexBasis::Fixed(4),
-                        StatusProperties {
-                            action_name: self.properties.source.status_name(),
-                            pending: self.current_task_id.is_some(),
-                            style: self.properties.theme.action,
-                        },
-                    ),
-                    Text::item_with(
-                        FlexBasis::Fixed(1),
-                        TextProperties::new().style(self.properties.theme.input),
-                    ),
-                    layout::auto(input),
-                ]),
-            ),
+        Layout::column([
+            Item::auto(Select::with(SelectProperties {
+                background: Style::normal(
+                    self.properties.theme.item_unfocused_background,
+                    self.properties.theme.item_file_foreground,
+                ),
+                direction: FlexDirection::ColumnReverse,
+                item_at: item_at.into(),
+                focused: true,
+                num_items: self.listing.num_filtered(),
+                selected: self.selected_index,
+                on_change: self.link.callback(Message::ChangeSelectedFile).into(),
+                item_size: 1,
+            })),
+            Item::fixed(1)(Container::row([
+                Item::fixed(4)(Status::with(StatusProperties {
+                    action_name: self.properties.source.status_name(),
+                    pending: self.current_task_id.is_some(),
+                    style: self.properties.theme.action,
+                })),
+                Item::fixed(1)(Text::with(
+                    TextProperties::new().style(self.properties.theme.input),
+                )),
+                Item::auto(input),
+            ])),
         ])
     }
 
