@@ -123,7 +123,7 @@ fn node_selector(input: &str) -> IResult<&str, NodeSelectorRaw> {
         NodeSelectorRaw {
             node_kind: identifier_str.into(),
             nth_child: nth
-                .map_or(Ok(None), |nth| usize::from_str_radix(nth, 10).map(Some))
+                .map_or(Ok(None), |nth| nth.parse::<usize>().map(Some))
                 .unwrap(),
         },
     ))

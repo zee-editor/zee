@@ -13,9 +13,8 @@ use std::{
     sync::Arc,
 };
 use zi::{
-    layout::{self, Container},
-    BindingMatch, BindingTransition, Callback, Component, ComponentExt, ComponentLink, FlexBasis,
-    FlexDirection, Key, Layout, Rect, ShouldRender,
+    BindingMatch, BindingTransition, Callback, Component, ComponentExt, ComponentLink, Container,
+    FlexBasis, FlexDirection, Item, Key, Layout, Rect, ShouldRender,
 };
 
 use crate::{
@@ -318,7 +317,7 @@ impl Component for Editor {
                 },
             )
         } else {
-            layout::auto(self.windows.layout(&mut |Window { id, focused, index }| {
+            Item::auto(self.windows.layout(&mut |Window { id, focused, index }| {
                 let buffer = self.buffers.get(&id).unwrap();
                 Buffer::with_key(
                     format!("{}.{}", index.0, id.0).as_str(),
@@ -337,7 +336,7 @@ impl Component for Editor {
             }))
         };
 
-        layout::column([
+        Layout::column([
             buffers,
             Prompt::item_with_key(
                 FlexBasis::Fixed(if self.prompt_action.is_none() {
@@ -569,13 +568,13 @@ impl<IdT: Clone + Copy + Display> WindowTree<IdT> {
 
     pub fn layout(&self, lay_component: &mut impl FnMut(Window<IdT>) -> Layout) -> Layout {
         let mut container_stack = Vec::new();
-        let mut container = Container::new(FlexDirection::Row);
+        let mut container = Container::empty(FlexDirection::Row);
         let mut window_index = WindowIndex(0);
 
         for window in self.nodes.iter() {
             match window {
                 Node::Window(id) => {
-                    container.add(layout::auto(lay_component(Window {
+                    container.push(Item::auto(lay_component(Window {
                         id: *id,
                         focused: window_index == self.focused_index,
                         index: window_index,
@@ -584,13 +583,13 @@ impl<IdT: Clone + Copy + Display> WindowTree<IdT> {
                 }
                 Node::ContainerStart(direction) => {
                     container_stack.push(container);
-                    container = Container::new(*direction);
+                    container = Container::empty(*direction);
                 }
                 Node::ContainerEnd => {
                     container_stack
                         .last_mut()
                         .unwrap()
-                        .add(layout::auto(container.into()));
+                        .push(Item::auto(container));
                     container = container_stack.pop().unwrap();
                 }
             }
