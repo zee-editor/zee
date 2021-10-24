@@ -46,7 +46,7 @@ impl Matcher {
         ranked.clear();
         ranked.extend(entries.enumerate().filter_map(|(index, file)| {
             matcher
-                .fuzzy_match(&file, filter)
+                .fuzzy_match(file, filter)
                 .map(|score| (index, score))
         }));
         ranked.sort_unstable_by_key(|(_, score)| -score);

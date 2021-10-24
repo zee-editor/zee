@@ -146,8 +146,8 @@ impl TextArea {
             }
 
             let style = text_style_at_char(
-                &theme,
-                &cursor,
+                theme,
+                cursor,
                 char_index,
                 focused,
                 line_under_cursor,

@@ -48,7 +48,7 @@ pub enum Message {
     OpenFilePicker(FileSource),
     OpenFile(PathBuf),
     SelectBuffer(BufferId),
-    LogMessage(Option<String>),
+    Log(Option<String>),
     Cancel,
     Quit,
 }
@@ -193,7 +193,7 @@ impl Component for Editor {
         for file_path in properties.args_files.iter().cloned() {
             link.send(Message::OpenFile(file_path));
         }
-        let log_message = link.callback(|message| Message::LogMessage(Some(message)));
+        let log_message = link.callback(|message| Message::Log(Some(message)));
 
         Self {
             context: properties,
@@ -293,7 +293,7 @@ impl Component for Editor {
             Message::ClosePane if !self.buffers.is_empty() => {
                 self.windows.close_focused();
             }
-            Message::LogMessage(message) if !self.prompt_action.is_interactive() => {
+            Message::Log(message) if !self.prompt_action.is_interactive() => {
                 self.prompt_action = message
                     .map(|message| PromptAction::Log { message })
                     .unwrap_or(PromptAction::None);
@@ -372,30 +372,20 @@ impl Component for Editor {
             [Key::Ctrl('x'), Key::Ctrl('v')] => Message::OpenFilePicker(FileSource::Repository),
 
             // Buffer management
-            [Key::Ctrl('x'), Key::Char('b')] | [Key::Ctrl('x'), Key::Ctrl('b')] => {
-                Message::OpenBufferSwitcher
+            [Key::Ctrl('x'), Key::Char('b') | Key::Ctrl('b')] => Message::OpenBufferSwitcher,
+            [Key::Ctrl('x'), Key::Char('o') | Key::Ctrl('o')] => Message::FocusNextComponent,
+            [Key::Ctrl('x'), Key::Char('i') | Key::Ctrl('i') | Key::Char('O') | Key::Ctrl('O')] => {
+                Message::FocusPreviousComponent
             }
-            [Key::Ctrl('x'), Key::Char('o')] | [Key::Ctrl('x'), Key::Ctrl('o')] => {
-                Message::FocusNextComponent
-            }
-            [Key::Ctrl('x'), Key::Char('i')]
-            | [Key::Ctrl('x'), Key::Ctrl('i')]
-            | [Key::Ctrl('x'), Key::Char('O')]
-            | [Key::Ctrl('x'), Key::Ctrl('O')] => Message::FocusPreviousComponent,
-
             // Window management
-            [Key::Ctrl('x'), Key::Char('1')] | [Key::Ctrl('x'), Key::Ctrl('1')] => {
-                Message::FullscreenWindow
-            }
-            [Key::Ctrl('x'), Key::Char('2')] | [Key::Ctrl('x'), Key::Ctrl('2')] => {
+            [Key::Ctrl('x'), Key::Char('1') | Key::Ctrl('1')] => Message::FullscreenWindow,
+            [Key::Ctrl('x'), Key::Char('2') | Key::Ctrl('2')] => {
                 Message::SplitWindow(FlexDirection::Column)
             }
-            [Key::Ctrl('x'), Key::Char('3')] | [Key::Ctrl('x'), Key::Ctrl('3')] => {
+            [Key::Ctrl('x'), Key::Char('3') | Key::Ctrl('3')] => {
                 Message::SplitWindow(FlexDirection::Row)
             }
-            [Key::Ctrl('x'), Key::Char('0')] | [Key::Ctrl('x'), Key::Ctrl('0')] => {
-                Message::ClosePane
-            }
+            [Key::Ctrl('x'), Key::Char('0') | Key::Ctrl('0')] => Message::ClosePane,
 
             // Theme
             [Key::Ctrl('t')] => Message::ChangeTheme,
@@ -404,7 +394,7 @@ impl Component for Editor {
             [Key::Ctrl('x'), Key::Ctrl('c')] => Message::Quit,
             _ => {
                 if let PromptAction::Log { .. } = self.prompt_action {
-                    self.link.send(Message::LogMessage(None));
+                    self.link.send(Message::Log(None));
                 };
                 return BindingMatch {
                     transition: BindingTransition::Continue,
