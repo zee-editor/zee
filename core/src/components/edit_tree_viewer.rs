@@ -1,4 +1,4 @@
-use std::{cmp, iter};
+use std::cmp;
 use zi::{Canvas, Component, ComponentLink, Layout, Rect, ShouldRender, Style};
 
 use crate::undo::{self, EditTree};
@@ -122,9 +122,6 @@ impl Component for EditTreeViewer {
             }
             let mut pairs = revision.children.windows(2);
 
-            // Clippy suggests writing this while loop as for loop instead,
-            // which is not possible as the slice pattern is refutable.
-            #[allow(clippy::while_let_on_iterator)]
             while let Some(&[ref left, ref right]) = pairs.next() {
                 let formatted_left = &formatted_tree[left.index];
                 let formatted_right = &formatted_tree[right.index];
@@ -147,9 +144,7 @@ impl Component for EditTreeViewer {
                         start_x as usize,
                         y as usize,
                         connector_style,
-                        &iter::repeat('─')
-                            .take((end_x - start_x) as usize)
-                            .collect::<String>(),
+                        &"─".repeat((end_x - start_x) as usize),
                     );
                 }
             }

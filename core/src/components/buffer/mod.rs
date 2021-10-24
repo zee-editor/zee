@@ -500,7 +500,7 @@ impl Component for Buffer {
                 iter::once(edit_tree_viewer)
                     .chain(iter::once(Some(Item::fixed(1)(line_info))))
                     .chain(iter::once(Some(Item::auto(textarea))))
-                    .filter_map(|x| x),
+                    .flatten(),
             )),
             Item::fixed(1)(status_bar),
         ])

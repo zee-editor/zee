@@ -297,7 +297,7 @@ impl Cursor {
         let new_line = text.line(new_line_index);
         let mut graphemes = RopeGraphemes::new(&new_line);
         let mut new_visual_x = 0;
-        while let Some(grapheme) = graphemes.next() {
+        for grapheme in &mut graphemes {
             let width = utils::grapheme_width(&grapheme);
             if new_visual_x + width > *current_visual_x {
                 break;
