@@ -13,34 +13,28 @@ jobs:
   build:
     runs-on: ubuntu-20.04
     steps:
-    - uses: actions/checkout@v2
-      with:
-        submodules: 'recursive'
-    - uses: actions/cache@v2
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-    - uses: actions-rs/toolchain@v1
+    - name: Install latest stable rustc
+      uses: actions-rs/toolchain@v1
       with:
         profile: minimal
         toolchain: stable
         override: true
-    - uses: actions-rs/toolchain@v1
+        components: rustfmt, clippy
+    - name: Install nightly rustfmt
+      uses: actions-rs/toolchain@v1
       with:
         profile: minimal
         toolchain: nightly
         override: false
         components: rustfmt
     - name: Install x11 deps
-      run: sudo apt install xorg-dev libxcb-shape0-dev libxcb-xfixes0-dev
-    - name: Check formatting
-      run: cargo +nightly fmt -- --check
-    - name: Check clippy
-      run: cargo clippy --locked --all-targets -- -D warnings
-    - name: Run tests
-      run: cargo test --locked --all-targets
+      run: sudo apt update && sudo apt install xorg-dev libxcb-shape0-dev libxcb-xfixes0-dev
+    - name: Checkout git submodules
+      uses: actions/checkout@v2
+      with:
+        submodules: 'recursive'
+    - uses: actions/checkout@v2
+    - name: Run checks
+      run: ./scripts/check
     - name: Build
-      run: cargo build --locked --all-targets
+      run: ./scripts/build

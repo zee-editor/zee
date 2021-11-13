@@ -1,0 +1,9 @@
+#!/bin/sh
+
+set -ex
+
+cargo check --all-targets
+cargo +nightly fmt -- --check
+cargo clippy --offline --all-targets -- -D warnings
+cargo test --offline --all-targets
+cargo test --offline --doc
