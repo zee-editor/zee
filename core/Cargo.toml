@@ -6,7 +6,7 @@ description = "A modern editor for the terminal"
 readme = "README.md"
 homepage = "https://github.com/mcobzarenco/zee"
 license = "MIT OR Apache-2.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 anyhow = "1.0.38"

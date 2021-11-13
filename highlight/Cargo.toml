@@ -5,7 +5,7 @@ authors = ["Marius Cobzarenco <marius@reinfer.io>"]
 description = "Utility for highlighting source code with CSS-like rules used by zee"
 homepage = "https://github.com/mcobzarenco/zee/tree/master/highlight"
 license = "Apache-2.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 fnv = "1.0.7"
