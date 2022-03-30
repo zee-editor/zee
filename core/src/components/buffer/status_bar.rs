@@ -181,7 +181,7 @@ impl Component for StatusBar {
                     theme.position_in_file,
                     &match repository
                         .as_ref()
-                        .map(|repo| repo.head().unwrap())
+                        .and_then(|repo| repo.head().ok())
                         .as_ref()
                         .and_then(|reference| reference.shorthand())
                     {
