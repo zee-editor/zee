@@ -231,7 +231,7 @@ impl Component for Editor {
             Message::OpenFile(path) => {
                 self.prompt_action = self.open_file(path).map_or_else(
                     |error| PromptAction::Log {
-                        message: format!("Could not open file: {}", error.to_string()),
+                        message: format!("Could not open file: {}", error),
                     },
                     |new_file| {
                         if new_file {

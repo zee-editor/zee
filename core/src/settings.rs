@@ -8,15 +8,9 @@ use std::{
 
 use crate::error::{Context, Result};
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Settings {
     pub theme_index: usize,
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        Settings { theme_index: 0 }
-    }
 }
 
 pub fn settings_path() -> Result<PathBuf> {

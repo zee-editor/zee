@@ -68,7 +68,7 @@ impl TextArea {
         line_index: usize,
         line: RopeSlice,
         mut syntax_cursor: Option<&mut SyntaxCursor>,
-        mut trace: &mut NodeTrace<SelectorNodeId>,
+        trace: &mut NodeTrace<SelectorNodeId>,
     ) -> usize {
         // Get references to the relevant bits of context
         let Self {
@@ -116,7 +116,7 @@ impl TextArea {
                 (Some(syntax_cursor), Some(highlights))
                     if !trace.byte_range.contains(&byte_index) =>
                 {
-                    syntax_cursor.trace_at(&mut trace, byte_index, |node| {
+                    syntax_cursor.trace_at(trace, byte_index, |node| {
                         highlights.get_selector_node_id(node.kind_id())
                     });
                     content = text
