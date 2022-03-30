@@ -26,7 +26,7 @@ $ cargo install zee
 ## features
 
  - The 100 FPS editor. Cursor movement and edits render under 10ms. Everything else happens asynchronously (syntax parsing and highlighting, IO to/from disk, file pickers).
- - Buffers are backed by a fast B-tree implementation of a [rope](https://en.wikipedia.org/wiki/Rope) (via cessen's [ropey](https://github.com/cessen/ropey)).
+ - Buffers are backed by a fast B-tree implementation of a [rope](https://en.m.wikipedia.org/wiki/Rope_(data_structure)) (via cessen's [ropey](https://github.com/cessen/ropey)).
  - Uses [Tree-sitter](https://tree-sitter.github.io/tree-sitter/) for generating a parse tree from your code. This AST is used for syntax highlighting and on the fly validation. As it is an incremental parsing library, it scales to files with 1 million lines of code.
  - multi-buffer, multi-pane -- shared state *beats* tmux with multiple editors
  - fast recursive file search with fuzzy matching and aware of *ignore* files (using BurntSushi's ripgrep crates [walkdir](https://github.com/BurntSushi/walkdir), [ignore](https://github.com/BurntSushi/ripgrep))
