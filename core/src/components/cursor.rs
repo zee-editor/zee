@@ -227,6 +227,10 @@ impl Cursor {
     }
 
     pub fn delete_selection(&mut self, text: &mut Rope) -> DeleteOperation {
+        if text.len_chars() == 0 {
+            return DeleteOperation::empty();
+        }
+
         // Delete selection
         let selection = self.selection();
         let deleted = text.slice(selection.start.0..selection.end.0).into();
