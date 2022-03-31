@@ -6,6 +6,7 @@ description = "Utility for highlighting source code with CSS-like rules used by 
 homepage = "https://github.com/mcobzarenco/zee/tree/master/highlight"
 license = "Apache-2.0"
 edition = "2021"
+rust-version = "1.59"
 
 [dependencies]
 fnv = "1.0.7"
