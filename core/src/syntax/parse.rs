@@ -280,7 +280,11 @@ impl<'a> SyntaxCursor<'a> {
         trace.path.push(self.cursor.node().kind().into());
         trace.trace.push(map_node(&self.cursor.node()));
         trace.nth_children.push(0);
-        while let Some(nth_child) = self.cursor.goto_first_child_for_byte(byte_index) {
+
+        // Add 1 to `byte_index` as `goto_first_child_for_byte` finds the first
+        // child node whose end byte is greater than or equal to the given byte
+        // offset.
+        while let Some(nth_child) = self.cursor.goto_first_child_for_byte(byte_index + 1) {
             trace.is_error = trace.is_error || self.cursor.node().is_error();
             trace.path.push(self.cursor.node().kind().into());
             trace.trace.push(map_node(&self.cursor.node()));
@@ -315,7 +319,7 @@ struct CancelableParser {
 }
 
 impl CancelableParser {
-    fn new(parser: Parser) -> Self {
+    fn new(mut parser: Parser) -> Self {
         // A `tree_sitter::Parser` can hold a pointer to a cancellation flag
         // that it polls periodically. This is polled from C and it is up to the
         // caller to ensure that the pointer lives at least as long as the

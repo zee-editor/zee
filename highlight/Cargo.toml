@@ -11,15 +11,15 @@ rust-version = "1.59"
 [dependencies]
 fnv = "1.0.7"
 lazy_static = "1.4.0"
-log = "0.4.14"
+log = "0.4.16"
 maplit = "1.0.2"
 nom = "5.1.2"
-regex = "1.5.2"
-serde = "1.0.125"
-serde_derive = "1.0.125"
-serde_json = "1.0.64"
+regex = "1.5.5"
+serde = "1.0.136"
+serde_derive = "1.0.136"
+serde_json = "1.0.79"
 serde_regex = "1.1.0"
-smallvec = { version = "1.6.1", features = ["serde"] }
-tree-sitter = "0.19.3"
+smallvec = { version = "1.8.0", features = ["serde"] }
+tree-sitter = "0.20.6"
 
 zee-grammar = { version = "0.2.0", path = "../grammar" }

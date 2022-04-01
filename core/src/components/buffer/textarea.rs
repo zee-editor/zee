@@ -100,11 +100,7 @@ impl TextArea {
         let mut visual_x = frame.origin.x;
         let mut char_index = CharIndex(text.line_to_char(line_index));
 
-        let mut content: Cow<str> = text
-            .slice(
-                text.byte_to_char(trace.byte_range.start)..text.byte_to_char(trace.byte_range.end),
-            )
-            .into();
+        let mut content: Cow<str> = text.byte_slice(trace.byte_range.clone()).into();
         let mut scope = mode
             .highlights()
             .and_then(|highlights| highlights.matches(&trace.trace, &trace.nth_children, &content))
@@ -119,12 +115,7 @@ impl TextArea {
                     syntax_cursor.trace_at(trace, byte_index, |node| {
                         highlights.get_selector_node_id(node.kind_id())
                     });
-                    content = text
-                        .slice(
-                            text.byte_to_char(trace.byte_range.start)
-                                ..text.byte_to_char(trace.byte_range.end),
-                        )
-                        .into();
+                    content = text.byte_slice(trace.byte_range.clone()).into();
 
                     scope = highlights
                         .matches(&trace.trace, &trace.nth_children, &content)

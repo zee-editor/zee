@@ -11,9 +11,8 @@ mod task;
 mod undo;
 mod utils;
 
-use flexi_logger::Logger;
+use flexi_logger::{FileSpec, Logger};
 use std::{env, path::PathBuf, rc::Rc};
-use structopt::StructOpt;
 use zi::ComponentExt;
 
 use crate::{
@@ -22,37 +21,42 @@ use crate::{
     task::TaskPool,
 };
 
-#[derive(Debug, StructOpt)]
-#[structopt(global_settings(&[clap::AppSettings::ColoredHelp]))]
+use clap::Parser;
+
+#[derive(Debug, Parser)]
 struct Args {
-    #[structopt(name = "file", parse(from_os_str))]
+    #[clap(name = "file", parse(from_os_str))]
     /// Open file to edit
     files: Vec<PathBuf>,
 
-    #[structopt(long = "settings-path", parse(from_os_str))]
+    #[clap(long = "settings-path", parse(from_os_str))]
     /// Path to the configuration file. It's usually ~/.config/zee on Linux.
     settings_path: Option<PathBuf>,
 
-    #[structopt(long = "create-settings")]
+    #[clap(long = "create-settings")]
     /// Writes the default configuration to file, if the file doesn't exist
     create_settings: bool,
 
-    #[structopt(long = "log")]
+    #[clap(long = "log")]
     /// Enable debug logging to `zee.log` file
     enable_logging: bool,
 }
 
 fn configure_logging() -> Result<()> {
-    Logger::with_env_or_str("myprog=debug, mylib=debug")
-        .log_to_file()
-        .suppress_timestamp()
+    Logger::try_with_env_or_str("myprog=debug, mylib=debug")?
+        .log_to_file(
+            FileSpec::default()
+                .basename("zee")
+                .suffix("log")
+                .suppress_timestamp(),
+        )
         .start()
-        .map_err(anyhow::Error::from)?;
-    Ok(())
+        .map(|_handle| ())
+        .map_err(anyhow::Error::from)
 }
 
 fn start_editor() -> Result<()> {
-    let args = Args::from_args();
+    let args = Args::parse();
     if args.enable_logging {
         configure_logging()?;
     }
