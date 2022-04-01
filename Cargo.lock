@@ -1599,7 +1599,6 @@ dependencies = [
  "ignore",
  "log",
  "maplit",
- "num_cpus",
  "once_cell",
  "palette",
  "parking_lot",

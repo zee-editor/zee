@@ -1,6 +1,6 @@
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::{
-    cmp,
+    num::NonZeroUsize,
     sync::atomic::{AtomicUsize, Ordering},
 };
 
@@ -20,7 +20,17 @@ impl TaskPool {
         // By default, leave two cpus unused, so there's no contention with the
         // drawing thread + allow other programs to make progress even if the
         // task pool is 100% used.
-        let num_threads = cmp::max(1, num_cpus::get().saturating_sub(2));
+        let num_threads = std::cmp::max(
+            1,
+            std::cmp::min(
+                std::thread::available_parallelism()
+                    .map(NonZeroUsize::get)
+                    .unwrap_or(1)
+                    .saturating_sub(2),
+                MAX_NUMBER_OF_THREADS,
+            ),
+        );
+        log::info!("Creating a compute task pool with {} threads", num_threads);
         Ok(Self {
             thread_pool: ThreadPoolBuilder::new().num_threads(num_threads).build()?,
             next_task_id: AtomicUsize::new(0),
@@ -33,3 +43,5 @@ impl TaskPool {
         id
     }
 }
+
+const MAX_NUMBER_OF_THREADS: usize = 8;
