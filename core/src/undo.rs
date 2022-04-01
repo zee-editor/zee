@@ -1,5 +1,4 @@
 use euclid::default::Vector2D;
-use im::{vector, Vector};
 use ropey::Rope;
 use smallvec::SmallVec;
 use std::ops::{Deref, DerefMut};
@@ -37,7 +36,7 @@ pub struct Reference {
 
 #[derive(Debug, Clone)]
 pub struct EditTree {
-    pub revisions: Vector<Revision>,
+    pub revisions: Vec<Revision>,
     pub head_index: usize,
     staged: Rope,
     has_staged_changes: bool,
@@ -47,7 +46,7 @@ impl EditTree {
     pub fn new(mut text: Rope) -> Self {
         utils::ensure_trailing_newline_with_content(&mut text);
         Self {
-            revisions: vector![Revision::root(text.clone())],
+            revisions: vec![Revision::root(text.clone())],
             head_index: 0,
             staged: text,
             has_staged_changes: false,
@@ -75,7 +74,7 @@ impl EditTree {
         // let parent_to_child_diff = child_to_parent_diff.reverse();
         let new_revision_index = self.revisions.len();
 
-        self.revisions.push_back(Revision {
+        self.revisions.push(Revision {
             text: self.staged.clone(),
             cursor,
             parent: Some(Reference {
@@ -168,7 +167,7 @@ pub struct FormattedRevision {
 }
 
 pub fn format_revision(
-    revisions: &Vector<Revision>,
+    revisions: &[Revision],
     formatted: &mut [FormattedRevision],
     index: usize,
     transform: Vector2D<isize>,
