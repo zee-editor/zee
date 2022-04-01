@@ -1,6 +1,6 @@
 use ropey::Rope;
+use smallstr::SmallString;
 use smallvec::SmallVec;
-use smartstring::alias::CompactString;
 use std::{
     fmt,
     ops::{Deref, DerefMut, Range},
@@ -229,7 +229,7 @@ impl OpaqueDiff {
 }
 
 pub struct NodeTrace<T> {
-    pub path: Vec<CompactString>,
+    pub path: Vec<SmallString<[u8; 8]>>,
     pub nth_children: SmallVec<[u16; 32]>,
     pub trace: SmallVec<[T; 32]>,
     pub is_error: bool,

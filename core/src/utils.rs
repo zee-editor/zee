@@ -1,5 +1,4 @@
 use ropey::{iter::Chunks, Rope, RopeSlice};
-use smartstring::alias::String as SmartString;
 use unicode_segmentation::{GraphemeCursor, GraphemeIncomplete};
 use unicode_width::UnicodeWidthStr;
 
@@ -18,7 +17,7 @@ pub fn rope_slice_as_str<T>(slice: &RopeSlice, closure: impl FnOnce(&str) -> T) 
     if let Some(text) = slice.as_str() {
         closure(text)
     } else {
-        let text = slice.chars().collect::<SmartString>();
+        let text = slice.chars().collect::<String>();
         closure(text.as_str())
     }
 }

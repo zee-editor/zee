@@ -1,5 +1,4 @@
 use once_cell::sync::Lazy;
-use smartstring::alias::CompactString;
 use std::{ffi::OsStr, fmt, path::Path, ptr};
 use tree_sitter::Language;
 use zee_grammar as grammar;
@@ -9,7 +8,7 @@ use zee_highlight::{
 };
 
 pub struct Mode {
-    pub name: CompactString,
+    pub name: String,
     pub parser: Option<SyntaxParser>,
     file: Vec<FilenamePattern>,
 }

@@ -1263,21 +1263,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "smallstr"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "63b1aefdf380735ff8ded0b15f31aab05daf1f70216c01c02a12926badd1df9d"
+dependencies = [
+ "smallvec",
+]
+
+[[package]]
 name = "smallvec"
 version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ecab6c735a6bb4139c0caafd0cc3635748bbb3acf4550e8138122099251f309"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "smartstring"
-version = "0.2.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31aa6a31c0c2b21327ce875f7e8952322acfcfd0c27569a6e18a647281352c9b"
-dependencies = [
- "static_assertions",
 ]
 
 [[package]]
@@ -1609,8 +1609,8 @@ dependencies = [
  "serde",
  "serde_derive",
  "size_format",
+ "smallstr 0.3.0",
  "smallvec",
- "smartstring",
  "structopt",
  "thiserror",
  "toml",
@@ -1660,7 +1660,7 @@ dependencies = [
  "euclid",
  "log",
  "ropey",
- "smallstr",
+ "smallstr 0.2.0",
  "smallvec",
  "unicode-segmentation",
  "unicode-width",
