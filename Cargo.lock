@@ -1589,7 +1589,6 @@ dependencies = [
  "anyhow",
  "cfg-if",
  "clap",
- "crossbeam-channel",
  "crossclip",
  "dirs",
  "euclid",
