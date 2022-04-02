@@ -1,0 +1,85 @@
+/**
+ * Any CSS included here will be global. The classic template
+ * bundles Infima by default. Infima is a CSS framework designed to
+ * work well for content-centric websites.
+ */
+
+/* Gruvbox colours */
+:root {
+  --gruv-dark0-hard: rgb(29, 32, 33);
+  --gruv-dark0: rgb(40, 40, 40);
+  --gruv-dark0-soft: rgb(50, 48, 47);
+  --gruv-dark1: rgb(60, 56, 54);
+  --gruv-dark2: rgb(80, 73, 69);
+  --gruv-dark3: rgb(102, 92, 84);
+  --gruv-dark4: rgb(124, 111, 100);
+
+  --gruv-gray-245: rgb(146, 131, 116);
+  --gruv-gray-244: rgb(146, 131, 116);
+
+  --gruv-light0-hard: rgb(249, 245, 215);
+  --gruv-light0: rgb(251, 241, 199);
+  --gruv-light0-soft: rgb(242, 229, 188);
+  --gruv-light1: rgb(235, 219, 178);
+  --gruv-light2: rgb(213, 196, 161);
+  --gruv-light3: rgb(189, 174, 147);
+  --gruv-light4: rgb(168, 153, 132);
+
+  --gruv-bright-red: rgb(251, 73, 52);
+  --gruv-bright-green: rgb(184, 187, 38);
+  --gruv-bright-yellow: rgb(250, 189, 47);
+  --gruv-bright-blue: rgb(131, 165, 152);
+  --gruv-bright-purple: rgb(211, 134, 155);
+  --gruv-bright-aqua: rgb(142, 192, 124);
+  --gruv-bright-orange: rgb(254, 128, 25);
+
+  --gruv-neutral-red: rgb(204, 36, 29);
+  --gruv-neutral-green: rgb(152, 151, 26);
+  --gruv-neutral-yellow: rgb(215, 153, 33);
+  --gruv-neutral-blue: rgb(69, 133, 136);
+  --gruv-neutral-purple: rgb(177, 98, 134);
+  --gruv-neutral-aqua: rgb(104, 157, 106);
+  --gruv-neutral-orange: rgb(214, 93, 14);
+
+  --gruv-faded-red: rgb(157, 0, 6);
+  --gruv-faded-green: rgb(121, 116, 14);
+  --gruv-faded-yellow: rgb(181, 118, 20);
+  --gruv-faded-blue: rgb(7, 102, 120);
+  --gruv-faded-purple: rgb(143, 63, 113);
+  --gruv-faded-aqua: rgb(66, 123, 88);
+  --gruv-faded-orange: rgb(175, 58, 3);
+
+
+/* For readability concerns, you should choose a lighter palette in dark mode. */
+  /* rgb(50, 48, 47) */
+  --ifm-background-color: var(--gruv-dark0);
+  --ifm-background-color-surface-color: var(--gruv-dark0-hard);
+  --ifm-navbar-background-color: var(--ifm-background-color-surface-color);
+  --ifm-font-color-base: rgb(251, 241, 199);
+
+  --ifm-color-primary: #3578e5;
+  --ifm-color-secondary: #ebedf0;
+  --ifm-color-success: rgb(152, 151, 26);
+  --ifm-color-info: rgb(131, 165, 152)#54c7ec;
+  --ifm-color-warning: #ffba00;
+  --ifm-color-danger: #fa383e;
+
+  --ifm-color-primary: rgb(242, 229, 188);
+  --ifm-color-primary-dark: #21af90;
+  --ifm-color-primary-darker: #1fa588;
+  --ifm-color-primary-darkest: #1a8870;
+  --ifm-color-primary-light: #29d5b0;
+  --ifm-color-primary-lighter: #32d8b4;
+  --ifm-color-primary-lightest: #4fddbf;
+}
+
+.docusaurus-highlight-code-line {
+  background-color: rgba(0, 0, 0, 0.1);
+  display: block;
+  margin: 0 calc(-1 * var(--ifm-pre-padding));
+  padding: 0 var(--ifm-pre-padding);
+}
+
+[data-theme='dark'] .docusaurus-highlight-code-line {
+  background-color: rgba(0, 0, 0, 0.3);
+}
