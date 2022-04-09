@@ -1,6 +1,8 @@
 # TODO List
+
+ - [ ] Custom panic handler that resets terminal
+ - [ ] C-t swaps characters like in Emacs
  - [ ] Display a prompt message when saving a buffer
- - [ ] Decouple frames from buffers and add a buffer switcher
  - [ ] Show possible commands with the entered prefix after an interval
  - [ ] C-?
  - [ ] Alt-f Alt-b Alt-d (move symbol left/right, delete symbol)
@@ -15,7 +17,8 @@
  - [ ] search
  - [ ] regex search
  - [ ] zi: auto generated ids
- - [ ] zi: unique focus controller
+ - [x] zi: unique focus controller
+ - [x] Decouple frames from buffers and add a buffer switcher
  - [x] Intuitive change of focus when closing windows
  - [x] Undo / redo
  - [x] Ability to split a frame vertically

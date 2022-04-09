@@ -1,7 +1,10 @@
 use std::cmp;
 use zi::{Canvas, Component, ComponentLink, Layout, Rect, ShouldRender, Style};
 
-use crate::undo::{self, EditTree};
+use crate::{
+    editor::buffer::WeakHandle,
+    undo::{self, EditTree},
+};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Theme {
@@ -12,10 +15,9 @@ pub struct Theme {
     pub alternate_connector: Style,
 }
 
-#[derive(Clone, Debug)]
 pub struct Properties {
     pub theme: Theme,
-    pub tree: EditTree,
+    pub tree: WeakHandle<EditTree>,
 }
 
 pub struct EditTreeViewer {
@@ -50,10 +52,11 @@ impl Component for EditTreeViewer {
                     ref theme,
                 },
         } = *self;
+        let tree = tree.reader();
         let mut canvas = Canvas::new(frame.size);
         canvas.clear(theme.current_revision);
 
-        let formatted_tree = undo::format_tree(tree);
+        let formatted_tree = undo::format_tree(&tree);
 
         let (middle_x, middle_y) = {
             let transform = formatted_tree[tree.head_index].transform;

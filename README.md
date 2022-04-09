@@ -74,7 +74,9 @@ The following keybindings are available:
  - `C-x h` select the entire buffer and move the cursor to the beginning
  - `C-y` paste selection (yank in Emacs)
  - `C-g` clear the current selection
- - `C-z`, `C-/` undo
+ - `C-_`, `C-z`, `C-/` undo previous command
+ - `C-q` redo previous command
+ - `C-x u` open the edit tree viewer
  - `C-x C-s` save the current buffer
 
 #### file navigation
@@ -83,12 +85,23 @@ The following keybindings are available:
  - `C-l` while opening a file, go to the parent directory
  - `Tab` while opening a file, fills in the currently selected path
 
+#### edit tree viewer
+ - `C-p`, `Up` move up the tree to an older revision, undoing the command
+ - `C-n`, `Down` move down the tree to a newer revision, redoing the command
+ - `C-b`, `Left` select the left child of current revision
+ - `C-f`, `Right` select the right child of current revision
+
 #### global
  - `C-g` cancel the current operation
- - `C-x 0` close the current buffer
+ - `C-x k` kill a buffer
+ - `C-x b` switch buffer
+ - `C-x 0`, `C-x C-0` close the focused window
+ - `C-x 1`, `C-x C-1` make the focused window fullscreen
+ - `C-x 2`, `C-x C-2` split the focused window below
+ - `C-x 3`, `C-x C-3` split the focused window to the right
  - `C-x o`, `C-x C-o` switch focus to the next buffer
+ - `C-x C-t` cycle through the available themes
  - `C-x C-c` quit
- - `C-t` cycle through the available themes
 
 ## license
 

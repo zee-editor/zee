@@ -2,13 +2,10 @@ pub mod line_info;
 pub mod status_bar;
 pub mod textarea;
 
-use git2::Repository;
-use ropey::Rope;
-use std::{borrow::Cow, fs::File, io::BufWriter, iter, path::PathBuf, rc::Rc};
+use std::{borrow::Cow, iter, path::PathBuf};
 use zi::{
     components::text::{Text, TextAlign, TextProperties},
     prelude::*,
-    Callback,
 };
 
 use self::{
@@ -16,22 +13,17 @@ use self::{
     status_bar::{Properties as StatusBarProperties, StatusBar, Theme as StatusBarTheme},
     textarea::{Properties as TextAreaProperties, TextArea},
 };
-use super::{
-    cursor::Cursor,
-    edit_tree_viewer::{
-        EditTreeViewer, Properties as EditTreeViewerProperties, Theme as EditTreeViewerTheme,
-    },
+use super::edit_tree_viewer::{
+    EditTreeViewer, Properties as EditTreeViewerProperties, Theme as EditTreeViewerTheme,
 };
 use crate::{
-    editor::Context,
-    error::Result,
-    mode::Mode,
-    syntax::{
-        highlight::Theme as SyntaxTheme,
-        parse::{OpaqueDiff, ParserPool, ParserStatus},
+    editor::{
+        buffer::{BufferCursor, ModifiedStatus, RepositoryRc, WeakHandle, DISABLE_TABS},
+        ContextHandle,
     },
+    mode::Mode,
+    syntax::{highlight::Theme as SyntaxTheme, parse::ParseTree},
     undo::EditTree,
-    utils::{strip_trailing_whitespace, TAB_WIDTH},
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -42,243 +34,69 @@ pub struct Theme {
     pub syntax: SyntaxTheme,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum ModifiedStatus {
-    Changed,
-    Unchanged,
-    Saving,
+pub struct Properties {
+    pub context: ContextHandle,
+    pub theme: Cow<'static, Theme>,
+    pub focused: bool,
+    pub frame_id: usize,
+    pub mode: &'static Mode,
+    pub repo: Option<RepositoryRc>,
+    pub content: WeakHandle<EditTree>,
+    pub file_path: Option<PathBuf>,
+    pub cursor: BufferCursor,
+    pub parse_tree: Option<ParseTree>,
+    pub modified_status: ModifiedStatus,
+}
+
+impl PartialEq for Properties {
+    fn eq(&self, other: &Self) -> bool {
+        self.cursor == other.cursor
+            && self.content.generation() == other.content.generation()
+            && self.parse_tree.as_ref().map(|tree| tree.generation)
+                == other.parse_tree.as_ref().map(|tree| tree.generation)
+            && self.modified_status == other.modified_status
+            && self.focused == other.focused
+            && self.frame_id == other.frame_id
+            && *self.theme == *other.theme
+            && self.mode == other.mode
+            && self.repo == other.repo
+            && self.file_path == other.file_path
+    }
+}
+
+#[derive(Debug)]
+pub enum Message {
+    CenterCursorVisually,
+    ClearSelection,
+    ToggleEditTree,
 }
 
 pub struct Buffer {
     properties: Properties,
     frame: Rect,
-    link: ComponentLink<Self>,
-
-    text: EditTree,
-    has_unsaved_changes: ModifiedStatus,
-    cursor: Cursor,
     line_offset: usize,
-    parser: Option<ParserPool>,
     viewing_edit_tree: bool,
 }
 
 impl Buffer {
-    pub fn spawn_save_file(&mut self) {
-        self.has_unsaved_changes = ModifiedStatus::Saving;
-        if let Some(ref file_path) = self.properties.file_path {
-            let text = self.text.staged().clone();
-            let file_path = file_path.clone();
-            let link = self.link.clone();
-            self.properties.context.task_pool.spawn(move |_| {
-                link.send(Message::SaveFile(
-                    File::create(&file_path)
-                        .map(BufWriter::new)
-                        .and_then(|writer| {
-                            let text = strip_trailing_whitespace(text);
-                            text.write_to(writer)?;
-                            Ok(text)
-                        })
-                        .map_err(|error| error.into()),
-                ))
-            });
-        }
-    }
-
-    #[inline]
-    fn reduce(&mut self, message: Message) {
-        // Stateless
-        match message {
-            Message::Up if !self.viewing_edit_tree => self.cursor.move_up(&self.text),
-            Message::Down if !self.viewing_edit_tree => self.cursor.move_down(&self.text),
-            Message::Left if !self.viewing_edit_tree => self.cursor.move_left(&self.text),
-            Message::Right if !self.viewing_edit_tree => self.cursor.move_right(&self.text),
-            Message::PageDown => self
-                .cursor
-                .move_down_n(&self.text, self.frame.size.height - 1),
-            Message::PageUp => self
-                .cursor
-                .move_up_n(&self.text, self.frame.size.height - 1),
-            Message::StartOfLine => self.cursor.move_to_start_of_line(&self.text),
-            Message::EndOfLine => self.cursor.move_to_end_of_line(&self.text),
-            Message::StartOfBuffer => self.cursor.move_to_start_of_buffer(&self.text),
-            Message::EndOfBuffer => self.cursor.move_to_end_of_buffer(&self.text),
-            Message::CenterCursorVisually => self.center_visual_cursor(),
-
-            Message::BeginSelection => self.cursor.begin_selection(),
-            Message::ClearSelection => {
-                if self.viewing_edit_tree {
-                    self.viewing_edit_tree = false;
-                } else {
-                    self.cursor.clear_selection();
-                }
-            }
-            Message::SelectAll => self.cursor.select_all(&self.text),
-            Message::SaveBuffer => self.spawn_save_file(),
-            Message::Left if self.viewing_edit_tree => self.text.previous_child(),
-            Message::Right if self.viewing_edit_tree => self.text.next_child(),
-            Message::SaveFile(new_text) => {
-                match new_text {
-                    Ok(new_text) => {
-                        self.cursor.sync(&self.text, &new_text);
-                        self.text
-                            .create_revision(OpaqueDiff::empty(), self.cursor.clone());
-                        *self.text = new_text;
-                        self.has_unsaved_changes = ModifiedStatus::Unchanged;
-                    }
-                    Err(error) => self.properties.log_message.emit(error.to_string()),
-                }
-                return;
-            }
-            Message::ParseSyntax(parsed) => {
-                let parsed = parsed.unwrap();
-                if let Some(parser) = self.parser.as_mut() {
-                    parser.handle_parse_syntax_done(parsed);
-                }
-                return;
-            }
-            _ => {}
-        };
-
-        let mut undoing = false;
-        let diff = match message {
-            Message::DeleteForward => {
-                let operation = self.cursor.delete(&mut self.text);
-                // self.clipboard = Some(operation.deleted);
-                operation.diff
-            }
-            Message::DeleteBackward => self.cursor.backspace(&mut self.text).diff,
-            Message::DeleteLine => self.delete_line(),
-            Message::Yank => self.paste_from_clipboard(),
-            Message::CopySelection => self.copy_selection_to_clipboard(),
-            Message::CutSelection => self.cut_selection_to_clipboard(),
-            Message::InsertTab if DISABLE_TABS => {
-                let diff = self
-                    .cursor
-                    .insert_chars(&mut self.text, iter::repeat(' ').take(TAB_WIDTH));
-                self.cursor.move_right_n(&self.text, TAB_WIDTH);
-                diff
-            }
-            Message::InsertTab if !DISABLE_TABS => {
-                let diff = self
-                    .cursor
-                    .insert_chars(&mut self.text, iter::repeat(' ').take(TAB_WIDTH));
-                self.cursor.move_right_n(&self.text, TAB_WIDTH);
-                diff
-            }
-            Message::InsertNewLine => {
-                let diff = self.cursor.insert_char(&mut self.text, '\n');
-                // self.ensure_trailing_newline_with_content();
-                self.cursor.move_down(&self.text);
-                self.cursor.move_to_start_of_line(&self.text);
-                diff
-            }
-            Message::ToggleEditTree => {
-                self.viewing_edit_tree = !self.viewing_edit_tree;
-                OpaqueDiff::empty()
-            }
-            Message::Undo => self
-                .undo()
-                .map(|diff| {
-                    undoing = true;
-                    diff
-                })
-                .unwrap_or_else(OpaqueDiff::empty),
-            Message::Up if self.viewing_edit_tree => self
-                .undo()
-                .map(|diff| {
-                    undoing = true;
-                    diff
-                })
-                .unwrap_or_else(OpaqueDiff::empty),
-            Message::Redo => self
-                .redo()
-                .map(|diff| {
-                    undoing = true;
-                    diff
-                })
-                .unwrap_or_else(OpaqueDiff::empty),
-            Message::Down if self.viewing_edit_tree => self
-                .redo()
-                .map(|diff| {
-                    undoing = true;
-                    diff
-                })
-                .unwrap_or_else(OpaqueDiff::empty),
-            Message::InsertChar(character) => {
-                let diff = self.cursor.insert_char(&mut self.text, character);
-                // self.ensure_trailing_newline_with_content();
-                self.cursor.move_right(&self.text);
-                diff
-            }
-            _ => OpaqueDiff::empty(),
-        };
-
-        if !diff.is_empty() && !undoing {
-            self.has_unsaved_changes = ModifiedStatus::Changed;
-            self.text.create_revision(diff.clone(), self.cursor.clone());
-        }
-
-        match self.parser.as_mut() {
-            Some(parser) if !diff.is_empty() && !undoing => {
-                parser.edit(&diff);
-                parser.spawn(
-                    &self.properties.context.task_pool,
-                    self.text.staged().clone(),
-                    false,
-                );
-            }
-            _ => {}
-        }
-        self.ensure_cursor_in_view();
-    }
-
-    #[inline]
-    fn ensure_cursor_in_view(&mut self) {
-        let current_line = self.text.char_to_line(self.cursor.range().start.0);
+    fn ensure_cursor_in_view(&mut self) -> ShouldRender {
+        let content = self.properties.content.reader();
+        let current_line = content.char_to_line(self.properties.cursor.inner().range().start.0);
         let num_lines = self.frame.size.height.saturating_sub(1);
         if current_line < self.line_offset {
             self.line_offset = current_line;
+            ShouldRender::Yes
         } else if current_line - self.line_offset > num_lines.saturating_sub(1) {
             self.line_offset = current_line + 1 - num_lines;
-        }
-    }
-
-    fn undo(&mut self) -> Option<OpaqueDiff> {
-        if let Some((diff, cursor)) = self.text.undo() {
-            self.cursor = cursor;
-            if let Some(parser) = self.parser.as_mut() {
-                parser.edit(&diff);
-                parser.spawn(
-                    &self.properties.context.task_pool,
-                    self.text.staged().clone(),
-                    true,
-                );
-            }
-            Some(diff)
+            ShouldRender::Yes
         } else {
-            None
-        }
-    }
-
-    fn redo(&mut self) -> Option<OpaqueDiff> {
-        if let Some((diff, cursor)) = self.text.redo() {
-            self.cursor = cursor;
-            if let Some(parser) = self.parser.as_mut() {
-                parser.edit(&diff);
-                parser.spawn(
-                    &self.properties.context.task_pool,
-                    self.text.staged().clone(),
-                    true,
-                );
-            }
-            Some(diff)
-        } else {
-            None
+            ShouldRender::No
         }
     }
 
     fn center_visual_cursor(&mut self) {
-        let line_index = self.text.char_to_line(self.cursor.range().start.0);
+        let content = self.properties.content.reader();
+        let line_index = content.char_to_line(self.properties.cursor.inner().range().start.0);
         if line_index >= self.frame.size.height / 2
             && self.line_offset != line_index - self.frame.size.height / 2
         {
@@ -290,101 +108,80 @@ impl Buffer {
         }
     }
 
-    fn delete_line(&mut self) -> OpaqueDiff {
-        let operation = self.cursor.delete_line(&mut self.text);
-        operation.diff
-    }
-
-    fn copy_selection_to_clipboard(&mut self) -> OpaqueDiff {
-        let selection = self.cursor.selection();
-        self.properties
-            .context
-            .clipboard
-            .set_contents(self.text.slice(selection.start.0..selection.end.0).into())
-            .unwrap();
-        self.cursor.clear_selection();
-        OpaqueDiff::empty()
-    }
-
-    fn cut_selection_to_clipboard(&mut self) -> OpaqueDiff {
-        let operation = self.cursor.delete_selection(&mut self.text);
-        self.properties
-            .context
-            .clipboard
-            .set_contents(operation.deleted.into())
-            .unwrap();
-        operation.diff
-    }
-
-    fn paste_from_clipboard(&mut self) -> OpaqueDiff {
-        let clipboard_str = self.properties.context.clipboard.get_contents().unwrap();
-        if !clipboard_str.is_empty() {
-            self.cursor
-                .insert_chars(&mut self.text, clipboard_str.chars())
+    fn move_up(&self) {
+        if self.viewing_edit_tree {
+            self.properties.cursor.undo();
         } else {
-            OpaqueDiff::empty()
+            self.properties.cursor.move_up();
         }
     }
-}
 
-#[derive(Debug)]
-pub enum Message {
-    // Movement
-    Up,
-    Down,
-    Left,
-    Right,
-    PageDown,
-    PageUp,
-    StartOfLine,
-    EndOfLine,
-    StartOfBuffer,
-    EndOfBuffer,
-    CenterCursorVisually,
+    fn move_down(&self) {
+        if self.viewing_edit_tree {
+            self.properties.cursor.redo();
+        } else {
+            self.properties.cursor.move_down();
+        }
+    }
 
-    // Editing
-    BeginSelection,
-    ClearSelection,
-    SelectAll,
-    DeleteForward,
-    DeleteBackward,
-    DeleteLine,
-    Yank,
-    CopySelection,
-    CutSelection,
-    InsertTab,
-    InsertNewLine,
-    InsertChar(char),
+    fn move_left(&self) {
+        if self.viewing_edit_tree {
+            self.properties.cursor.previous_child_revision();
+        } else {
+            self.properties.cursor.move_left();
+        }
+    }
 
-    // Undo / Redo
-    Undo,
-    Redo,
-    ToggleEditTree,
+    fn move_right(&self) {
+        if self.viewing_edit_tree {
+            self.properties.cursor.next_child_revision();
+        } else {
+            self.properties.cursor.move_right();
+        }
+    }
 
-    // Buffer
-    SaveBuffer,
-    SaveFile(Result<Rope>),
-    ParseSyntax(Result<ParserStatus>),
-}
+    fn move_page_down(&self) {
+        self.properties
+            .cursor
+            .move_down_n(self.frame.size.height.saturating_sub(1));
+    }
 
-#[derive(Clone)]
-pub struct Properties {
-    pub context: Rc<Context>,
-    pub theme: Cow<'static, Theme>,
-    pub focused: bool,
-    pub frame_id: usize,
-    pub mode: &'static Mode,
-    pub repo: Option<RepositoryRc>,
-    pub content: Rope,
-    pub file_path: Option<PathBuf>,
-    pub log_message: Callback<String>,
-}
+    fn move_page_up(&self) {
+        self.properties
+            .cursor
+            .move_up_n(self.frame.size.height.saturating_sub(1));
+    }
 
-impl PartialEq for Properties {
-    fn eq(&self, other: &Self) -> bool {
-        *self.theme == *other.theme
-            && self.focused == other.focused
-            && self.frame_id == other.frame_id
+    fn move_start_of_line(&self) {
+        self.properties.cursor.move_start_of_line()
+    }
+
+    fn move_end_of_line(&self) {
+        self.properties.cursor.move_end_of_line()
+    }
+
+    fn move_start_of_buffer(&self) {
+        self.properties.cursor.move_start_of_buffer()
+    }
+
+    fn move_end_of_buffer(&self) {
+        self.properties.cursor.move_end_of_buffer()
+    }
+
+    fn delete_forward(&self) {
+        self.properties.cursor.delete_forward()
+    }
+
+    fn delete_backward(&self) {
+        self.properties.cursor.delete_backward()
+    }
+
+    fn delete_line(&self) {
+        self.properties.cursor.delete_line()
+    }
+
+    fn insert_new_line(&self) {
+        self.properties.cursor.insert_new_line()
     }
 }
 
@@ -392,84 +189,82 @@ impl Component for Buffer {
     type Properties = Properties;
     type Message = Message;
 
-    fn create(properties: Self::Properties, frame: Rect, link: ComponentLink<Self>) -> Self {
-        let link_clone = link.clone();
-        let mut parser = properties
-            .mode
-            .language()
-            .map(move |language| ParserPool::new(link_clone, *language));
-        if let Some(parser) = parser.as_mut() {
-            parser.ensure_tree(&properties.context.task_pool, || properties.content.clone());
-        };
-
-        Buffer {
-            text: EditTree::new(properties.content.clone()),
-            has_unsaved_changes: ModifiedStatus::Unchanged,
-            cursor: Cursor::new(),
+    fn create(properties: Self::Properties, frame: Rect, _link: ComponentLink<Self>) -> Self {
+        let mut buffer = Self {
             line_offset: 0,
-            parser,
             viewing_edit_tree: false,
-
             properties,
             frame,
-            link,
-        }
+        };
+        buffer.ensure_cursor_in_view();
+        buffer
     }
 
     fn change(&mut self, properties: Self::Properties) -> ShouldRender {
-        let should_render = (self.properties.theme != properties.theme
-            || self.properties.focused != properties.focused
-            || self.properties.frame_id != properties.frame_id)
-            .into();
+        let changed_properties = self.properties != properties;
         self.properties = properties;
-        should_render
+        self.ensure_cursor_in_view() | changed_properties.into()
     }
 
     fn resize(&mut self, frame: Rect) -> ShouldRender {
+        let changed_frame = self.frame != frame;
         self.frame = frame;
-        self.ensure_cursor_in_view();
-        ShouldRender::Yes
+        self.ensure_cursor_in_view() | changed_frame.into()
     }
 
     fn update(&mut self, message: Message) -> ShouldRender {
-        self.reduce(message);
-        ShouldRender::Yes
+        match message {
+            Message::CenterCursorVisually => {
+                self.center_visual_cursor();
+                ShouldRender::Yes
+            }
+            Message::ClearSelection if self.viewing_edit_tree => {
+                self.viewing_edit_tree = false;
+                ShouldRender::Yes
+            }
+            Message::ClearSelection => ShouldRender::No,
+            Message::ToggleEditTree => {
+                self.viewing_edit_tree = !self.viewing_edit_tree;
+                ShouldRender::Yes
+            }
+        }
     }
 
     fn view(&self) -> Layout {
+        let content = self.properties.content.reader();
+
         // The textarea components that displays text
         let textarea = TextArea::with(TextAreaProperties {
             theme: self.properties.theme.syntax.clone(),
             focused: self.properties.focused,
-            text: self.text.staged().clone(),
-            cursor: self.cursor.clone(),
+            text: content.staged().clone(),
+            cursor: self.properties.cursor.inner().clone(),
             mode: self.properties.mode,
             line_offset: self.line_offset,
-            parse_tree: self.parser.as_ref().and_then(|parser| parser.tree.clone()),
+            parse_tree: self.properties.parse_tree.clone(),
         });
 
         // Vertical info bar which shows line specific diagnostics
         let line_info = LineInfo::with(LineInfoProperties {
             style: self.properties.theme.border,
             line_offset: self.line_offset,
-            num_lines: self.text.len_lines(),
+            num_lines: content.len_lines(),
         });
 
         // The "status bar" which shows information about the file etc.
         let status_bar = StatusBar::with(StatusBarProperties {
-            current_line_index: self.text.char_to_line(self.cursor.range().start.0),
+            current_line_index: content
+                .char_to_line(self.properties.cursor.inner().range().start.0),
+            column_offset: self.properties.cursor.inner().column_offset(&content),
             file_path: self.properties.file_path.clone(),
             focused: self.properties.focused,
             frame_id: self.properties.frame_id,
-            has_unsaved_changes: self.has_unsaved_changes,
+            modified_status: self.properties.modified_status,
             mode: self.properties.mode.into(),
-            num_lines: self.text.len_lines(),
+            num_lines: content.len_lines(),
             repository: self.properties.repo.clone(),
-            size_bytes: self.text.len_bytes() as u64,
+            size_bytes: content.len_bytes() as u64,
             theme: self.properties.theme.status_bar.clone(),
-            // TODO: Fix visual_cursor_x to display the column (i.e. unicode
-            // width). It used to be computed by draw_line.
-            visual_cursor_x: self.cursor.range().start.0,
         });
 
         // Edit-tree viewer (aka. undo/redo tree)
@@ -480,7 +275,7 @@ impl Component for Buffer {
                 )),
                 Item::auto(Container::column([
                     Item::auto(EditTreeViewer::with(EditTreeViewerProperties {
-                        tree: self.text.clone(),
+                        tree: self.properties.content.clone(),
                         theme: self.properties.theme.edit_tree_viewer.clone(),
                     })),
                     Item::fixed(1)(Text::with(
@@ -506,99 +301,163 @@ impl Component for Buffer {
         ])
     }
 
-    fn has_focus(&self) -> bool {
-        self.properties.focused
-    }
+    fn bindings(&self, bindings: &mut Bindings<Self>) {
+        use Key::*;
 
-    fn input_binding(&self, pressed: &[Key]) -> BindingMatch<Self::Message> {
-        let transition = BindingTransition::Clear;
-        log::debug!("{:?}", pressed);
-        let message = match pressed {
-            // Cursor movement
-            [Key::Ctrl('p')] | [Key::Up] => Message::Up,
-            [Key::Ctrl('n')] | [Key::Down] => Message::Down,
-            [Key::Ctrl('b')] | [Key::Left] => Message::Left,
-            [Key::Ctrl('f')] | [Key::Right] => Message::Right,
-            [Key::Ctrl('v')] | [Key::PageDown] => Message::PageDown,
-            [Key::Alt('v')] | [Key::PageUp] => Message::PageUp,
-            [Key::Ctrl('a')] | [Key::Home] => Message::StartOfLine,
-            [Key::Ctrl('e')] | [Key::End] => Message::EndOfLine,
-            [Key::Alt('<')] => Message::StartOfBuffer,
-            [Key::Alt('>')] => Message::EndOfBuffer,
-            [Key::Ctrl('l')] => Message::CenterCursorVisually,
-
-            // Editing
-            [Key::Null] | [Key::Ctrl(' ')] => Message::BeginSelection,
-            [Key::Ctrl('g')] => Message::ClearSelection,
-            [Key::Ctrl('x'), Key::Char('h')] => Message::SelectAll,
-            [Key::Alt('w')] => Message::CopySelection,
-            [Key::Ctrl('w')] => Message::CutSelection,
-            [Key::Ctrl('y')] => Message::Yank,
-            [Key::Ctrl('d')] | [Key::Delete] => Message::DeleteForward,
-            [Key::Backspace] => Message::DeleteBackward,
-            [Key::Ctrl('k')] => Message::DeleteLine,
-            [Key::Char('\n')] => Message::InsertNewLine,
-            [Key::Char('\t')] if DISABLE_TABS => Message::InsertTab,
-            &[Key::Char(character)] if character != '\n' => Message::InsertChar(character),
-
-            // Undo / Redo
-            [Key::Ctrl('x'), Key::Char('u')] | [Key::Ctrl('x'), Key::Ctrl('u')] => {
-                Message::ToggleEditTree
-            }
-            [Key::Ctrl('_')] | [Key::Ctrl('z')] | [Key::Ctrl('/')] => Message::Undo,
-            [Key::Ctrl('q')] => Message::Redo,
-
-            // Buffer
-            [Key::Ctrl('x'), Key::Ctrl('s')] | [Key::Ctrl('x'), Key::Char('s')] => {
-                Message::SaveBuffer
-            }
-            [Key::Ctrl('x')] => {
-                return {
-                    BindingMatch {
-                        transition: BindingTransition::Continue,
-                        message: None,
-                    }
-                }
-            }
-            _ => {
-                return {
-                    BindingMatch {
-                        transition: BindingTransition::Clear,
-                        message: None,
-                    }
-                }
-            }
-        };
-
-        BindingMatch {
-            transition,
-            message: Some(message),
+        bindings.set_focus(self.properties.focused);
+        if !bindings.is_empty() {
+            return;
         }
+
+        // Cursor movement
+        //
+        // Up
+        bindings.add("move-up", [Ctrl('p')], Self::move_up);
+        bindings.add("move-up", [Up], Self::move_up);
+
+        // Down
+        bindings.add("move-down", [Ctrl('n')], Self::move_down);
+        bindings.add("move-down", [Down], Self::move_down);
+
+        // Left
+        bindings.add("move-left", [Ctrl('b')], Self::move_left);
+        bindings.add("move-left", [Left], Self::move_left);
+
+        // Right
+        bindings.add("move-right", [Ctrl('f')], Self::move_right);
+        bindings.add("move-right", [Right], Self::move_right);
+
+        // Page down
+        bindings.add("move-page-down", [Ctrl('v')], Self::move_page_down);
+        bindings.add("move-page-down", [PageDown], Self::move_page_down);
+
+        // Page up
+        bindings.add("move-page-up", [Alt('v')], Self::move_page_up);
+        bindings.add("move-page-up", [PageUp], Self::move_page_up);
+
+        // Start/end of line
+        bindings.add("move-start-of-line", [Ctrl('a')], Self::move_start_of_line);
+        bindings.add("move-start-of-line", [Home], Self::move_start_of_line);
+        bindings.add("move-end-of-line", [Ctrl('e')], Self::move_end_of_line);
+        bindings.add("move-end-of-line", [End], Self::move_end_of_line);
+
+        // Start/end of buffer
+        bindings.add(
+            "move-start-of-buffer",
+            [Alt('<')],
+            Self::move_start_of_buffer,
+        );
+        bindings.add("move-end-of-buffer", [Alt('>')], Self::move_end_of_buffer);
+
+        // Editing
+        //
+        // Delete forward
+        bindings.add("delete-forward", [Ctrl('d')], Self::delete_forward);
+        bindings.add("delete-forward", [Delete], Self::delete_forward);
+
+        // Delete backward
+        bindings.add("delete-backward", [Backspace], Self::delete_backward);
+
+        // Delete line
+        bindings.add("delete-line", [Ctrl('k')], Self::delete_line);
+
+        // Insert new line
+        bindings.add("insert-new-line", [Char('\n')], Self::insert_new_line);
+
+        // Insert tab
+        bindings.add("insert-tab", [Char('\t')], |this: &Self| {
+            if DISABLE_TABS {
+                this.properties.cursor.insert_tab()
+            }
+        });
+
+        // Insert character
+        bindings.add(
+            "insert-character",
+            AnyCharacter,
+            |this: &Self, keys: &[Key]| match keys {
+                &[Char(character)] if character != '\n' => {
+                    this.properties.cursor.insert_char(character)
+                }
+                _ => {}
+            },
+        );
+
+        // Selections
+        //
+        // Begin selection
+        bindings.add("begin-selection", [Null], |this: &Self| {
+            this.properties.cursor.begin_selection();
+        });
+        bindings.add("begin-selection", [Ctrl(' ')], |this: &Self| {
+            this.properties.cursor.begin_selection();
+        });
+
+        // Select all
+        bindings.add("select-all", [Ctrl('x'), Char('h')], |this: &Self| {
+            this.properties.cursor.select_all();
+        });
+        // Copy selection to clipboard
+        bindings.add("copy-selection", [Alt('w')], |this: &Self| {
+            this.properties.cursor.copy_selection_to_clipboard();
+        });
+        // Cut selection to clipboard
+        bindings.add("cut-selection", [Ctrl('w')], |this: &Self| {
+            this.properties.cursor.cut_selection_to_clipboard();
+        });
+        // Paste from clipboard
+        bindings.add("paste-clipboard", [Ctrl('y')], |this: &Self| {
+            this.properties.cursor.paste_from_clipboard();
+        });
+
+        // Undo / Redo
+        //
+        // Undo
+        bindings.add("undo", [Ctrl('_')], |this: &Self| {
+            this.properties.cursor.undo();
+        });
+        bindings.add("undo", [Ctrl('z')], |this: &Self| {
+            this.properties.cursor.undo();
+        });
+        bindings.add("undo", [Ctrl('/')], |this: &Self| {
+            this.properties.cursor.undo();
+        });
+
+        // Redo
+        bindings.add("redo", [Ctrl('q')], |this: &Self| {
+            this.properties.cursor.redo();
+        });
+
+        // Save buffer
+        bindings.add("save-buffer", [Ctrl('x'), Ctrl('s')], |this: &Self| {
+            this.properties.cursor.save();
+        });
+        bindings.add("save-buffer", [Ctrl('x'), Char('s')], |this: &Self| {
+            this.properties.cursor.save();
+        });
+
+        // Centre cursor visually
+        bindings.add("center-cursor-visually", [Ctrl('l')], || {
+            Message::CenterCursorVisually
+        });
+
+        // View edit tree
+        //
+        // Toggle
+        bindings.add("toggle-edit-tree", [Ctrl('x'), Char('u')], || {
+            Message::ToggleEditTree
+        });
+
+        // Close
+        bindings.add("clear-selection", [Ctrl('g')], |this: &Self| {
+            if this.viewing_edit_tree {
+                Some(Message::ClearSelection)
+            } else {
+                this.properties.cursor.clear_selection();
+                None
+            }
+        });
     }
 }
 
-#[derive(Clone)]
-pub struct RepositoryRc(Rc<Repository>);
-
-impl RepositoryRc {
-    pub fn new(repository: Repository) -> Self {
-        Self(Rc::new(repository))
-    }
-}
-
-impl PartialEq for RepositoryRc {
-    fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.0, &other.0)
-    }
-}
-
-impl std::ops::Deref for RepositoryRc {
-    type Target = Repository;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-const DISABLE_TABS: bool = false;
 const EDIT_TREE_WIDTH: usize = 36;

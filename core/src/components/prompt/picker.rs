@@ -22,7 +22,7 @@ use super::{
     Theme, PROMPT_MAX_HEIGHT,
 };
 use crate::{
-    editor::Context,
+    editor::ContextHandle,
     error::{Context as _Context, Result},
     task::TaskId,
     utils,
@@ -41,7 +41,7 @@ pub enum FileSource {
 }
 
 impl FileSource {
-    fn status_name(&self) -> String {
+    fn status_name(&self) -> Cow<'static, str> {
         match self {
             Self::Directory => "open",
             Self::Repository => "repo",
@@ -64,7 +64,7 @@ pub enum Message {
 
 #[derive(Clone)]
 pub struct Properties {
-    pub context: Rc<Context>,
+    pub context: ContextHandle,
     pub theme: Cow<'static, Theme>,
     pub source: FileSource,
     pub on_open: Callback<PathBuf>,
@@ -285,33 +285,20 @@ impl Component for FilePicker {
         ])
     }
 
-    fn has_focus(&self) -> bool {
-        true
-    }
-
-    fn input_binding(&self, pressed: &[Key]) -> BindingMatch<Self::Message> {
-        let transition = BindingTransition::Clear;
-        let message = match pressed {
-            [Key::Char('\n')] => Message::OpenFile,
-            [Key::Ctrl('l')] => Message::SelectParentDirectory,
-            [Key::Char('\t')] => Message::AutocompletePath,
-            [Key::Ctrl('x')] => {
-                return BindingMatch {
-                    transition: BindingTransition::Continue,
-                    message: None,
-                };
-            }
-            _ => {
-                return BindingMatch {
-                    transition: BindingTransition::Clear,
-                    message: None,
-                };
-            }
-        };
-        BindingMatch {
-            transition,
-            message: Some(message),
+    fn bindings(&self, bindings: &mut Bindings<Self>) {
+        if !bindings.is_empty() {
+            return;
         }
+
+        bindings.set_focus(true);
+
+        bindings.add("open-file", [Key::Char('\n')], || Message::OpenFile);
+        bindings.add("select-parent-directory", [Key::Ctrl('l')], || {
+            Message::SelectParentDirectory
+        });
+        bindings.add("autocomplete-path", [Key::Char('\t')], || {
+            Message::AutocompletePath
+        });
     }
 }
 

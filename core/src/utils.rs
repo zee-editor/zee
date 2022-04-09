@@ -1,6 +1,8 @@
 use ropey::{iter::Chunks, Rope, RopeSlice};
-use unicode_segmentation::{GraphemeCursor, GraphemeIncomplete};
-use unicode_width::UnicodeWidthStr;
+use zi::{
+    unicode_segmentation::{GraphemeCursor, GraphemeIncomplete},
+    unicode_width::UnicodeWidthStr,
+};
 
 pub fn grapheme_width(slice: &RopeSlice) -> usize {
     rope_slice_as_str(slice, |text| {

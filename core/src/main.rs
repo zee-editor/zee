@@ -12,11 +12,11 @@ mod undo;
 mod utils;
 
 use flexi_logger::{FileSpec, Logger};
-use std::{env, path::PathBuf, rc::Rc};
+use std::{env, path::PathBuf};
 use zi::ComponentExt;
 
 use crate::{
-    editor::{Context, Editor},
+    editor::{Editor, Properties as EditorProperties},
     error::Result,
     task::TaskPool,
 };
@@ -82,17 +82,14 @@ fn start_editor() -> Result<()> {
         }
     }
 
-    // Instantiate editor and open any files specified as arguments
-    let context = Rc::new(Context {
+    // Instantiate the editor, open any files specified as arguments and start the UI loop
+    zi_term::incremental()?.run_event_loop(Editor::with(EditorProperties {
         args_files: args.files,
         current_working_dir: current_dir,
         settings,
         task_pool: TaskPool::new()?,
         clipboard: clipboard::create()?,
-    });
-
-    // Start the UI loop
-    zi_term::incremental()?.run_event_loop(Editor::with(context))?;
+    }))?;
 
     Ok(())
 }

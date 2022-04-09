@@ -30,6 +30,19 @@ impl<IdT: Clone + Copy + Display> WindowTree<IdT> {
         }
     }
 
+    pub fn clear(&mut self) {
+        self.nodes.clear();
+        self.focused_index = WindowIndex(0);
+        self.num_windows = WindowIndex(0);
+    }
+
+    pub fn nodes_mut(&mut self) -> impl Iterator<Item = &mut IdT> {
+        self.nodes.iter_mut().filter_map(|node| match node {
+            Node::Window(id) => Some(id),
+            _ => None,
+        })
+    }
+
     pub fn is_empty(&self) -> bool {
         self.num_windows == WindowIndex(0)
     }
@@ -40,7 +53,7 @@ impl<IdT: Clone + Copy + Display> WindowTree<IdT> {
         self.num_windows = self.num_windows.increment();
     }
 
-    pub fn close_focused(&mut self) {
+    pub fn delete_focused(&mut self) {
         let focused = self.find_focused_window();
         self.nodes.remove(focused.node_index);
         self.num_windows = self.num_windows.saturating_decrement();
@@ -63,7 +76,7 @@ impl<IdT: Clone + Copy + Display> WindowTree<IdT> {
         }
     }
 
-    pub fn close_all_except_focused(&mut self) {
+    pub fn delete_all_except_focused(&mut self) {
         let focused = self.nodes.remove(self.find_focused_window().node_index);
         self.nodes.clear();
         self.nodes.push(focused);
@@ -85,7 +98,9 @@ impl<IdT: Clone + Copy + Display> WindowTree<IdT> {
                 .insert(focused.node_index + 3, Node::ContainerEnd);
         }
 
-        self.focused_index = self.focused_index.increment();
+        // TODO: Should the newly created window be focused? Emacs doesn't, but often I wish it did
+        //
+        // self.focused_index = self.focused_index.increment();
         self.num_windows = self.num_windows.increment();
     }
 
