@@ -1,8 +1,10 @@
 use once_cell::sync::Lazy;
 use pkg_version::{pkg_version_major, pkg_version_minor, pkg_version_patch};
 use std::{borrow::Cow, cmp};
-use unicode_width::UnicodeWidthStr;
-use zi::{Canvas, Component, ComponentLink, Layout, Rect, ShouldRender, Size, Style};
+use zi::{
+    unicode_width::UnicodeWidthStr, Canvas, Component, ComponentLink, Layout, Rect, ShouldRender,
+    Size, Style,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Theme {

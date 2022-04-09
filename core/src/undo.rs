@@ -144,6 +144,10 @@ impl EditTree {
     pub fn staged(&self) -> &Rope {
         self.deref()
     }
+
+    pub fn staged_mut(&mut self) -> &mut Rope {
+        self.deref_mut()
+    }
 }
 
 impl Deref for EditTree {

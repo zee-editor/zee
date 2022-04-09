@@ -1,14 +1,15 @@
 use ropey::Rope;
 use size_format::SizeFormatterBinary;
-use std::{borrow::Cow, convert::TryInto, path::PathBuf, rc::Rc};
+use std::{borrow::Cow, convert::TryInto, path::PathBuf};
 use zi::{
     components::{
         input::{Cursor, Input, InputChange, InputProperties, InputStyle},
         select::{Select, SelectProperties},
         text::{Text, TextAlign, TextProperties},
     },
-    BindingMatch, BindingTransition, Callback, Colour, Component, ComponentExt, ComponentLink,
-    Container, FlexBasis, FlexDirection, Item, Key, Layout, Rect, ShouldRender, Style,
+    unicode_width::UnicodeWidthStr,
+    Bindings, Callback, Colour, Component, ComponentExt, ComponentLink, Container, FlexBasis,
+    FlexDirection, Item, Key, Layout, Rect, ShouldRender, Style,
 };
 
 use super::{
@@ -17,7 +18,7 @@ use super::{
     Theme,
 };
 use crate::{
-    editor::{BufferId, Context},
+    editor::{BufferId, ContextHandle},
     mode::Mode,
     task::TaskId,
 };
@@ -66,8 +67,9 @@ pub enum Message {
 
 #[derive(Clone)]
 pub struct Properties {
-    pub context: Rc<Context>,
+    pub context: ContextHandle,
     pub theme: Cow<'static, Theme>,
+    pub message: Cow<'static, str>,
     pub entries: Vec<BufferEntry>,
     pub on_select: Callback<BufferId>,
     pub on_filter: Callback<usize>,
@@ -252,10 +254,10 @@ impl Component for BufferPicker {
             },
             Item::fixed(1)(Container::row([
                 Status::item_with_key(
-                    FlexBasis::Fixed(6),
+                    FlexBasis::Fixed(self.properties.message.width()),
                     "status",
                     StatusProperties {
-                        action_name: "buffer".into(),
+                        action_name: self.properties.message.clone(),
                         pending: self.current_task_id.is_some(),
                         style: self.properties.theme.action,
                     },
@@ -282,32 +284,12 @@ impl Component for BufferPicker {
         ])
     }
 
-    fn has_focus(&self) -> bool {
-        true
-    }
-
-    fn input_binding(&self, pressed: &[Key]) -> BindingMatch<Self::Message> {
-        let transition = BindingTransition::Clear;
-        let message = match pressed {
-            [Key::Char('\n')] => Message::Select,
-            // [Key::Ctrl('l')] => Message::SelectParentDirectory,
-            // [Key::Char('\t')] => Message::AutocompletePath,
-            [Key::Ctrl('x')] => {
-                return BindingMatch {
-                    transition: BindingTransition::Continue,
-                    message: None,
-                };
-            }
-            _ => {
-                return BindingMatch {
-                    transition: BindingTransition::Clear,
-                    message: None,
-                };
-            }
-        };
-        BindingMatch {
-            transition,
-            message: Some(message),
+    fn bindings(&self, bindings: &mut Bindings<Self>) {
+        if !bindings.is_empty() {
+            return;
         }
+
+        bindings.set_focus(true);
+        bindings.add("select-buffer", [Key::Char('\n')], || Message::Select);
     }
 }

@@ -1,10 +1,15 @@
 use size_format::SizeFormatterBinary;
 use std::{ops::Range, path::PathBuf};
-use unicode_width::UnicodeWidthStr;
-use zi::{Canvas, Component, ComponentLink, Layout, Rect, ShouldRender, Size, Style};
+use zi::{
+    unicode_width::UnicodeWidthStr, Canvas, Component, ComponentLink, Layout, Rect, ShouldRender,
+    Size, Style,
+};
 
-use super::{ModifiedStatus, RepositoryRc};
-use crate::{mode::Mode, utils::StaticRefEq};
+use crate::{
+    editor::buffer::{ModifiedStatus, RepositoryRc},
+    mode::Mode,
+    utils::StaticRefEq,
+};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Theme {
@@ -23,15 +28,15 @@ pub struct Theme {
 pub struct Properties {
     pub theme: Theme,
     pub current_line_index: usize,
+    pub column_offset: usize,
     pub file_path: Option<PathBuf>,
     pub focused: bool,
     pub frame_id: usize,
-    pub has_unsaved_changes: ModifiedStatus,
+    pub modified_status: ModifiedStatus,
     pub mode: StaticRefEq<Mode>,
     pub num_lines: usize,
     pub repository: Option<RepositoryRc>,
     pub size_bytes: u64,
-    pub visual_cursor_x: usize,
 }
 
 pub struct StatusBar {
@@ -66,7 +71,7 @@ impl Component for StatusBar {
             properties:
                 Properties {
                     ref file_path,
-                    ref has_unsaved_changes,
+                    ref modified_status,
                     ref mode,
                     ref repository,
                     ref theme,
@@ -75,7 +80,7 @@ impl Component for StatusBar {
                     frame_id,
                     num_lines,
                     size_bytes,
-                    visual_cursor_x,
+                    column_offset,
                 },
             frame,
         } = *self;
@@ -96,13 +101,13 @@ impl Component for StatusBar {
             // Has unsaved changes
             .and_then(|canvas| {
                 canvas.append_start(
-                    match has_unsaved_changes {
+                    match modified_status {
                         ModifiedStatus::Unchanged => theme.is_not_modified,
                         _ => theme.is_modified,
                     },
-                    match has_unsaved_changes {
+                    match modified_status {
                         ModifiedStatus::Unchanged => " - ",
-                        ModifiedStatus::Changed | ModifiedStatus::Saving => " ❄ ",
+                        ModifiedStatus::Changed | ModifiedStatus::Saving => " ✚ ",
                     },
                 )
             })
@@ -166,11 +171,7 @@ impl Component for StatusBar {
             })
             // The row:column in the file, right-aligned
             .and_then(|canvas| {
-                let line_status = format!(
-                    " {current_line:>3}:{current_byte:>2} ",
-                    current_line = current_line_index,
-                    current_byte = visual_cursor_x,
-                );
+                let line_status = format!(" {current_line_index:>3}:{column_offset:>2} ");
                 canvas.append_end(theme.is_not_modified, &line_status)
             })
             // Name of the current mode

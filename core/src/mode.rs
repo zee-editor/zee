@@ -14,8 +14,8 @@ pub struct Mode {
 }
 
 impl Mode {
-    pub fn language(&self) -> Option<&Language> {
-        self.parser.as_ref().map(|parser| &parser.language)
+    pub fn language(&self) -> Option<Language> {
+        self.parser.as_ref().map(|parser| parser.language)
     }
 
     pub fn highlights(&self) -> Option<&HighlightRules> {

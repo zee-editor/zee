@@ -13,10 +13,9 @@ use tree_sitter::{
     InputEdit as TreeSitterInputEdit, Language, Node, Parser, Point as TreeSitterPoint, Tree,
     TreeCursor,
 };
-use zi::ComponentLink;
 
 use crate::{
-    components::buffer::{Buffer, Message},
+    error::Result,
     task::{TaskId, TaskPool},
 };
 
@@ -43,6 +42,7 @@ pub struct ParsedSyntax {
 
 #[derive(Clone)]
 pub struct ParseTree {
+    pub generation: usize,
     pub tree: Tree,
 }
 
@@ -72,16 +72,14 @@ impl DerefMut for ParseTree {
 
 pub struct ParserPool {
     pub tree: Option<ParseTree>,
-    link: ComponentLink<Buffer>,
     language: Language,
     parsers: Vec<CancelableParser>,
     current_parse_task: Option<(TaskId, CancelFlag)>,
 }
 
 impl ParserPool {
-    pub fn new(link: ComponentLink<Buffer>, language: Language) -> Self {
+    pub fn new(language: Language) -> Self {
         Self {
-            link,
             language,
             parsers: vec![],
             tree: None,
@@ -89,13 +87,24 @@ impl ParserPool {
         }
     }
 
-    pub fn ensure_tree(&mut self, task_pool: &TaskPool, tree_fn: impl FnOnce() -> Rope) {
+    pub fn ensure_tree(
+        &mut self,
+        task_pool: &TaskPool,
+        tree_fn: impl FnOnce() -> Rope,
+        on_parse: impl FnOnce(Result<ParserStatus>) + Send + 'static,
+    ) {
         if let (None, None) = (self.tree.as_ref(), self.current_parse_task.as_ref()) {
-            self.spawn(task_pool, tree_fn(), true);
+            self.spawn(task_pool, tree_fn(), true, on_parse);
         }
     }
 
-    pub fn spawn(&mut self, task_pool: &TaskPool, text: Rope, fresh: bool) {
+    pub fn spawn(
+        &mut self,
+        task_pool: &TaskPool,
+        text: Rope,
+        fresh: bool,
+        on_parse: impl FnOnce(Result<ParserStatus>) + Send + 'static,
+    ) {
         let mut parser = self.parsers.pop().unwrap_or_else(|| {
             let mut parser = Parser::new();
             parser
@@ -106,7 +115,6 @@ impl ParserPool {
 
         let cancel_flag = parser.cancel_flag().clone();
         let raw_tree = self.tree.clone().map(|tree| tree.tree);
-        let link = self.link.clone();
         let task_id = task_pool.spawn(move |task_id| {
             let maybe_tree = parser.parse_with(
                 &mut |byte_index, _| {
@@ -119,7 +127,8 @@ impl ParserPool {
             );
             // Reset the parser for later reuse
             parser.reset();
-            link.send(Message::ParseSyntax(match maybe_tree {
+
+            on_parse(match maybe_tree {
                 Some(tree) => Ok(ParserStatus {
                     task_id,
                     parser,
@@ -130,7 +139,7 @@ impl ParserPool {
                     parser,
                     parsed: None,
                 }),
-            }))
+            });
         });
         if let Some((_, old_cancel_flag)) = self.current_parse_task.as_ref() {
             old_cancel_flag.set();
@@ -138,7 +147,7 @@ impl ParserPool {
         self.current_parse_task = Some((task_id, cancel_flag));
     }
 
-    pub fn handle_parse_syntax_done(&mut self, status: ParserStatus) {
+    pub fn handle_parse_syntax_done(&mut self, generation: usize, status: ParserStatus) {
         let ParserStatus {
             task_id,
             parser,
@@ -163,7 +172,7 @@ impl ParserPool {
         // If the parser task hasn't been cancelled, store the new syntax tree
         if let Some(ParsedSyntax { tree, text }) = parsed {
             assert!(tree.root_node().end_byte() <= text.len_bytes());
-            self.tree = Some(ParseTree { tree });
+            self.tree = Some(ParseTree { generation, tree });
         }
     }
 
@@ -172,8 +181,8 @@ impl ParserPool {
             Some(ref mut tree) if !diff.is_empty() => {
                 tree.edit(&TreeSitterInputEdit {
                     start_byte: diff.byte_index,
-                    old_end_byte: diff.byte_index + diff.old_length,
-                    new_end_byte: diff.byte_index + diff.new_length,
+                    old_end_byte: diff.byte_index + diff.old_byte_length,
+                    new_end_byte: diff.byte_index + diff.new_byte_length,
                     // I don't use tree sitter's line/col tracking; I'm assuming
                     // here that passing in dummy values doesn't cause any other
                     // problem apart from incorrect line/col after editing a tree.
@@ -189,18 +198,31 @@ impl ParserPool {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct OpaqueDiff {
-    byte_index: usize,
-    old_length: usize,
-    new_length: usize,
+    pub byte_index: usize,
+    pub old_byte_length: usize,
+    pub new_byte_length: usize,
+    pub char_index: usize,
+    pub old_char_length: usize,
+    pub new_char_length: usize,
 }
 
 impl OpaqueDiff {
     #[inline]
-    pub fn new(byte_index: usize, old_length: usize, new_length: usize) -> Self {
+    pub fn new(
+        byte_index: usize,
+        old_byte_length: usize,
+        new_byte_length: usize,
+        char_index: usize,
+        old_char_length: usize,
+        new_char_length: usize,
+    ) -> Self {
         Self {
             byte_index,
-            old_length,
-            new_length,
+            old_byte_length,
+            new_byte_length,
+            char_index,
+            old_char_length,
+            new_char_length,
         }
     }
 
@@ -208,22 +230,28 @@ impl OpaqueDiff {
     pub fn empty() -> Self {
         Self {
             byte_index: 0,
-            old_length: 0,
-            new_length: 0,
+            old_byte_length: 0,
+            new_byte_length: 0,
+            char_index: 0,
+            old_char_length: 0,
+            new_char_length: 0,
         }
     }
 
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.byte_index == 0 && self.old_length == 0 && self.new_length == 0
+        *self == OpaqueDiff::empty()
     }
 
     #[inline]
     pub fn reverse(&self) -> Self {
         Self {
             byte_index: self.byte_index,
-            old_length: self.new_length,
-            new_length: self.old_length,
+            old_byte_length: self.new_byte_length,
+            new_byte_length: self.old_byte_length,
+            char_index: self.char_index,
+            old_char_length: self.new_char_length,
+            new_char_length: self.old_char_length,
         }
     }
 }

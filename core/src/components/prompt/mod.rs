@@ -4,18 +4,19 @@ pub mod picker;
 mod matcher;
 mod status;
 
-use std::{borrow::Cow, path::PathBuf, rc::Rc};
+use std::{borrow::Cow, path::PathBuf};
 use zi::{
     components::text::{Text, TextProperties},
     Background, Callback, Component, ComponentExt, ComponentLink, Foreground, Layout, Rect,
     ShouldRender, Style,
 };
 
+use crate::editor::{BufferId, ContextHandle};
+
 use self::{
     buffers::{BufferEntry, BufferPicker, Properties as BufferPickerProperties},
     picker::{FilePicker, FileSource, Properties as FilePickerProperties},
 };
-use crate::editor::{BufferId, Context};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Theme {
@@ -36,7 +37,8 @@ pub enum Action {
     Log {
         message: String,
     },
-    SwitchBuffer {
+    PickBuffer {
+        message: Cow<'static, str>,
         entries: Vec<BufferEntry>,
         on_select: Callback<BufferId>,
         on_change_height: Callback<usize>,
@@ -57,30 +59,23 @@ impl Action {
         !matches!(self, Self::None | Self::Log { .. })
     }
 
+    pub fn is_log(&self) -> bool {
+        matches!(self, Self::Log { .. })
+    }
+
     pub fn initial_height(&self) -> usize {
         match self {
-            Self::SwitchBuffer { ref entries, .. } => {
+            Self::PickBuffer { ref entries, .. } => {
                 1 + std::cmp::min(std::cmp::max(entries.len(), 1), PROMPT_MAX_HEIGHT)
             }
             _ => 1,
         }
     }
-
-    // pub fn notify_height_change(&self, height: usize) {
-    //     use Action::*;
-    //     match self {
-    //         OpenFile {
-    //             ref on_change_height,
-    //             ..
-    //         } => on_change_height.emit(height),
-    //         _ => {}
-    //     }
-    // }
 }
 
 #[derive(Clone)]
 pub struct Properties {
-    pub context: Rc<Context>,
+    pub context: ContextHandle,
     pub theme: Cow<'static, Theme>,
     pub action: Action,
 }
@@ -103,26 +98,22 @@ impl Component for Prompt {
             .into();
         self.properties = properties;
 
-        // if initial_height != self.height() {
-        //     self.properties.action.notify_height_change(self.height());
-        // }
-
         should_render
     }
 
     fn view(&self) -> Layout {
-        log::info!("Prompt action: {:?}", self.properties.action);
-        match self.properties.action {
+        match &self.properties.action {
             Action::None => Text::with(TextProperties::new().style(self.properties.theme.input)),
-            Action::Log { ref message } => Text::with(
+            Action::Log { message } => Text::with(
                 TextProperties::new()
                     .content(message.clone())
                     .style(self.properties.theme.input),
             ),
-            Action::SwitchBuffer {
-                ref entries,
-                ref on_select,
-                ref on_change_height,
+            Action::PickBuffer {
+                message,
+                entries,
+                on_select,
+                on_change_height,
             } => {
                 let on_change_height = on_change_height.clone();
                 let on_filter = (move |size| {
@@ -131,6 +122,7 @@ impl Component for Prompt {
                 .into();
 
                 BufferPicker::with(BufferPickerProperties {
+                    message: message.clone(),
                     context: self.properties.context.clone(),
                     theme: self.properties.theme.clone(),
                     entries: entries.clone(),
@@ -140,20 +132,16 @@ impl Component for Prompt {
             }
             Action::OpenFile {
                 source,
-                ref on_change_height,
-                ref on_open,
+                on_change_height,
+                on_open,
             } => FilePicker::with(FilePickerProperties {
                 context: self.properties.context.clone(),
                 theme: self.properties.theme.clone(),
-                source,
+                source: *source,
                 on_open: on_open.clone(),
                 on_change_height: on_change_height.clone(),
             }),
         }
-    }
-
-    fn has_focus(&self) -> bool {
-        false
     }
 }
 

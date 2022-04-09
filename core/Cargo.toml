@@ -35,10 +35,8 @@ smallvec = "1.8.0"
 thiserror = "1.0.30"
 toml = "0.5.8"
 tree-sitter = "0.20.6"
-unicode-segmentation = "1.9.0"
-unicode-width = "0.1.9"
-zi = "0.2.0"
-zi-term = "0.2.0"
+zi = "0.3.1"
+zi-term = "0.3.1"
 
 # Local crates
 zee-grammar = { version = "0.2.0", path = "../grammar" }

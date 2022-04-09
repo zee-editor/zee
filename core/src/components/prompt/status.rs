@@ -1,4 +1,5 @@
 use palette::{Gradient, Hsv, LinSrgb};
+use std::borrow::Cow;
 use zi::{
     components::text::{Text, TextProperties},
     prelude::*,
@@ -6,7 +7,7 @@ use zi::{
 
 #[derive(Clone, PartialEq)]
 pub struct StatusProperties {
-    pub action_name: String,
+    pub action_name: Cow<'static, str>,
     pub pending: bool,
     pub style: Style,
 }
@@ -64,7 +65,11 @@ impl Component for Status {
         } else {
             style
         };
-        Text::with(TextProperties::new().content(action_name).style(style))
+        Text::with(
+            TextProperties::new()
+                .content(action_name.to_owned())
+                .style(style),
+        )
     }
 
     fn tick(&self) -> Option<Self::Message> {
