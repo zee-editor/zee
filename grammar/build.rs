@@ -74,6 +74,7 @@ fn compile_tree_sitter_cpp_lib(name: &str) {
 
 #[allow(warnings)]
 fn main() {
+    println!("cargo:rerun-if-changed=build.rs");
     compile_tree_sitter_c_lib("tree-sitter-css");
     compile_tree_sitter_c_lib("tree-sitter-javascript");
     compile_tree_sitter_c_lib("tree-sitter-rust");

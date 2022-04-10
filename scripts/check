@@ -2,8 +2,8 @@
 
 set -ex
 
-cargo check --all-targets
+cargo check --all-targets --all-features
 cargo +nightly fmt -- --check
-cargo clippy --offline --all-targets -- -D warnings
-cargo test --offline --all-targets
-cargo test --offline --doc
+cargo clippy --offline --all-targets --all-features -- -D warnings
+cargo test --offline --all-targets --all-features
+cargo test --offline --all-features --doc

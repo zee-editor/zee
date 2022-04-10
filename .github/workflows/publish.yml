@@ -1,0 +1,52 @@
+name: Publish
+
+on:
+  push:
+    tags: v*
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  publish:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Install latest stable rustc
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: rustfmt, clippy
+      - name: Install nightly rustfmt
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: false
+          components: rustfmt
+      - name: Install x11 deps
+        run: sudo apt update && sudo apt install xorg-dev libxcb-shape0-dev libxcb-xfixes0-dev
+      - name: Checkout git submodules
+        uses: actions/checkout@v2
+        with:
+          submodules: 'recursive'
+      - name: Run checks
+        run: ./scripts/check
+      - name: Build
+        run: ./scripts/build
+      - name: Publish zee-grammar
+        run: |
+          cd grammar
+          cargo login ${{ secrets.CRATES_IO_TOKEN }}
+          cargo publish
+      - name: Publish zee-highlight
+        run: |
+          cd highlight
+          cargo login ${{ secrets.CRATES_IO_TOKEN }}
+          cargo publish
+      - name: Publish zee
+        run: |
+          cd core
+          cargo login ${{ secrets.CRATES_IO_TOKEN }}
+          cargo publish
