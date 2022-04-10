@@ -2,4 +2,4 @@
 
 set -ex
 
-cargo build --all-targets
+cargo build --all-targets --all-features
