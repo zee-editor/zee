@@ -46,7 +46,7 @@ zee-highlight = { version = "0.2.0", path = "../highlight" }
 crossclip = { optional = true, version = "0.7.0" }
 
 [features]
-default = ["system-clipboard"]
+default = []
 
 # Enables integration with the system's clipboard.
 system-clipboard = [
