@@ -302,7 +302,8 @@ impl Component for Editor {
             Message::KillBuffer(buffer_id) => {
                 self.prompt_action = PromptAction::None;
                 self.prompt_height = self.prompt_action.initial_height();
-                debug_assert!(self.buffers.remove(buffer_id).is_some());
+                let removed_buffer = self.buffers.remove(buffer_id);
+                debug_assert!(removed_buffer.is_some());
                 if self.buffers.is_empty() {
                     self.windows.clear();
                 } else {
