@@ -78,17 +78,17 @@ impl Cursor {
 
         // Otherwise, the change overlaps with the cursor
         let grapheme_start = prev_grapheme_boundary(
-            &new_text.slice(..),
+            new_text.slice(..),
             CharIndex(cmp::min(self.range.end.0, new_text.len_chars())),
         );
-        let grapheme_end = next_grapheme_boundary(&new_text.slice(..), grapheme_start);
+        let grapheme_end = next_grapheme_boundary(new_text.slice(..), grapheme_start);
         self.range = grapheme_start..grapheme_end
     }
 
     #[cfg(test)]
     pub fn end_of_buffer(text: &Rope) -> Self {
         Self {
-            range: prev_grapheme_boundary(&text.slice(..), CharIndex(text.len_chars()))
+            range: prev_grapheme_boundary(text.slice(..), CharIndex(text.len_chars()))
                 ..CharIndex(text.len_chars()),
             visual_horizontal_offset: None,
             selection: None,
@@ -137,7 +137,7 @@ impl Cursor {
     }
 
     pub fn move_left(&mut self, text: &Rope) {
-        let previous_grapheme_start = prev_grapheme_boundary(&text.slice(..), self.range.start);
+        let previous_grapheme_start = prev_grapheme_boundary(text.slice(..), self.range.start);
         if previous_grapheme_start == CharIndex(0) && self.range.start == CharIndex(0) {
             return;
         }
@@ -148,7 +148,7 @@ impl Cursor {
 
     pub fn move_right(&mut self, text: &Rope) {
         let grapheme_start = self.range.end;
-        let grapheme_end = next_grapheme_boundary(&text.slice(..), self.range.end);
+        let grapheme_end = next_grapheme_boundary(text.slice(..), self.range.end);
         if grapheme_start != grapheme_end {
             self.range = grapheme_start..grapheme_end;
         }
@@ -164,7 +164,7 @@ impl Cursor {
     pub fn move_to_start_of_line(&mut self, text: &Rope) {
         let line_index = text.char_to_line(self.range.start.0);
         let char_index = CharIndex(text.line_to_char(line_index));
-        self.range = char_index..next_grapheme_boundary(&text.slice(..), char_index);
+        self.range = char_index..next_grapheme_boundary(text.slice(..), char_index);
         self.visual_horizontal_offset = None;
     }
 
@@ -183,12 +183,12 @@ impl Cursor {
     }
 
     pub fn move_to_start_of_buffer(&mut self, text: &Rope) {
-        self.range = CharIndex(0)..next_grapheme_boundary(&text.slice(..), CharIndex(0));
+        self.range = CharIndex(0)..next_grapheme_boundary(text.slice(..), CharIndex(0));
         self.visual_horizontal_offset = None;
     }
 
     pub fn move_to_end_of_buffer(&mut self, text: &Rope) {
-        self.range = prev_grapheme_boundary(&text.slice(..), CharIndex(text.len_chars()))
+        self.range = prev_grapheme_boundary(text.slice(..), CharIndex(text.len_chars()))
             ..CharIndex(text.len_chars());
         self.visual_horizontal_offset = None;
     }
@@ -232,7 +232,7 @@ impl Cursor {
         )
     }
 
-    pub fn delete(&mut self, text: &mut Rope) -> DeleteOperation {
+    pub fn delete_forward(&mut self, text: &mut Rope) -> DeleteOperation {
         if text.len_chars() == 0 || self.range.start.0 == text.len_chars().saturating_sub(1) {
             return DeleteOperation::empty();
         }
@@ -247,7 +247,7 @@ impl Cursor {
         text.remove(self.range.start.0..self.range.end.0);
 
         let grapheme_start = self.range.start;
-        let grapheme_end = next_grapheme_boundary(&text.slice(..), self.range.start);
+        let grapheme_end = next_grapheme_boundary(text.slice(..), self.range.start);
         let deleted = text.slice(grapheme_start.0..grapheme_end.0).into();
         if grapheme_start < grapheme_end {
             self.range = grapheme_start..grapheme_end
@@ -256,6 +256,15 @@ impl Cursor {
         }
         ensure_trailing_newline_with_content(text);
         DeleteOperation { diff, deleted }
+    }
+
+    pub fn delete_backward(&mut self, text: &mut Rope) -> DeleteOperation {
+        if self.range.start.0 > 0 {
+            self.move_left(text);
+            self.delete_forward(text)
+        } else {
+            DeleteOperation::empty()
+        }
     }
 
     pub fn delete_line(&mut self, text: &mut Rope) -> DeleteOperation {
@@ -281,7 +290,7 @@ impl Cursor {
         // Update cursor position
         let grapheme_start =
             CharIndex(text.line_to_char(cmp::min(line_index, text.len_lines().saturating_sub(2))));
-        let grapheme_end = next_grapheme_boundary(&text.slice(..), grapheme_start);
+        let grapheme_end = next_grapheme_boundary(text.slice(..), grapheme_start);
         if grapheme_start != grapheme_end {
             self.range = grapheme_start..grapheme_end
         } else {
@@ -312,9 +321,9 @@ impl Cursor {
         // Update cursor position
         let grapheme_start = cmp::min(
             self.range.start,
-            prev_grapheme_boundary(&text.slice(..), CharIndex(text.len_chars())),
+            prev_grapheme_boundary(text.slice(..), CharIndex(text.len_chars())),
         );
-        let grapheme_end = next_grapheme_boundary(&text.slice(..), grapheme_start);
+        let grapheme_end = next_grapheme_boundary(text.slice(..), grapheme_start);
         if grapheme_start != grapheme_end {
             self.range = grapheme_start..grapheme_end
         } else {
@@ -324,15 +333,6 @@ impl Cursor {
         self.visual_horizontal_offset = None;
 
         DeleteOperation { diff, deleted }
-    }
-
-    pub fn backspace(&mut self, text: &mut Rope) -> DeleteOperation {
-        if self.range.start.0 > 0 {
-            self.move_left(text);
-            self.delete(text)
-        } else {
-            DeleteOperation::empty()
-        }
     }
 
     pub fn sync(&mut self, current_text: &Rope, new_text: &Rope) {
@@ -345,10 +345,10 @@ impl Cursor {
             new_text.line(new_line).len_chars().saturating_sub(1),
         );
         let grapheme_end = next_grapheme_boundary(
-            &new_text.slice(..),
+            new_text.slice(..),
             CharIndex(new_text.line_to_char(new_line) + new_line_offset),
         );
-        let grapheme_start = prev_grapheme_boundary(&new_text.slice(..), grapheme_end);
+        let grapheme_start = prev_grapheme_boundary(new_text.slice(..), grapheme_end);
 
         self.range = if grapheme_start != grapheme_end {
             grapheme_start..grapheme_end
@@ -386,12 +386,12 @@ impl Cursor {
         );
 
         self.range = if new_visual_x <= *current_visual_x {
-            let grapheme_start = prev_grapheme_boundary(&text.slice(..), new_line_offset);
-            let grapheme_end = next_grapheme_boundary(&text.slice(..), grapheme_start);
+            let grapheme_start = prev_grapheme_boundary(text.slice(..), new_line_offset);
+            let grapheme_end = next_grapheme_boundary(text.slice(..), grapheme_start);
             grapheme_start..grapheme_end
         } else {
-            let grapheme_end = next_grapheme_boundary(&text.slice(..), new_line_offset);
-            let grapheme_start = prev_grapheme_boundary(&text.slice(..), grapheme_end);
+            let grapheme_end = next_grapheme_boundary(text.slice(..), new_line_offset);
+            let grapheme_start = prev_grapheme_boundary(text.slice(..), grapheme_end);
             grapheme_start..grapheme_end
         }
     }
@@ -463,7 +463,7 @@ impl RopeCursorExt for Rope {
 }
 
 /// Finds the previous grapheme boundary before the given char position.
-fn prev_grapheme_boundary(slice: &RopeSlice, char_index: CharIndex) -> CharIndex {
+fn prev_grapheme_boundary(slice: RopeSlice, char_index: CharIndex) -> CharIndex {
     // Bounds check
     debug_assert!(char_index.0 <= slice.len_chars());
 
@@ -501,7 +501,7 @@ fn prev_grapheme_boundary(slice: &RopeSlice, char_index: CharIndex) -> CharIndex
 }
 
 /// Finds the next grapheme boundary after the given char position.
-pub fn next_grapheme_boundary(slice: &RopeSlice, char_index: CharIndex) -> CharIndex {
+pub fn next_grapheme_boundary(slice: RopeSlice, char_index: CharIndex) -> CharIndex {
     debug_assert!(char_index.0 <= slice.len_chars());
 
     // We work with bytes for this, so convert.
@@ -543,18 +543,20 @@ mod tests {
 
     use super::*;
 
+    fn text_with_cursor(text: impl Into<Rope>) -> (Rope, Cursor) {
+        (text.into(), Cursor::new())
+    }
+
     #[test]
-    fn move_right_empty() {
-        let text = Rope::from("\n");
-        let mut cursor = Cursor::new();
+    fn move_right_on_empty_text() {
+        let (text, mut cursor) = text_with_cursor("\n");
         cursor.move_right(&text);
         assert_eq!(Cursor::new(), cursor);
     }
 
     #[test]
     fn move_right_at_the_end() {
-        let text = Rope::from(TEXT);
-        let mut cursor = Cursor::new();
+        let (text, mut cursor) = text_with_cursor(TEXT);
         cursor.move_to_end_of_buffer(&text);
         let cursor_at_end = cursor.clone();
         cursor.move_right(&text);
@@ -581,14 +583,14 @@ mod tests {
     fn prev_grapheme_1() {
         let text = Rope::from(MULTI_CHAR_EMOJI);
         let grapheme_start =
-            prev_grapheme_boundary(&text.slice(..), CharIndex(text.len_chars() - 1)).0;
+            prev_grapheme_boundary(text.slice(..), CharIndex(text.len_chars() - 1)).0;
         assert_eq!(0, grapheme_start);
     }
 
     #[test]
     fn end_grapheme_1() {
         let text = Rope::from(MULTI_CHAR_EMOJI);
-        let grapheme_end = next_grapheme_boundary(&text.slice(..), CharIndex(0)).0;
+        let grapheme_end = next_grapheme_boundary(text.slice(..), CharIndex(0)).0;
         assert_eq!(text.len_chars(), grapheme_end);
     }
 
@@ -602,12 +604,57 @@ mod tests {
         assert_eq!(Cursor::new(), cursor);
     }
 
-    // #[test]
-    // fn width_grapheme() {
-    //     // assert_eq!(UnicodeWidthStr::width(ROCKET_EMOJI), 2);
-    //     // assert_eq!(UnicodeWidthStr::width(MOUNTAIN_EMOJI), 2);
-    //     assert_eq!(UnicodeWidthStr::width(VORTEX_EMOJI), 2);
-    // }
+    // Delete forward
+    #[test]
+    fn delete_forward_at_the_end() {
+        let (mut text, mut cursor) = text_with_cursor(TEXT);
+        let expected = text.clone();
+        cursor.move_to_end_of_buffer(&text);
+        cursor.delete_forward(&mut text);
+        assert_eq!(expected, text);
+    }
+
+    #[test]
+    fn delete_forward_empty_text() {
+        let (mut text, mut cursor) = text_with_cursor("");
+        cursor.delete_forward(&mut text);
+        assert_eq!(cursor, Cursor::new());
+    }
+
+    #[test]
+    fn delete_forward_at_the_begining() {
+        let (mut text, mut cursor) = text_with_cursor("// Hello world!\n");
+        let expected = Rope::from("Hello world!\n");
+        cursor.delete_forward(&mut text);
+        cursor.delete_forward(&mut text);
+        cursor.delete_forward(&mut text);
+        assert_eq!(expected, text);
+    }
+
+    // Delete backward
+    #[test]
+    fn delete_backward_at_the_end() {
+        let (mut text, mut cursor) = text_with_cursor("// Hello world!\n");
+        let expected = Rope::from("// Hello world\n");
+        cursor.move_to_end_of_buffer(&text);
+        cursor.delete_backward(&mut text);
+        assert_eq!(expected, text);
+    }
+
+    #[test]
+    fn delete_backward_empty_text() {
+        let (mut text, mut cursor) = text_with_cursor("");
+        cursor.delete_backward(&mut text);
+        assert_eq!(cursor, Cursor::new());
+    }
+
+    #[test]
+    fn delete_backward_at_the_begining() {
+        let (mut text, mut cursor) = text_with_cursor("// Hello world!\n");
+        let expected = text.clone();
+        cursor.delete_backward(&mut text);
+        assert_eq!(expected, text);
+    }
 
     const TEXT: &str = r#"
 Basic Latin
@@ -616,7 +663,4 @@ CJK
     豈 更 車 Ⅷ
 "#;
     const MULTI_CHAR_EMOJI: &str = r#"👨‍👨‍👧‍👧"#;
-    // const MOUNTAIN_EMOJI: &str = r#"⛰"#;
-    // const VORTEX_EMOJI: &str = r#"🌀"#;
-    // const ROCKET_EMOJI: &str = r#"🚀"#;
 }

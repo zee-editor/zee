@@ -402,12 +402,14 @@ impl Buffer {
         let diff = {
             match message {
                 CursorMessage::DeleteForward => {
-                    let operation = self.cursors[cursor_id.0].delete(&mut self.content);
-                    // self.clipboard = Some(operation.deleted);
-                    operation.diff
+                    self.cursors[cursor_id.0]
+                        .delete_forward(&mut self.content)
+                        .diff
                 }
                 CursorMessage::DeleteBackward => {
-                    self.cursors[cursor_id.0].backspace(&mut self.content).diff
+                    self.cursors[cursor_id.0]
+                        .delete_backward(&mut self.content)
+                        .diff
                 }
                 CursorMessage::DeleteLine => self.delete_line(cursor_id),
                 CursorMessage::Yank => self.paste_from_clipboard(cursor_id),
