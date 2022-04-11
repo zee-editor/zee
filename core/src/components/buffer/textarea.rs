@@ -8,13 +8,16 @@ use zi::{
 };
 
 use crate::{
-    components::cursor::{CharIndex, Cursor},
+    edit::{
+        self,
+        cursor::{CharIndex, Cursor},
+        RopeGraphemes,
+    },
     mode::Mode,
     syntax::{
         highlight::{text_style_at_char, Theme as SyntaxTheme},
         parse::{NodeTrace, ParseTree, SyntaxCursor},
     },
-    utils::{self, RopeGraphemes},
 };
 
 #[derive(Clone)]
@@ -145,7 +148,7 @@ impl TextArea {
                 scope.unwrap_or(""),
                 trace.is_error,
             );
-            let grapheme_width = utils::grapheme_width(&grapheme);
+            let grapheme_width = edit::graphemes::width(&grapheme);
             let horizontal_bounds_inclusive = frame.min_x()..=frame.max_x();
             if !horizontal_bounds_inclusive.contains(&(visual_x + grapheme_width)) {
                 break;

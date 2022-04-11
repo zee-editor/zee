@@ -17,13 +17,13 @@ use super::edit_tree_viewer::{
     EditTreeViewer, Properties as EditTreeViewerProperties, Theme as EditTreeViewerTheme,
 };
 use crate::{
+    edit::EditTree,
     editor::{
         buffer::{BufferCursor, ModifiedStatus, RepositoryRc, WeakHandle, DISABLE_TABS},
         ContextHandle,
     },
     mode::Mode,
     syntax::{highlight::Theme as SyntaxTheme, parse::ParseTree},
-    undo::EditTree,
 };
 
 #[derive(Clone, Debug, PartialEq)]

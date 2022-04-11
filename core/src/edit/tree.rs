@@ -3,7 +3,8 @@ use ropey::Rope;
 use smallvec::SmallVec;
 use std::ops::{Deref, DerefMut};
 
-use crate::{components::cursor::Cursor, syntax::OpaqueDiff, utils};
+use super::{ensure_trailing_newline_with_content, Cursor};
+use crate::syntax::OpaqueDiff;
 
 #[derive(Debug, Clone)]
 pub struct Revision {
@@ -44,7 +45,7 @@ pub struct EditTree {
 
 impl EditTree {
     pub fn new(mut text: Rope) -> Self {
-        utils::ensure_trailing_newline_with_content(&mut text);
+        ensure_trailing_newline_with_content(&mut text);
         Self {
             revisions: vec![Revision::root(text.clone())],
             head_index: 0,

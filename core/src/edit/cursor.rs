@@ -5,10 +5,8 @@ use std::{
 };
 use zi::unicode_segmentation::{GraphemeCursor, GraphemeIncomplete};
 
-use crate::{
-    syntax::OpaqueDiff,
-    utils::{self, ensure_trailing_newline_with_content, RopeGraphemes},
-};
+use super::{ensure_trailing_newline_with_content, RopeGraphemes};
+use crate::syntax::OpaqueDiff;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Cursor {
@@ -44,7 +42,7 @@ impl Cursor {
 
     pub fn column_offset(&self, text: &Rope) -> usize {
         let char_line_start = text.line_to_char(text.cursor_to_line(self));
-        utils::grapheme_width(&text.slice(char_line_start..self.range.start.0))
+        super::graphemes::width(&text.slice(char_line_start..self.range.start.0))
     }
 
     pub fn reconcile(&mut self, new_text: &Rope, diff: &OpaqueDiff) {
@@ -367,14 +365,14 @@ impl Cursor {
         let current_line_start = text.line_to_char(current_line_index);
         let cursor_range_start = self.range.start;
         let current_visual_x = self.visual_horizontal_offset.get_or_insert_with(|| {
-            utils::grapheme_width(&text.slice(current_line_start..cursor_range_start.0))
+            super::graphemes::width(&text.slice(current_line_start..cursor_range_start.0))
         });
 
         let new_line = text.line(new_line_index);
         let mut graphemes = RopeGraphemes::new(&new_line);
         let mut new_visual_x = 0;
         for grapheme in &mut graphemes {
-            let width = utils::grapheme_width(&grapheme);
+            let width = super::graphemes::width(&grapheme);
             if new_visual_x + width > *current_visual_x {
                 break;
             }
@@ -396,10 +394,6 @@ impl Cursor {
         }
     }
 }
-
-// fn opaque_diff(text: &Rope) -> OpaqueDiff{
-
-// }
 
 pub struct DeleteOperation {
     pub diff: OpaqueDiff,

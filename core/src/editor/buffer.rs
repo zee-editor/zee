@@ -11,12 +11,10 @@ use zi::ComponentLink;
 
 use super::{ContextHandle, Editor};
 use crate::{
-    components::cursor::Cursor,
+    edit::{strip_trailing_whitespace, Cursor, EditTree, TAB_WIDTH},
     error::Result,
     mode::{self, Mode, PLAIN_TEXT_MODE},
     syntax::parse::{OpaqueDiff, ParseTree, ParserPool, ParserStatus},
-    undo::EditTree,
-    utils::{strip_trailing_whitespace, TAB_WIDTH},
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

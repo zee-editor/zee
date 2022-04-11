@@ -2,8 +2,8 @@ use std::cmp;
 use zi::{Canvas, Component, ComponentLink, Layout, Rect, ShouldRender, Style};
 
 use crate::{
+    edit::tree::{self, EditTree},
     editor::buffer::WeakHandle,
-    undo::{self, EditTree},
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -56,7 +56,7 @@ impl Component for EditTreeViewer {
         let mut canvas = Canvas::new(frame.size);
         canvas.clear(theme.current_revision);
 
-        let formatted_tree = undo::format_tree(&tree);
+        let formatted_tree = tree::format_tree(&tree);
 
         let (middle_x, middle_y) = {
             let transform = formatted_tree[tree.head_index].transform;

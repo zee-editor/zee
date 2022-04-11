@@ -2,13 +2,13 @@
 
 mod clipboard;
 mod components;
+mod edit;
 mod editor;
 mod error;
 mod mode;
 mod settings;
 mod syntax;
 mod task;
-mod undo;
 mod utils;
 
 use flexi_logger::{FileSpec, Logger};

@@ -22,10 +22,10 @@ use super::{
     Theme, PROMPT_MAX_HEIGHT,
 };
 use crate::{
+    edit::ensure_trailing_newline_with_content,
     editor::ContextHandle,
     error::{Context as _Context, Result},
     task::TaskId,
-    utils,
 };
 
 #[derive(Debug)]
@@ -157,7 +157,7 @@ impl Component for FilePicker {
                     .map(|parent| parent.to_string_lossy())
                     .unwrap_or_else(|| "".into())
                     .into();
-                utils::ensure_trailing_newline_with_content(&mut self.input);
+                ensure_trailing_newline_with_content(&mut self.input);
                 self.cursor.move_to_end_of_line(&self.input);
                 self.cursor.insert_char(&mut self.input, '/');
                 self.cursor.move_right(&self.input);
@@ -166,7 +166,7 @@ impl Component for FilePicker {
             Message::AutocompletePath => {
                 if let Some(path) = self.listing.selected(self.selected_index) {
                     self.input = path.to_string_lossy().into();
-                    utils::ensure_trailing_newline_with_content(&mut self.input);
+                    ensure_trailing_newline_with_content(&mut self.input);
                     self.cursor.move_to_end_of_line(&self.input);
                     if path.is_dir() {
                         self.cursor.insert_char(&mut self.input, '/');

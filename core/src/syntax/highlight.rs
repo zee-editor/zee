@@ -1,6 +1,6 @@
 use zi::terminal::{Background, Style};
 
-use crate::components::cursor::{CharIndex, Cursor};
+use crate::edit::cursor::{CharIndex, Cursor};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Theme {
