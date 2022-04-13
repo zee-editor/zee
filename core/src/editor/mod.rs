@@ -214,7 +214,7 @@ impl Component for Editor {
         for (index, file_path) in properties.args_files.iter().cloned().enumerate() {
             link.send(Message::OpenFile(file_path));
             if index < properties.args_files.len().saturating_sub(1) {
-                link.send(Message::SplitWindow(FlexDirection::RowReverse));
+                link.send(Message::SplitWindow(FlexDirection::Row));
             }
         }
         let context = ContextHandle(
