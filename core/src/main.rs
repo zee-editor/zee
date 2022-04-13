@@ -10,6 +10,7 @@ mod settings;
 mod syntax;
 mod task;
 mod utils;
+mod versioned;
 
 use flexi_logger::{FileSpec, Logger};
 use std::{env, path::PathBuf};

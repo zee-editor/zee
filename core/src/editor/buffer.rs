@@ -15,6 +15,7 @@ use crate::{
     error::Result,
     mode::{self, Mode, PLAIN_TEXT_MODE},
     syntax::parse::{OpaqueDiff, ParseTree, ParserPool, ParserStatus},
+    versioned::{Versioned, WeakHandle},
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -140,74 +141,6 @@ impl Buffers {
     }
 }
 
-pub struct MainHandle<T> {
-    value: Rc<T>,
-    generation: usize,
-}
-
-impl<T> MainHandle<T> {
-    pub fn new(value: T) -> Self {
-        Self {
-            value: Rc::new(value),
-            generation: 0,
-        }
-    }
-
-    pub fn weak(&self) -> WeakHandle<T> {
-        WeakHandle {
-            value: Rc::downgrade(&self.value),
-            generation: self.generation,
-        }
-    }
-}
-
-impl<T> std::ops::Deref for MainHandle<T> {
-    type Target = T;
-
-    fn deref(&self) -> &T {
-        &self.value
-    }
-}
-
-impl<T: Clone> std::ops::DerefMut for MainHandle<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        assert_eq!(Rc::strong_count(&self.value), 1);
-        self.generation += 1;
-        Rc::make_mut(&mut self.value)
-    }
-}
-
-#[derive(Clone)]
-pub struct WeakHandle<T> {
-    value: std::rc::Weak<T>,
-    generation: usize,
-}
-
-impl<T> WeakHandle<T> {
-    pub fn reader(&self) -> ReadHandle<T> {
-        ReadHandle(
-            self.value
-                .upgrade()
-                .expect("Tried deref-ing an invalid weak handle"),
-        )
-    }
-
-    pub fn generation(&self) -> usize {
-        self.generation
-    }
-}
-
-#[derive(Clone)]
-pub struct ReadHandle<T>(Rc<T>);
-
-impl<T> std::ops::Deref for ReadHandle<T> {
-    type Target = T;
-
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ModifiedStatus {
     Changed,
@@ -220,7 +153,7 @@ pub struct Buffer {
     id: BufferId,
     mode: &'static Mode,
     repo: Option<RepositoryRc>,
-    content: MainHandle<EditTree>,
+    content: Versioned<EditTree>,
     file_path: Option<PathBuf>,
     modified_status: ModifiedStatus,
     cursors: Vec<Cursor>,
@@ -248,14 +181,8 @@ impl Buffer {
                 || text.clone(),
                 move |status| {
                     link.send(
-                        BuffersMessage::new(
-                            id,
-                            BufferMessage::ParseSyntax {
-                                generation: 0,
-                                status,
-                            },
-                        )
-                        .into(),
+                        BuffersMessage::new(id, BufferMessage::ParseSyntax { version: 0, status })
+                            .into(),
                     )
                 },
             );
@@ -266,7 +193,7 @@ impl Buffer {
             id,
             mode,
             repo,
-            content: MainHandle::new(EditTree::new(text)),
+            content: Versioned::new(EditTree::new(text)),
             file_path,
             modified_status: ModifiedStatus::Unchanged,
             cursors: vec![Cursor::new()],
@@ -355,11 +282,11 @@ impl Buffer {
                 // self.properties.logger.info(error.to_string())
                 log::error!("{}", error);
             }
-            BufferMessage::ParseSyntax { generation, status } => {
+            BufferMessage::ParseSyntax { version, status } => {
                 log::info!("done!");
                 let parsed = status.unwrap();
                 if let Some(parser) = self.parser.as_mut() {
-                    parser.handle_parse_syntax_done(generation, parsed);
+                    parser.handle_parse_syntax_done(version, parsed);
                 }
             }
             BufferMessage::CursorMessage { cursor_id, message } => {
@@ -462,8 +389,9 @@ impl Buffer {
     }
 
     fn delete_line(&mut self, cursor_id: CursorId) -> OpaqueDiff {
-        let operation = self.cursors[cursor_id.0].delete_line(&mut self.content);
-        operation.diff
+        self.cursors[cursor_id.0]
+            .delete_line(&mut self.content)
+            .diff
     }
 
     fn copy_selection_to_clipboard(&mut self, cursor_id: CursorId) -> OpaqueDiff {
@@ -526,15 +454,12 @@ impl Buffer {
             let staged_text = self.content.staged().clone();
             let buffer_id = self.id;
             let link = self.context.link.clone();
-            let generation = self.content.generation;
+            let version = self.content.version();
             parser.edit(diff);
             parser.spawn(task_pool, staged_text, fresh, move |status| {
                 link.send(
-                    BuffersMessage::new(
-                        buffer_id,
-                        BufferMessage::ParseSyntax { generation, status },
-                    )
-                    .into(),
+                    BuffersMessage::new(buffer_id, BufferMessage::ParseSyntax { version, status })
+                        .into(),
                 )
             });
         }
@@ -753,7 +678,7 @@ pub enum BufferMessage {
     SaveBufferStart,
     SaveBufferEnd(io::Result<Rope>),
     ParseSyntax {
-        generation: usize,
+        version: usize,
         status: Result<ParserStatus>,
     },
     PreviousChildRevision,

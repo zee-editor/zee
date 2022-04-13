@@ -42,7 +42,7 @@ pub struct ParsedSyntax {
 
 #[derive(Clone)]
 pub struct ParseTree {
-    pub generation: usize,
+    pub version: usize,
     pub tree: Tree,
 }
 
@@ -147,7 +147,7 @@ impl ParserPool {
         self.current_parse_task = Some((task_id, cancel_flag));
     }
 
-    pub fn handle_parse_syntax_done(&mut self, generation: usize, status: ParserStatus) {
+    pub fn handle_parse_syntax_done(&mut self, version: usize, status: ParserStatus) {
         let ParserStatus {
             task_id,
             parser,
@@ -172,7 +172,7 @@ impl ParserPool {
         // If the parser task hasn't been cancelled, store the new syntax tree
         if let Some(ParsedSyntax { tree, text }) = parsed {
             assert!(tree.root_node().end_byte() <= text.len_bytes());
-            self.tree = Some(ParseTree { generation, tree });
+            self.tree = Some(ParseTree { version, tree });
         }
     }
 

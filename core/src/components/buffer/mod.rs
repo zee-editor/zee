@@ -19,11 +19,12 @@ use super::edit_tree_viewer::{
 use crate::{
     edit::EditTree,
     editor::{
-        buffer::{BufferCursor, ModifiedStatus, RepositoryRc, WeakHandle, DISABLE_TABS},
+        buffer::{BufferCursor, ModifiedStatus, RepositoryRc, DISABLE_TABS},
         ContextHandle,
     },
     mode::Mode,
     syntax::{highlight::Theme as SyntaxTheme, parse::ParseTree},
+    versioned::WeakHandle,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -51,9 +52,9 @@ pub struct Properties {
 impl PartialEq for Properties {
     fn eq(&self, other: &Self) -> bool {
         self.cursor == other.cursor
-            && self.content.generation() == other.content.generation()
-            && self.parse_tree.as_ref().map(|tree| tree.generation)
-                == other.parse_tree.as_ref().map(|tree| tree.generation)
+            && self.content.version() == other.content.version()
+            && self.parse_tree.as_ref().map(|tree| tree.version)
+                == other.parse_tree.as_ref().map(|tree| tree.version)
             && self.modified_status == other.modified_status
             && self.focused == other.focused
             && self.frame_id == other.frame_id
@@ -80,7 +81,7 @@ pub struct Buffer {
 
 impl Buffer {
     fn ensure_cursor_in_view(&mut self) -> ShouldRender {
-        let content = self.properties.content.reader();
+        let content = self.properties.content.upgrade();
         let current_line = content.char_to_line(self.properties.cursor.inner().range().start.0);
         let num_lines = self.frame.size.height.saturating_sub(1);
         if current_line < self.line_offset {
@@ -95,7 +96,7 @@ impl Buffer {
     }
 
     fn center_visual_cursor(&mut self) {
-        let content = self.properties.content.reader();
+        let content = self.properties.content.upgrade();
         let line_index = content.char_to_line(self.properties.cursor.inner().range().start.0);
         if line_index >= self.frame.size.height / 2
             && self.line_offset != line_index - self.frame.size.height / 2
@@ -231,7 +232,7 @@ impl Component for Buffer {
     }
 
     fn view(&self) -> Layout {
-        let content = self.properties.content.reader();
+        let content = self.properties.content.upgrade();
 
         // The textarea components that displays text
         let textarea = TextArea::with(TextAreaProperties {

@@ -3,7 +3,7 @@ use zi::{Canvas, Component, ComponentLink, Layout, Rect, ShouldRender, Style};
 
 use crate::{
     edit::tree::{self, EditTree},
-    editor::buffer::WeakHandle,
+    versioned::WeakHandle,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -52,7 +52,7 @@ impl Component for EditTreeViewer {
                     ref theme,
                 },
         } = *self;
-        let tree = tree.reader();
+        let tree = tree.upgrade();
         let mut canvas = Canvas::new(frame.size);
         canvas.clear(theme.current_revision);
 
