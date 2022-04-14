@@ -22,4 +22,4 @@ serde_regex = "1.1.0"
 smallvec = { version = "1.8.0", features = ["serde"] }
 tree-sitter = "0.20.6"
 
-zee-grammar = { version = "0.2.3", path = "../grammar" }
+zee-grammar = { version = "0.2.3", path = "../zee-grammar" }

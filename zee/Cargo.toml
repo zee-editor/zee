@@ -39,8 +39,8 @@ zi = "0.3.1"
 zi-term = "0.3.1"
 
 # Local crates
-zee-grammar = { version = "0.2.3", path = "../grammar" }
-zee-highlight = { version = "0.2.1", path = "../highlight" }
+zee-grammar = { version = "0.2.3", path = "../zee-grammar" }
+zee-highlight = { version = "0.2.1", path = "../zee-highlight" }
 
 # Optional dependencies
 crossclip = { optional = true, version = "0.7.0" }

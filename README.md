@@ -10,32 +10,48 @@
   </a>
 </p>
 
-Zee is a modern editor for the terminal, written in Rust. It is highly experimental code.
+Zee is a modern editor for the terminal, _in the spirit of Emacs_. It is written in Rust and it is somewhat experimental.
 
 In the old tradition of text editor demos, here's what it currently looks like editing its own source code
 
 ![Peek 2020-03-09 00-16](https://user-images.githubusercontent.com/797170/76173969-0bdc4980-619c-11ea-9f24-7899e2722910.gif)
 
-## getting started
-
-The recommended way to install zee using cargo install
-```
-$ cargo install zee
-```
-
 ## features
 
  - The 100 FPS editor. Cursor movement and edits render under 10ms. Everything else happens asynchronously (syntax parsing and highlighting, IO to/from disk, file pickers).
  - Buffers are backed by a fast B-tree implementation of a [rope](https://en.wikipedia.org/wiki/Rope_(data_structure)) (via cessen's [ropey](https://github.com/cessen/ropey)).
+ - Edit tree history, aka. undo/redo tree
  - Uses [Tree-sitter](https://tree-sitter.github.io/tree-sitter/) for generating a parse tree from your code. This AST is used for syntax highlighting and on the fly validation. As it is an incremental parsing library, it scales to files with 1 million lines of code.
  - multi-buffer, multi-pane -- shared state *beats* tmux with multiple editors
  - fast recursive file search with fuzzy matching and aware of *ignore* files (using BurntSushi's ripgrep crates [walkdir](https://github.com/BurntSushi/walkdir), [ignore](https://github.com/BurntSushi/ripgrep))
  - local file picker with directory navigation
  - a pragmatic editor, not a research endeavour into CRDTs
 
+## getting started
+
+The recommended way to install zee is using [cargo](https://crates.io/)
+```
+$ cargo install zee
+```
+
+#### options
+
+To enable integration with your system's clipboard, install zee with the `system-clipboard` feature
+```
+& cargo install --features system-clipboard zee
+```
+
+To build with clipboard support, you'll additionally need x11 bindings on Linux. On a Debian-y distribution, install them with like this
+
+```
+sudo apt install xorg-dev libxcb-shape0-dev libxcb-xfixes0-dev
+```
+
 ## building from source
 
-The editor depends on a bunch of tree sitter parsers, one for each supported language. These are included as git submodules in `grammar/languages/tree-sitter-*`.
+Zee is written in Rust and it requires the latest stable compiler to build.
+
+The editor also depends on tree sitter parsers, one for each supported language. These are included as git submodules in `grammar/languages/tree-sitter-*`.
 After cloning the repository, you have to run
 ```
 git submodule update --init --recursive
@@ -46,7 +62,9 @@ then you should be able to build normally with cargo.
 
 To start the editor run `zee`. As expected, you can pass in one or multiple files to be opened, e.g. `zee file1 file2`.
 
-Zee uses Emacs-y keybindings. Below, `C-` means `Ctrl` + the specified key, e.g. `C-k` is `Ctrl + k`. Similarly `A-` means `Alt` + the specified key. Empty spaces denote a sequence of key presses, e.g. `C-x C-c` means first pressing `C-x` followed by `C-c`.
+Zee uses Emacs-y keybindings. Feeling at home with the default Emacs bindings is a goal of the project.
+
+Below, `C-` means `Ctrl` + the specified key, e.g. `C-k` is `Ctrl + k`. Similarly `A-` means `Alt` + the specified key. Empty spaces denote a sequence of key presses, e.g. `C-x C-c` means first pressing `C-x` followed by `C-c`.
 
 The following keybindings are available:
 

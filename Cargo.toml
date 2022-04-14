@@ -1,8 +1,8 @@
 [workspace]
 members = [
-    "core",
-    "grammar",
-    "highlight",
+    "zee",
+    "zee-grammar",
+    "zee-highlight",
 ]
 
 [profile.dev]
