@@ -1,6 +1,6 @@
 [package]
 name = "zee"
-version = "0.2.1"
+version = "0.3.0"
 authors = ["Marius Cobzarenco <marius@reinfer.io>"]
 description = "A modern editor for the terminal"
 readme = "README.md"
@@ -8,7 +8,7 @@ homepage = "https://github.com/zee-editor/zee"
 license = "MIT OR Apache-2.0"
 edition = "2021"
 rust-version = "1.59"
-include = ["/src", "build.rs", "modes.ron"]
+include = ["/src", "/highlights", "build.rs", "modes.ron"]
 build = "build.rs"
 
 [dependencies]
@@ -43,8 +43,8 @@ zi = "0.3.1"
 zi-term = "0.3.1"
 
 # Local crates
-zee-grammar = { version = "0.2.3", path = "../zee-grammar" }
-zee-highlight = { version = "0.2.1", path = "../zee-highlight" }
+zee-grammar = { version = "0.3.0", path = "../zee-grammar" }
+zee-highlight = { version = "0.3.0", path = "../zee-highlight" }
 
 # Optional dependencies
 crossclip = { optional = true, version = "0.7.0" }
@@ -52,7 +52,7 @@ crossclip = { optional = true, version = "0.7.0" }
 [build-dependencies]
 anyhow = "1.0.56"
 ron = "0.7.0"
-zee-grammar = { version = "0.2.3", path = "../zee-grammar" }
+zee-grammar = { version = "0.3.0", path = "../zee-grammar" }
 
 [features]
 default = []

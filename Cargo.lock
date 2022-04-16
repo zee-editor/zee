@@ -1670,7 +1670,7 @@ dependencies = [
 
 [[package]]
 name = "zee"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "cfg-if",
@@ -1708,7 +1708,7 @@ dependencies = [
 
 [[package]]
 name = "zee-grammar"
-version = "0.2.3"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "cc",
@@ -1725,7 +1725,7 @@ dependencies = [
 
 [[package]]
 name = "zee-highlight"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "fnv",
  "log",

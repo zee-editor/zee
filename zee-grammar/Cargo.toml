@@ -1,6 +1,6 @@
 [package]
 name = "zee-grammar"
-version = "0.2.3"
+version = "0.3.0"
 authors = ["Marius Cobzarenco <marius@reinfer.io>"]
 description = "Wrappers for tree sitter grammars used by zee"
 homepage = "https://github.com/mcobzarenco/zee/tree/master/grammar"
