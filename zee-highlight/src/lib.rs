@@ -2,13 +2,11 @@ mod error;
 mod selector;
 
 use fnv::FnvHashMap;
-use lazy_static::lazy_static;
 use serde_derive::{self, Deserialize, Serialize};
 use std::{cmp, collections::HashMap, convert::TryFrom};
 
 use error::Result;
 use tree_sitter::Language;
-use zee_grammar as grammar;
 
 use crate::selector::{map_node_kind_names, Selector};
 
@@ -213,11 +211,6 @@ pub enum ScopePattern {
 pub struct Regex(#[serde(with = "serde_regex")] regex::Regex);
 
 impl Regex {
-    #[cfg(test)]
-    fn new(regex: &str) -> Result<Self> {
-        Ok(Self(regex::Regex::new(regex)?))
-    }
-
     fn is_match(&self, text: &str) -> bool {
         self.0.is_match(text)
     }
@@ -258,48 +251,12 @@ impl ScopePattern {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Scope(pub String);
 
-lazy_static! {
-    pub static ref BASH_RULES: HighlightRules =
-        parse_rules_unwrap(*grammar::BASH, BASH_RULES_SOURCE);
-    pub static ref C_RULES: HighlightRules = parse_rules_unwrap(*grammar::C, C_RULES_SOURCE);
-    pub static ref CPP_RULES: HighlightRules = parse_rules_unwrap(*grammar::CPP, CPP_RULES_SOURCE);
-    pub static ref CSS_RULES: HighlightRules = parse_rules_unwrap(*grammar::CSS, CSS_RULES_SOURCE);
-    pub static ref HTML_RULES: HighlightRules =
-        parse_rules_unwrap(*grammar::HTML, HTML_RULES_SOURCE);
-    pub static ref JAVASCRIPT_RULES: HighlightRules =
-        parse_rules_unwrap(*grammar::JAVASCRIPT, JAVASCRIPT_RULES_SOURCE);
-    pub static ref TYPESCRIPT_RULES: HighlightRules =
-        parse_rules_unwrap(*grammar::TYPESCRIPT, TYPESCRIPT_RULES_SOURCE);
-    pub static ref TSX_RULES: HighlightRules = parse_rules_unwrap(*grammar::TSX, TSX_RULES_SOURCE);
-    pub static ref JSON_RULES: HighlightRules =
-        parse_rules_unwrap(*grammar::JSON, JSON_RULES_SOURCE);
-    pub static ref MARKDOWN_RULES: HighlightRules =
-        parse_rules_unwrap(*grammar::MARKDOWN, MARKDOWN_RULES_SOURCE);
-    pub static ref PYTHON_RULES: HighlightRules =
-        parse_rules_unwrap(*grammar::PYTHON, PYTHON_RULES_SOURCE);
-    pub static ref RUST_RULES: HighlightRules =
-        parse_rules_unwrap(*grammar::RUST, RUST_RULES_SOURCE);
-}
-
-fn parse_rules_unwrap(language: Language, source: &str) -> HighlightRules {
+pub fn parse_rules_unwrap(language: Language, source: &str) -> HighlightRules {
     let raw_rules =
         serde_json::from_str::<RawHighlightRules>(source).expect("valid json file for rules");
     let name = format!("valid rules for {}", raw_rules.name);
     raw_rules.compile(language).expect(&name)
 }
-
-const RUST_RULES_SOURCE: &str = include_str!("../languages/rust.json");
-const JSON_RULES_SOURCE: &str = include_str!("../languages/json.json");
-const PYTHON_RULES_SOURCE: &str = include_str!("../languages/python.json");
-const HTML_RULES_SOURCE: &str = include_str!("../languages/html.json");
-const MARKDOWN_RULES_SOURCE: &str = include_str!("../languages/markdown.json");
-const BASH_RULES_SOURCE: &str = include_str!("../languages/bash.json");
-const C_RULES_SOURCE: &str = include_str!("../languages/c.json");
-const CPP_RULES_SOURCE: &str = include_str!("../languages/cpp.json");
-const CSS_RULES_SOURCE: &str = include_str!("../languages/css.json");
-const JAVASCRIPT_RULES_SOURCE: &str = include_str!("../languages/javascript.json");
-const TYPESCRIPT_RULES_SOURCE: &str = include_str!("../languages/typescript.json");
-const TSX_RULES_SOURCE: &str = include_str!("../languages/tsx.json");
 
 #[cfg(test)]
 mod tests {
@@ -339,35 +296,5 @@ mod tests {
         let actual: RawHighlightRules = serde_json::from_str(style_str).expect("valid json");
         assert_eq!(expected.name, actual.name);
         assert_eq!(expected.scopes, actual.scopes);
-    }
-
-    #[test]
-    fn deserialize_rust_highlight_style() {
-        let actual: RawHighlightRules =
-            serde_json::from_str(RUST_RULES_SOURCE).expect("valid json");
-        assert_eq!(actual.name, "Rust");
-        assert_eq!(
-            actual.scopes.get("identifier").unwrap(),
-            &ScopePattern::Vec(vec![ScopePattern::Regex {
-                regex: Regex::new("^[A-Z\\d_]{2,}$").expect("valid regex"),
-                scopes: Scope("constant.other".into()),
-            }]),
-        );
-    }
-
-    #[test]
-    fn initializing_statics_doesnt_panic() {
-        assert_eq!(RUST_RULES.name, "Rust");
-        assert_eq!(JSON_RULES.name, "JSON");
-        assert_eq!(PYTHON_RULES.name, "Python");
-        assert_eq!(HTML_RULES.name, "HTML");
-        assert_eq!(MARKDOWN_RULES.name, "Markdown");
-        assert_eq!(BASH_RULES.name, "Shell Script");
-        assert_eq!(C_RULES.name, "C");
-        assert_eq!(CPP_RULES.name, "C++");
-        assert_eq!(CSS_RULES.name, "CSS");
-        assert_eq!(JAVASCRIPT_RULES.name, "JavaScript");
-        assert_eq!(TYPESCRIPT_RULES.name, "TypeScript");
-        assert_eq!(TSX_RULES.name, "TypeScript TSX");
     }
 }

@@ -10,9 +10,11 @@
   </a>
 </p>
 
-Zee is a modern editor for the terminal, _in the spirit of Emacs_. It is written in Rust and it is somewhat experimental.
+Zee is a modern editor for the terminal, _in the spirit of Emacs_. It is written in Rust and it is
+somewhat experimental.
 
-In the old tradition of text editor demos, here's what it currently looks like editing its own source code
+In the old tradition of text editor demos, here's what it currently looks like editing its own
+source code
 
 ![Peek 2020-03-09 00-16](https://user-images.githubusercontent.com/797170/76173969-0bdc4980-619c-11ea-9f24-7899e2722910.gif)
 
@@ -31,44 +33,74 @@ In the old tradition of text editor demos, here's what it currently looks like e
 
 The recommended way to install zee is using [cargo](https://crates.io/)
 ```
-$ cargo install zee
+cargo install zee
 ```
 
-#### options
+To start the editor run `zee`. As expected, you can pass in one or multiple files to be opened, e.g. `zee file1 file2`.
+
+### install options
 
 To enable integration with your system's clipboard, install zee with the `system-clipboard` feature
 ```
-& cargo install --features system-clipboard zee
+cargo install --features system-clipboard zee
 ```
 
-To build with clipboard support, you'll additionally need x11 bindings on Linux. On a Debian-y distribution, install them with like this
+To build with clipboard support, you'll additionally need x11 bindings on Linux. On a _Debian-y_ distribution, you can install them like this
 
 ```
 sudo apt install xorg-dev libxcb-shape0-dev libxcb-xfixes0-dev
 ```
 
+### syntax highlighting
+
+Zee uses [Tree-sitter](https://tree-sitter.github.io/tree-sitter/) parsers for syntax highlighting
+and on the fly validation of source code. To download and build the parsers, simply run
+
+```
+zee --build
+```
+
+The parsers are downloaded, compiled and placed in a `runtime/` directory inside the config
+directory. The exact location is system specific, e.g. `~/.config/zee/runtime` on Linux or macOS
+and `%AppData%/zee/runtime` on Windows.
+
 ## building from source
 
-Zee is written in Rust and it requires the latest stable compiler to build.
+Zee is written in Rust and it requires the latest stable compiler to build. You can use cargo to
+build it as you'd expect
 
-The editor also depends on tree sitter parsers, one for each supported language. These are included as git submodules in `grammar/languages/tree-sitter-*`.
-After cloning the repository, you have to run
 ```
-git submodule update --init --recursive
+git clone https://github.com/zee-editor/zee.git && cd zee
+cargo run -- zee/src/main.rs
 ```
-then you should be able to build normally with cargo.
+
+The editor also depends on tree sitter parsers, one for each supported language.
+For now, those are configured statically using the `zee/modes.ron` file. Each
+tree sitter parser is compiled to a shared object which is linked dynamically.
+
+Running `cargo build` downloads and builds this parsers just to ensure
+everything works correctly. You can skip this step by setting
+`ZEE_DISABLE_GRAMMAR_BUILD`, e.g.
+
+```
+ZEE_DISABLE_GRAMMAR_BUILD=t cargo run -- zee/src/main.rs
+```
 
 ## usage
 
-To start the editor run `zee`. As expected, you can pass in one or multiple files to be opened, e.g. `zee file1 file2`.
+To start the editor run `zee`. As expected, you can pass in one or multiple files to be opened,
+e.g. `zee file1 file2`.
 
-Zee uses Emacs-y keybindings. Feeling at home with the default Emacs bindings is a goal of the project.
+Zee uses Emacs-y keybindings. Feeling at home with the default Emacs bindings is a goal of the
+project.
 
-Below, `C-` means `Ctrl` + the specified key, e.g. `C-k` is `Ctrl + k`. Similarly `A-` means `Alt` + the specified key. Empty spaces denote a sequence of key presses, e.g. `C-x C-c` means first pressing `C-x` followed by `C-c`.
+Below, `C-` means `Ctrl` + the specified key, e.g. `C-k` is `Ctrl + k`. Similarly `A-` means
+`Alt` + the specified key. Empty spaces denote a sequence of key presses, e.g. `C-x C-c` means
+first pressing `C-x` followed by `C-c`.
 
 The following keybindings are available:
 
-#### movement
+### movement
 
  - `C-p`, `Up` move up
  - `C-n`, `Down` move down
@@ -82,7 +114,7 @@ The following keybindings are available:
  - `A->` move to the end of the buffer
  - `C-l` centre the cursor visually
 
-#### editing
+### editing
  - `C-d` delete forwards
  - `Backspace` delete backwards
  - `C-k` delete the current line
@@ -97,27 +129,27 @@ The following keybindings are available:
  - `C-x u` open the edit tree viewer
  - `C-x C-s` save the current buffer
 
-#### file navigation
+### file navigation
  - `C-x C-f` choose a file to open using a directory-level picker
  - `C-x C-v` search recursively for a file to open from the selected directory
  - `C-l` while opening a file, go to the parent directory
  - `Tab` while opening a file, fills in the currently selected path
 
-#### edit tree viewer
+### edit tree viewer
  - `C-p`, `Up` move up the tree to an older revision, undoing the command
  - `C-n`, `Down` move down the tree to a newer revision, redoing the command
  - `C-b`, `Left` select the left child of current revision
  - `C-f`, `Right` select the right child of current revision
 
-#### global
+### global
  - `C-g` cancel the current operation
  - `C-x k` kill a buffer
  - `C-x b` switch buffer
- - `C-x 0`, `C-x C-0` close the focused window
- - `C-x 1`, `C-x C-1` make the focused window fullscreen
- - `C-x 2`, `C-x C-2` split the focused window below
- - `C-x 3`, `C-x C-3` split the focused window to the right
- - `C-x o`, `C-x C-o` switch focus to the next buffer
+ - `C-x 0` close the focused window
+ - `C-x 1` make the focused window fullscreen
+ - `C-x 2` split the focused window below
+ - `C-x 3` split the focused window to the right
+ - `C-x o` switch focus to the next buffer
  - `C-x C-t` cycle through the available themes
  - `C-x C-c` quit
 
@@ -132,7 +164,7 @@ This project is licensed under either of
 
 at your option.
 
-#### contribution
+### contribution
 
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion by you, as defined in the Apache-2.0 license, shall be dual

@@ -7,13 +7,16 @@ homepage = "https://github.com/mcobzarenco/zee/tree/master/grammar"
 license = "Apache-2.0"
 edition = "2021"
 rust-version = "1.59"
-include = ["languages/tree-sitter-*/**", "/src", "build.rs"]
-build = "build.rs"
 
 [dependencies]
-once_cell = "1.10.0"
-tree-sitter = "0.20.6"
-
-[build-dependencies]
+anyhow = "1.0.56"
 cc = { version = "1.0.73", features = ["parallel"] }
+colored = "2.0.0"
+dirs = "4.0.0"
+libloading = "0.7.3"
+log = "0.4.16"
+once_cell = "1.10.0"
+rayon = "1.5.2"
+serde = "1.0.136"
+serde_derive = "1.0.136"
 tree-sitter = "0.20.6"

@@ -4,15 +4,18 @@ version = "0.2.1"
 authors = ["Marius Cobzarenco <marius@reinfer.io>"]
 description = "A modern editor for the terminal"
 readme = "README.md"
-homepage = "https://github.com/mcobzarenco/zee"
+homepage = "https://github.com/zee-editor/zee"
 license = "MIT OR Apache-2.0"
 edition = "2021"
 rust-version = "1.59"
+include = ["/src", "build.rs", "modes.ron"]
+build = "build.rs"
 
 [dependencies]
 anyhow = "1.0.56"
 cfg-if = "1.0.0"
 clap = { version = "3.1.8", features = ["derive"] }
+colored = "2.0.0"
 dirs = "4.0.0"
 euclid = "0.22.6"
 flexi_logger = "0.22.3"
@@ -26,6 +29,7 @@ palette = "0.5.0"
 parking_lot = "0.12.0"
 pkg-version = "1.0.0"
 rayon = "1.5.1"
+ron = "0.7.0"
 ropey = "1.4.1"
 serde = "1.0.136"
 serde_derive = "1.0.136"
@@ -44,6 +48,11 @@ zee-highlight = { version = "0.2.1", path = "../zee-highlight" }
 
 # Optional dependencies
 crossclip = { optional = true, version = "0.7.0" }
+
+[build-dependencies]
+anyhow = "1.0.56"
+ron = "0.7.0"
+zee-grammar = { version = "0.2.3", path = "../zee-grammar" }
 
 [features]
 default = []

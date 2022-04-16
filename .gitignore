@@ -1,4 +1,8 @@
+# Rust
 /target
 **/*.rs.bk
-local-test-data
+
+# Zee specific
+/runtime
 zee.log
+local-test-data

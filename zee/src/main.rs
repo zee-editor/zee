@@ -5,6 +5,7 @@ mod components;
 mod edit;
 mod editor;
 mod error;
+mod logging;
 mod mode;
 mod settings;
 mod syntax;
@@ -12,7 +13,7 @@ mod task;
 mod utils;
 mod versioned;
 
-use flexi_logger::{FileSpec, Logger};
+use clap::Parser;
 use std::{env, path::PathBuf};
 use zi::ComponentExt;
 
@@ -21,8 +22,6 @@ use crate::{
     error::Result,
     task::TaskPool,
 };
-
-use clap::Parser;
 
 #[derive(Debug, Parser)]
 struct Args {
@@ -41,27 +40,34 @@ struct Args {
     #[clap(long = "log")]
     /// Enable debug logging to `zee.log` file
     enable_logging: bool,
+
+    #[clap(long = "build")]
+    /// Download and build tree-sitter parsers
+    build: bool,
+
+    #[clap(short = 'v', long = "verbose")]
+    /// Verbose mode. Display extra information when building grammars
+    verbose: bool,
 }
 
-fn configure_logging() -> Result<()> {
-    Logger::try_with_env_or_str("myprog=debug, mylib=debug")?
-        .log_to_file(
-            FileSpec::default()
-                .basename("zee")
-                .suffix("log")
-                .suppress_timestamp(),
-        )
-        .start()
-        .map(|_handle| ())
-        .map_err(anyhow::Error::from)
+fn fetch_and_build_tree_sitter_parsers() -> Result<()> {
+    let mode_configs: Vec<zee_grammar::mode::Mode> =
+        ron::de::from_str(crate::mode::MODES_CONFIG_STR)
+            .expect("mode configuration file is well formed");
+    zee_grammar::builder::fetch_and_build_tree_sitter_parsers(&mode_configs)
 }
 
 fn start_editor() -> Result<()> {
     let args = Args::parse();
-    if args.enable_logging {
-        configure_logging()?;
-    }
     let current_dir = env::current_dir()?;
+    if args.build {
+        logging::configure_for_cli(args.verbose)?;
+        return fetch_and_build_tree_sitter_parsers();
+    }
+
+    if args.enable_logging {
+        logging::configure_for_editor()?;
+    }
 
     // Read the current settings. If we cannot for any reason, we'll use the
     // default ones to ensure the editor opens in any environment.

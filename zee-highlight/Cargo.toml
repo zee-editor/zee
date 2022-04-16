@@ -10,7 +10,6 @@ rust-version = "1.59"
 
 [dependencies]
 fnv = "1.0.7"
-lazy_static = "1.4.0"
 log = "0.4.16"
 maplit = "1.0.2"
 nom = "5.1.2"
@@ -21,5 +20,3 @@ serde_json = "1.0.79"
 serde_regex = "1.1.0"
 smallvec = { version = "1.8.0", features = ["serde"] }
 tree-sitter = "0.20.6"
-
-zee-grammar = { version = "0.2.3", path = "../zee-grammar" }

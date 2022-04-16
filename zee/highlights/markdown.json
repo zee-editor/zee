@@ -1,8 +1,7 @@
 {
   "name": "Markdown",
   "scopes": {
-    "task_list_item_marker": "keyword",
-    "list_marker": "keyword.operator",
+    "list_item": "keyword.operator",
     "heading_content": "entity.name.macro.call",
     "atx_heading": "keyword.operator",
     "fenced_code_block > info_string": "string",
