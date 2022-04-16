@@ -24,6 +24,7 @@ use crate::{
 };
 
 #[derive(Debug, Parser)]
+#[clap(about, version)]
 struct Args {
     #[clap(name = "file", parse(from_os_str))]
     /// Open file to edit
