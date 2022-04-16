@@ -27,10 +27,8 @@ jobs:
           components: rustfmt
       - name: Install x11 deps
         run: sudo apt update && sudo apt install xorg-dev libxcb-shape0-dev libxcb-xfixes0-dev
-      - name: Checkout git submodules
+      - name: Checkout repository
         uses: actions/checkout@v2
-        with:
-          submodules: 'recursive'
       - name: Run checks
         run: ./scripts/check
       - name: Build
