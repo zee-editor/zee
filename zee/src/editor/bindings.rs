@@ -66,66 +66,42 @@ pub(super) fn initialize(bindings: &mut Bindings<Editor>) {
     // Window management
     //
     // Change focus
-    bindings.add(
-        "focus-next-window",
-        [Key::Ctrl('x'), Key::Char('o')],
-        || Message::FocusNextWindow,
-    );
-    bindings.add(
-        "focus-next-window",
-        [Key::Ctrl('x'), Key::Ctrl('o')],
-        || Message::FocusNextWindow,
-    );
-    bindings.add(
-        "focus-previous-window",
-        [Key::Ctrl('x'), Key::Char('i')],
-        || Message::FocusPreviousWindow,
-    );
-    bindings.add(
-        "focus-previous-window",
-        [Key::Ctrl('x'), Key::Ctrl('i')],
-        || Message::FocusPreviousWindow,
-    );
+    bindings
+        .command("focus-next-window", || Message::FocusNextWindow)
+        .with([Key::Ctrl('x'), Key::Char('o')])
+        .with([Key::Ctrl('x'), Key::Ctrl('o')]);
+    bindings
+        .command("focus-previous-window", || Message::FocusPreviousWindow)
+        .with([Key::Ctrl('x'), Key::Char('i')])
+        .with([Key::Ctrl('x'), Key::Ctrl('i')]);
+
     // Make current window fullscreen
-    bindings.add(
-        "fullscreen-window",
-        [Key::Ctrl('x'), Key::Char('1')],
-        || Message::FullscreenWindow,
-    );
-    bindings.add(
-        "fullscreen-window",
-        [Key::Ctrl('x'), Key::Ctrl('1')],
-        || Message::FullscreenWindow,
-    );
+    bindings
+        .command("fullscreen-window", || Message::FullscreenWindow)
+        .with([Key::Ctrl('x'), Key::Char('1')])
+        .with([Key::Ctrl('x'), Key::Ctrl('1')]);
+
     // Split window below (column)
-    bindings.add(
-        "split-window-below",
-        [Key::Ctrl('x'), Key::Char('2')],
-        || Message::SplitWindow(FlexDirection::Column),
-    );
-    bindings.add(
-        "split-window-below",
-        [Key::Ctrl('x'), Key::Ctrl('2')],
-        || Message::SplitWindow(FlexDirection::Column),
-    );
+    bindings
+        .command("split-window-below", || {
+            Message::SplitWindow(FlexDirection::Column)
+        })
+        .with([Key::Ctrl('x'), Key::Char('2')])
+        .with([Key::Ctrl('x'), Key::Ctrl('2')]);
+
     // Split window right (row)
-    bindings.add(
-        "split-window-right",
-        [Key::Ctrl('x'), Key::Char('3')],
-        || Message::SplitWindow(FlexDirection::Row),
-    );
-    bindings.add(
-        "split-window-right",
-        [Key::Ctrl('x'), Key::Ctrl('3')],
-        || Message::SplitWindow(FlexDirection::Row),
-    );
+    bindings
+        .command("split-window-right", || {
+            Message::SplitWindow(FlexDirection::Row)
+        })
+        .with([Key::Ctrl('x'), Key::Char('3')])
+        .with([Key::Ctrl('x'), Key::Ctrl('3')]);
+
     // Delete window
-    bindings.add("delete-window", [Key::Ctrl('x'), Key::Char('0')], || {
-        Message::DeleteWindow
-    });
-    bindings.add("delete-window", [Key::Ctrl('x'), Key::Ctrl('0')], || {
-        Message::DeleteWindow
-    });
+    bindings
+        .command("delete-window", || Message::DeleteWindow)
+        .with([Key::Ctrl('x'), Key::Char('0')])
+        .with([Key::Ctrl('x'), Key::Ctrl('0')]);
 
     // Theme
     bindings.add("change-theme", [Key::Ctrl('x'), Key::Ctrl('t')], || {

@@ -129,12 +129,12 @@ pub fn build_grammar(grammar: &Grammar) -> Result<bool> {
         })?;
     }
 
-    let grammar_dir_entries = grammar_dir.read_dir().with_context(|| {
-        format!("Failed to read directory {grammar_dir:?}. Did you use 'hx --grammar fetch'?",)
-    })?;
+    let grammar_dir_entries = grammar_dir
+        .read_dir()
+        .with_context(|| format!("Failed to read directory {grammar_dir:?}.",))?;
 
     if grammar_dir_entries.count() == 0 {
-        bail!("Directory {grammar_dir:?} is empty. Did you use 'hx --grammar fetch'?",);
+        bail!("Directory {grammar_dir:?} is empty.",);
     };
 
     copy_tree_sitter_queries(&grammar.grammar_id, &grammar_dir)?;

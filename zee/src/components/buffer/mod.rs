@@ -19,7 +19,7 @@ use super::edit_tree_viewer::{
 use crate::{
     edit::EditTree,
     editor::{
-        buffer::{BufferCursor, ModifiedStatus, RepositoryRc, DISABLE_TABS},
+        buffer::{BufferCursor, CursorMessage, ModifiedStatus, RepositoryRc, DISABLE_TABS},
         ContextHandle,
     },
     mode::Mode,
@@ -313,34 +313,50 @@ impl Component for Buffer {
         // Cursor movement
         //
         // Up
-        bindings.add("move-up", [Ctrl('p')], Self::move_up);
-        bindings.add("move-up", [Up], Self::move_up);
+        bindings
+            .command("move-up", Self::move_up)
+            .with([Ctrl('p')])
+            .with([Up]);
 
         // Down
-        bindings.add("move-down", [Ctrl('n')], Self::move_down);
-        bindings.add("move-down", [Down], Self::move_down);
+        bindings
+            .command("move-down", Self::move_down)
+            .with([Ctrl('n')])
+            .with([Down]);
 
         // Left
-        bindings.add("move-left", [Ctrl('b')], Self::move_left);
-        bindings.add("move-left", [Left], Self::move_left);
+        bindings
+            .command("move-left", Self::move_left)
+            .with([Ctrl('b')])
+            .with([Left]);
 
         // Right
-        bindings.add("move-right", [Ctrl('f')], Self::move_right);
-        bindings.add("move-right", [Right], Self::move_right);
+        bindings
+            .command("move-right", Self::move_right)
+            .with([Ctrl('f')])
+            .with([Right]);
 
         // Page down
-        bindings.add("move-page-down", [Ctrl('v')], Self::move_page_down);
-        bindings.add("move-page-down", [PageDown], Self::move_page_down);
+        bindings
+            .command("move-page-down", Self::move_page_down)
+            .with([Ctrl('v')])
+            .with([PageDown]);
 
         // Page up
-        bindings.add("move-page-up", [Alt('v')], Self::move_page_up);
-        bindings.add("move-page-up", [PageUp], Self::move_page_up);
+        bindings
+            .command("move-page-up", Self::move_page_up)
+            .with([Alt('v')])
+            .with([PageUp]);
 
         // Start/end of line
-        bindings.add("move-start-of-line", [Ctrl('a')], Self::move_start_of_line);
-        bindings.add("move-start-of-line", [Home], Self::move_start_of_line);
-        bindings.add("move-end-of-line", [Ctrl('e')], Self::move_end_of_line);
-        bindings.add("move-end-of-line", [End], Self::move_end_of_line);
+        bindings
+            .command("move-start-of-line", Self::move_start_of_line)
+            .with([Ctrl('a')])
+            .with([Home]);
+        bindings
+            .command("move-end-of-line", Self::move_end_of_line)
+            .with([Ctrl('e')])
+            .with([End]);
 
         // Start/end of buffer
         bindings.add(
@@ -353,8 +369,10 @@ impl Component for Buffer {
         // Editing
         //
         // Delete forward
-        bindings.add("delete-forward", [Ctrl('d')], Self::delete_forward);
-        bindings.add("delete-forward", [Delete], Self::delete_forward);
+        bindings
+            .command("delete-forward", Self::delete_forward)
+            .with([Ctrl('d')])
+            .with([Delete]);
 
         // Delete backward
         bindings.add("delete-backward", [Backspace], Self::delete_backward);
@@ -387,12 +405,12 @@ impl Component for Buffer {
         // Selections
         //
         // Begin selection
-        bindings.add("begin-selection", [Null], |this: &Self| {
-            this.properties.cursor.begin_selection();
-        });
-        bindings.add("begin-selection", [Ctrl(' ')], |this: &Self| {
-            this.properties.cursor.begin_selection();
-        });
+        bindings
+            .command("begin-selection", |this: &Self| {
+                this.properties.cursor.begin_selection();
+            })
+            .with([Null])
+            .with([Ctrl(' ')]);
 
         // Select all
         bindings.add("select-all", [Ctrl('x'), Char('h')], |this: &Self| {
@@ -414,15 +432,13 @@ impl Component for Buffer {
         // Undo / Redo
         //
         // Undo
-        bindings.add("undo", [Ctrl('_')], |this: &Self| {
-            this.properties.cursor.undo();
-        });
-        bindings.add("undo", [Ctrl('z')], |this: &Self| {
-            this.properties.cursor.undo();
-        });
-        bindings.add("undo", [Ctrl('/')], |this: &Self| {
-            this.properties.cursor.undo();
-        });
+        bindings
+            .command("undo", |this: &Self| {
+                this.properties.cursor.undo();
+            })
+            .with([Ctrl('_')])
+            .with([Ctrl('z')])
+            .with([Ctrl('/')]);
 
         // Redo
         bindings.add("redo", [Ctrl('q')], |this: &Self| {
@@ -430,12 +446,12 @@ impl Component for Buffer {
         });
 
         // Save buffer
-        bindings.add("save-buffer", [Ctrl('x'), Ctrl('s')], |this: &Self| {
-            this.properties.cursor.save();
-        });
-        bindings.add("save-buffer", [Ctrl('x'), Char('s')], |this: &Self| {
-            this.properties.cursor.save();
-        });
+        bindings
+            .command("save-buffer", |this: &Self| {
+                this.properties.cursor.save();
+            })
+            .with([Ctrl('x'), Ctrl('s')])
+            .with([Ctrl('x'), Char('s')]);
 
         // Centre cursor visually
         bindings.add("center-cursor-visually", [Ctrl('l')], || {
