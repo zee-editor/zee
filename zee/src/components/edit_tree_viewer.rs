@@ -1,10 +1,8 @@
 use std::cmp;
+use zee_edit::tree::{self, EditTree};
 use zi::{Canvas, Component, ComponentLink, Layout, Rect, ShouldRender, Style};
 
-use crate::{
-    edit::tree::{self, EditTree},
-    versioned::WeakHandle,
-};
+use crate::versioned::WeakHandle;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Theme {

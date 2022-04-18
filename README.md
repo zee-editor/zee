@@ -102,10 +102,14 @@ The following keybindings are available:
 
 ### movement
 
- - `C-p`, `Up` move up
+ - `C-f`, `Right` move forward
+ - `C-b`, `Left` move backward
  - `C-n`, `Down` move down
- - `C-b`, `Left` move backwards
- - `C-f`, `Right` move forwards
+ - `C-p`, `Up` move up
+ - `A-f` move forward by one word
+ - `A-b` move backward by one word
+ - `A-n` move forward by one paragraph
+ - `A-p` move backward by one paragraph
  - `C-a`, `Home` move to start of line
  - `C-e`, `End` move to end of line
  - `C-v`, `PageDown` move down one page
@@ -127,6 +131,8 @@ The following keybindings are available:
  - `C-_`, `C-z`, `C-/` undo previous command
  - `C-q` redo previous command
  - `C-x u` open the edit tree viewer
+ - `Enter` insert a new line, moving the cursor
+ - `C-o` insert a new line after the cursor, without moving it
  - `C-x C-s` save the current buffer
 
 ### file navigation
@@ -143,13 +149,13 @@ The following keybindings are available:
 
 ### global
  - `C-g` cancel the current operation
- - `C-x k` kill a buffer
- - `C-x b` switch buffer
- - `C-x 0` close the focused window
- - `C-x 1` make the focused window fullscreen
- - `C-x 2` split the focused window below
- - `C-x 3` split the focused window to the right
- - `C-x o` switch focus to the next buffer
+ - `C-x k` choose a buffer to close
+ - `C-x b` switch the current window to another buffer
+ - `C-x 0`, `C-x C-0` close the focused window
+ - `C-x 1`, `C-x C-1` make the focused window fullscreen
+ - `C-x 2`, `C-x C-2` split the focused window below
+ - `C-x 3`, `C-x C-3` split the focused window to the right
+ - `C-x o`, `C-x C-o` switch focus to the next buffer
  - `C-x C-t` cycle through the available themes
  - `C-x C-c` quit
 

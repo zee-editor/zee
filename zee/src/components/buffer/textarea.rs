@@ -1,18 +1,15 @@
 use euclid::default::SideOffsets2D;
 use ropey::{Rope, RopeSlice};
-use std::{borrow::Cow, cmp, iter};
+use std::{borrow::Cow, iter};
 use zee_highlight::SelectorNodeId;
 use zi::{
     terminal::GraphemeCluster, Canvas, Component, ComponentLink, Layout, Position, Rect,
     ShouldRender, Size,
 };
 
+use zee_edit::{Cursor, RopeGraphemes};
+
 use crate::{
-    edit::{
-        self,
-        cursor::{CharIndex, Cursor},
-        RopeGraphemes,
-    },
     mode::Mode,
     syntax::{
         highlight::{text_style_at_char, Theme as SyntaxTheme},
@@ -72,7 +69,7 @@ impl TextArea {
         line: RopeSlice,
         mut syntax_cursor: Option<&mut SyntaxCursor>,
         trace: &mut NodeTrace<SelectorNodeId>,
-    ) -> usize {
+    ) {
         // Get references to the relevant bits of context
         let Self {
             properties:
@@ -88,7 +85,7 @@ impl TextArea {
         } = *self;
 
         // Highlight the currently selected line
-        let line_under_cursor = text.char_to_line(cursor.range().start.0) == line_index;
+        let line_under_cursor = text.char_to_line(cursor.range().start) == line_index;
         if line_under_cursor && focused {
             canvas.clear_region(
                 Rect::new(
@@ -99,9 +96,8 @@ impl TextArea {
             );
         }
 
-        let mut visual_cursor_x = 0;
         let mut visual_x = frame.origin.x;
-        let mut char_index = CharIndex(text.line_to_char(line_index));
+        let mut char_index = text.line_to_char(line_index);
 
         let mut content: Cow<str> = text.byte_slice(trace.byte_range.clone()).into();
         let mut scope = mode
@@ -110,7 +106,7 @@ impl TextArea {
             .map(|scope| scope.0.as_str());
 
         for grapheme in RopeGraphemes::new(&line.slice(..)) {
-            let byte_index = text.char_to_byte(char_index.0);
+            let byte_index = text.char_to_byte(char_index);
             match (syntax_cursor.as_mut(), mode.highlights()) {
                 (Some(syntax_cursor), Some(highlights))
                     if !trace.byte_range.contains(&byte_index) =>
@@ -127,18 +123,6 @@ impl TextArea {
                 _ => {}
             };
 
-            if cursor.range().contains(&char_index) && focused {
-                // eprintln!(
-                //     "Symbol under cursor [{}] -- {:?} {:?} {:?} {}",
-                //     scope.unwrap_or(""),
-                //     trace.path,
-                //     trace.trace,
-                //     trace.nth_children,
-                //     content,
-                // );
-                visual_cursor_x = visual_x.saturating_sub(frame.origin.x);
-            }
-
             let style = text_style_at_char(
                 theme,
                 cursor,
@@ -148,7 +132,7 @@ impl TextArea {
                 scope.unwrap_or(""),
                 trace.is_error,
             );
-            let grapheme_width = edit::graphemes::width(&grapheme);
+            let grapheme_width = zee_edit::graphemes::width(&grapheme);
             let horizontal_bounds_inclusive = frame.min_x()..=frame.max_x();
             if !horizontal_bounds_inclusive.contains(&(visual_x + grapheme_width)) {
                 break;
@@ -169,13 +153,15 @@ impl TextArea {
                 );
             }
 
-            char_index.0 += grapheme.len_chars();
-            visual_x += grapheme_width;
+            char_index += grapheme.len_chars();
+            visual_x += grapheme_width.max(1);
         }
 
-        if line_index == text.len_lines() - 1 && cursor.range().start == text.len_chars().into() {
+        if line.get_char(line.len_chars().saturating_sub(1)) != Some('\n')
+            && cursor.range().start == char_index
+        {
             canvas.draw_str(
-                frame.origin.x,
+                visual_x,
                 frame.origin.y,
                 if focused {
                     theme.cursor_focused
@@ -185,12 +171,10 @@ impl TextArea {
                 " ",
             );
         }
-
-        visual_cursor_x
     }
 
     #[inline]
-    fn draw_text(&self, canvas: &mut Canvas) -> usize {
+    fn draw_text(&self, canvas: &mut Canvas) {
         let mut syntax_cursor = self
             .properties
             .parse_tree
@@ -198,7 +182,6 @@ impl TextArea {
             .map(|tree| tree.cursor());
         let mut trace: NodeTrace<SelectorNodeId> = NodeTrace::new();
 
-        let mut visual_cursor_x = 0;
         for (line_index, line) in self
             .properties
             .text
@@ -206,20 +189,14 @@ impl TextArea {
             .take(canvas.size().height)
             .enumerate()
         {
-            visual_cursor_x = cmp::max(
-                visual_cursor_x,
-                self.draw_line(
-                    canvas,
-                    Rect::from_size(canvas.size())
-                        .inner_rect(SideOffsets2D::new(line_index, 0, 0, 0)),
-                    self.properties.line_offset + line_index,
-                    line,
-                    syntax_cursor.as_mut(),
-                    &mut trace,
-                ),
+            self.draw_line(
+                canvas,
+                Rect::from_size(canvas.size()).inner_rect(SideOffsets2D::new(line_index, 0, 0, 0)),
+                self.properties.line_offset + line_index,
+                line,
+                syntax_cursor.as_mut(),
+                &mut trace,
             );
         }
-
-        visual_cursor_x
     }
 }

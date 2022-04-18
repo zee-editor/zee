@@ -7,14 +7,17 @@ use std::{
     path::{Path, PathBuf},
     rc::Rc,
 };
+use zee_edit::{
+    graphemes::strip_trailing_whitespace, movement, tree::EditTree, Cursor, Direction, OpaqueDiff,
+    TAB_WIDTH,
+};
 use zi::ComponentLink;
 
 use super::{ContextHandle, Editor};
 use crate::{
-    edit::{strip_trailing_whitespace, Cursor, EditTree, TAB_WIDTH},
     error::Result,
     mode::{self, Mode, PLAIN_TEXT_MODE},
-    syntax::parse::{OpaqueDiff, ParseTree, ParserPool, ParserStatus},
+    syntax::parse::{ParseTree, ParserPool, ParserStatus},
     versioned::{Versioned, WeakHandle},
 };
 
@@ -264,9 +267,11 @@ impl Buffer {
     #[inline]
     pub fn handle_message(&mut self, message: BufferMessage) {
         match message {
+            // Start writing the buffer to disk asynchronously
             BufferMessage::SaveBufferStart => {
                 self.spawn_save_file();
             }
+            // Saved the buffer successfully
             BufferMessage::SaveBufferEnd(Ok(new_content)) => {
                 for cursor in self.cursors.iter_mut() {
                     cursor.sync(&self.content, &new_content);
@@ -276,14 +281,12 @@ impl Buffer {
                 *self.content.staged_mut() = new_content;
                 self.modified_status = ModifiedStatus::Unchanged;
             }
+            // Failed to save the buffer
             BufferMessage::SaveBufferEnd(Err(error)) => {
-                // TODO: log error in prompt
-
-                // self.properties.logger.info(error.to_string())
-                log::error!("{}", error);
+                self.context.log(error.to_string());
             }
+            // The syntax parser finished parsing the code (tree-sitter)
             BufferMessage::ParseSyntax { version, status } => {
-                log::info!("done!");
                 let parsed = status.unwrap();
                 if let Some(parser) = self.parser.as_mut() {
                     parser.handle_parse_syntax_done(version, parsed);
@@ -304,14 +307,28 @@ impl Buffer {
             let cursor = &mut self.cursors[cursor_id.0];
             // Stateless
             match message {
-                CursorMessage::Up(n) => cursor.move_up_n(content, n),
-                CursorMessage::Down(n) => cursor.move_down_n(content, n),
-                CursorMessage::Left => cursor.move_left(content),
-                CursorMessage::Right => cursor.move_right(content),
-                CursorMessage::StartOfLine => cursor.move_to_start_of_line(content),
-                CursorMessage::EndOfLine => cursor.move_to_end_of_line(content),
-                CursorMessage::StartOfBuffer => cursor.move_to_start_of_buffer(content),
-                CursorMessage::EndOfBuffer => cursor.move_to_end_of_buffer(content),
+                CursorMessage::Up(n) => {
+                    movement::move_vertically(content, cursor, Direction::Backward, n)
+                }
+                CursorMessage::Down(n) => {
+                    movement::move_vertically(content, cursor, Direction::Forward, n)
+                }
+                CursorMessage::Left => {
+                    movement::move_horizontally(content, cursor, Direction::Backward, 1)
+                }
+                CursorMessage::Right => {
+                    movement::move_horizontally(content, cursor, Direction::Forward, 1)
+                }
+                CursorMessage::StartOfLine => movement::move_to_start_of_line(content, cursor),
+                CursorMessage::EndOfLine => movement::move_to_end_of_line(content, cursor),
+                CursorMessage::StartOfBuffer => movement::move_to_start_of_buffer(content, cursor),
+                CursorMessage::EndOfBuffer => movement::move_to_end_of_buffer(content, cursor),
+                CursorMessage::MoveWord(direction, count) => {
+                    movement::move_word(content, cursor, direction, count)
+                }
+                CursorMessage::MoveParagraph(direction, count) => {
+                    movement::move_paragraph(content, cursor, direction, count)
+                }
 
                 CursorMessage::BeginSelection => cursor.begin_selection(),
                 CursorMessage::ClearSelection => {
@@ -327,16 +344,26 @@ impl Buffer {
         let diff = {
             match message {
                 CursorMessage::DeleteForward => {
-                    self.cursors[cursor_id.0]
-                        .delete_forward(&mut self.content)
-                        .diff
+                    let operation = self.cursors[cursor_id.0].delete_forward(&mut self.content);
+                    if operation.diff.is_empty() {
+                        self.context.log("End of buffer");
+                    }
+                    operation.diff
                 }
                 CursorMessage::DeleteBackward => {
-                    self.cursors[cursor_id.0]
-                        .delete_backward(&mut self.content)
-                        .diff
+                    let operation = self.cursors[cursor_id.0].delete_backward(&mut self.content);
+                    if operation.diff.is_empty() {
+                        self.context.log("Beginning of buffer");
+                    }
+                    operation.diff
                 }
-                CursorMessage::DeleteLine => self.delete_line(cursor_id),
+                CursorMessage::DeleteLine => {
+                    let diff = self.delete_line(cursor_id);
+                    if diff.is_empty() {
+                        self.context.log("End of buffer");
+                    }
+                    diff
+                }
                 CursorMessage::Yank => self.paste_from_clipboard(cursor_id),
                 CursorMessage::CopySelection => self.copy_selection_to_clipboard(cursor_id),
                 CursorMessage::CutSelection => self.cut_selection_to_clipboard(cursor_id),
@@ -344,20 +371,34 @@ impl Buffer {
                     let tab = if DISABLE_TABS { ' ' } else { '\t' };
                     let diff = self.cursors[cursor_id.0]
                         .insert_chars(&mut self.content, std::iter::repeat(tab).take(TAB_WIDTH));
-                    self.cursors[cursor_id.0].move_right_n(&self.content, TAB_WIDTH);
+                    movement::move_horizontally(
+                        &self.content,
+                        &mut self.cursors[cursor_id.0],
+                        Direction::Forward,
+                        TAB_WIDTH,
+                    );
                     diff
                 }
                 CursorMessage::InsertNewLine => {
                     let diff = self.cursors[cursor_id.0].insert_char(&mut self.content, '\n');
-                    // self.ensure_trailing_newline_with_content();
-                    self.cursors[cursor_id.0].move_down(&self.content);
-                    self.cursors[cursor_id.0].move_to_start_of_line(&self.content);
+                    let cursor = &mut self.cursors[cursor_id.0];
+                    movement::move_vertically(&self.content, cursor, Direction::Forward, 1);
+                    movement::move_to_start_of_line(&self.content, cursor);
                     diff
                 }
-                CursorMessage::InsertChar(character) => {
+                CursorMessage::InsertChar {
+                    character,
+                    move_forward,
+                } => {
                     let diff = self.cursors[cursor_id.0].insert_char(&mut self.content, character);
-                    // self.ensure_trailing_newline_with_content();
-                    self.cursors[cursor_id.0].move_right(&self.content);
+                    if move_forward {
+                        movement::move_horizontally(
+                            &self.content,
+                            &mut self.cursors[cursor_id.0],
+                            Direction::Forward,
+                            1,
+                        );
+                    }
                     diff
                 }
                 CursorMessage::Undo => {
@@ -398,11 +439,7 @@ impl Buffer {
         let selection = self.cursors[cursor_id.0].selection();
         self.context
             .clipboard
-            .set_contents(
-                self.content
-                    .slice(selection.start.0..selection.end.0)
-                    .into(),
-            )
+            .set_contents(self.content.slice(selection.start..selection.end).into())
             .unwrap();
         self.cursors[cursor_id.0].clear_selection();
         OpaqueDiff::empty()
@@ -517,7 +554,7 @@ impl BufferCursor {
     }
 
     #[inline]
-    fn send_message(&self, message: BufferMessage) {
+    pub fn send_message(&self, message: BufferMessage) {
         self.link.send(
             BuffersMessage {
                 buffer_id: self.buffer_id,
@@ -528,7 +565,7 @@ impl BufferCursor {
     }
 
     #[inline]
-    fn send_cursor(&self, message: CursorMessage) {
+    pub fn send_cursor(&self, message: CursorMessage) {
         self.send_message(BufferMessage::CursorMessage {
             cursor_id: self.cursor_id,
             message,
@@ -668,8 +705,11 @@ impl BufferCursor {
     }
 
     #[inline]
-    pub fn insert_char(&self, character: char) {
-        self.send_cursor(CursorMessage::InsertChar(character));
+    pub fn insert_char(&self, character: char, move_forward: bool) {
+        self.send_cursor(CursorMessage::InsertChar {
+            character,
+            move_forward,
+        });
     }
 }
 
@@ -700,6 +740,8 @@ pub enum CursorMessage {
     EndOfLine,
     StartOfBuffer,
     EndOfBuffer,
+    MoveWord(Direction, usize),
+    MoveParagraph(Direction, usize),
 
     // Editing
     BeginSelection,
@@ -714,7 +756,7 @@ pub enum CursorMessage {
     DeleteLine,
     InsertTab,
     InsertNewLine,
-    InsertChar(char),
+    InsertChar { character: char, move_forward: bool },
 
     // Undo / Redo
     Undo,

@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "zee",
+    "zee-edit",
     "zee-grammar",
     "zee-highlight",
 ]

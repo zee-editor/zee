@@ -51,7 +51,7 @@ impl Component for LineInfo {
                 0,
                 line_index as usize,
                 style,
-                if line_offset + line_index < num_lines - 1 {
+                if line_offset + line_index < num_lines {
                     " "
                 } else {
                     "╶"

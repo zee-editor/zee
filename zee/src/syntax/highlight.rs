@@ -1,6 +1,6 @@
 use zi::terminal::{Background, Style};
 
-use crate::edit::cursor::{CharIndex, Cursor};
+use zee_edit::{CharIndex, Cursor};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Theme {
@@ -90,7 +90,7 @@ pub fn text_style_at_char(
         theme.text
     };
 
-    if cursor.range().contains(&char_index) {
+    if char_index == cursor.range().start || cursor.range().contains(&char_index) {
         let cursor_style = if focused {
             theme.cursor_focused
         } else {

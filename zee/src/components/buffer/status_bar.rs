@@ -107,7 +107,7 @@ impl Component for StatusBar {
                     },
                     match modified_status {
                         ModifiedStatus::Unchanged => " - ",
-                        ModifiedStatus::Changed | ModifiedStatus::Saving => " ✚ ",
+                        ModifiedStatus::Changed | ModifiedStatus::Saving => " + ",
                     },
                 )
             })
@@ -155,7 +155,7 @@ impl Component for StatusBar {
                     theme.position_in_file,
                     &if current_line_index == 0 {
                         " Top ".into()
-                    } else if current_line_index == num_lines.saturating_sub(2) {
+                    } else if current_line_index >= num_lines.saturating_sub(2) {
                         " End ".into()
                     } else {
                         format!(
@@ -171,7 +171,10 @@ impl Component for StatusBar {
             })
             // The row:column in the file, right-aligned
             .and_then(|canvas| {
-                let line_status = format!(" {current_line_index:>3}:{column_offset:>2} ");
+                let line_status = format!(
+                    " {one_based_line_index:>3}:{column_offset:>2} ",
+                    one_based_line_index = current_line_index + 1
+                );
                 canvas.append_end(theme.is_not_modified, &line_status)
             })
             // Name of the current mode
@@ -202,7 +205,7 @@ struct StatusCanvas {
 
 impl StatusCanvas {
     fn new(size: Size, base: Style) -> Self {
-        debug_assert!(size.height == 1);
+        debug_assert!(size.height <= 1);
         let mut canvas = Canvas::new(size);
         canvas.clear(base);
         Self {
@@ -212,29 +215,22 @@ impl StatusCanvas {
     }
 
     fn append_start(&mut self, style: Style, content: &str) -> Option<&mut Self> {
-        let width = UnicodeWidthStr::width(content);
-        if width <= self.remaining_space() {
+        (content.width() <= self.remaining_space()).then(|| {
             let written = self.canvas.draw_str(self.free.start, 0, style, content);
-            debug_assert!(width == written);
             self.free.start += written;
-            Some(self)
-        } else {
-            None
-        }
+            self
+        })
     }
 
     fn append_end(&mut self, style: Style, content: &str) -> Option<&mut Self> {
-        let width = UnicodeWidthStr::width(content);
-        if width <= self.remaining_space() {
+        let width = content.width();
+        (width <= self.remaining_space()).then(|| {
             let written = self
                 .canvas
                 .draw_str(self.free.end - width, 0, style, content);
-            debug_assert!(width == written);
             self.free.end -= written;
-            Some(self)
-        } else {
-            None
-        }
+            self
+        })
     }
 
     fn remaining_space(&self) -> usize {

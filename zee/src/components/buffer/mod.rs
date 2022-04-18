@@ -3,6 +3,7 @@ pub mod status_bar;
 pub mod textarea;
 
 use std::{borrow::Cow, iter, path::PathBuf};
+use zee_edit::{tree::EditTree, Direction};
 use zi::{
     components::text::{Text, TextAlign, TextProperties},
     prelude::*,
@@ -17,7 +18,6 @@ use super::edit_tree_viewer::{
     EditTreeViewer, Properties as EditTreeViewerProperties, Theme as EditTreeViewerTheme,
 };
 use crate::{
-    edit::EditTree,
     editor::{
         buffer::{BufferCursor, CursorMessage, ModifiedStatus, RepositoryRc, DISABLE_TABS},
         ContextHandle,
@@ -82,7 +82,7 @@ pub struct Buffer {
 impl Buffer {
     fn ensure_cursor_in_view(&mut self) -> ShouldRender {
         let content = self.properties.content.upgrade();
-        let current_line = content.char_to_line(self.properties.cursor.inner().range().start.0);
+        let current_line = content.char_to_line(self.properties.cursor.inner().range().start);
         let num_lines = self.frame.size.height.saturating_sub(1);
         if current_line < self.line_offset {
             self.line_offset = current_line;
@@ -97,7 +97,7 @@ impl Buffer {
 
     fn center_visual_cursor(&mut self) {
         let content = self.properties.content.upgrade();
-        let line_index = content.char_to_line(self.properties.cursor.inner().range().start.0);
+        let line_index = content.char_to_line(self.properties.cursor.inner().range().start);
         if line_index >= self.frame.size.height / 2
             && self.line_offset != line_index - self.frame.size.height / 2
         {
@@ -249,13 +249,17 @@ impl Component for Buffer {
         let line_info = LineInfo::with(LineInfoProperties {
             style: self.properties.theme.border,
             line_offset: self.line_offset,
-            num_lines: content.len_lines(),
+            num_lines: content.len_lines()
+                - if content.line(content.len_lines() - 1).len_chars() > 0 {
+                    0
+                } else {
+                    1
+                },
         });
 
         // The "status bar" which shows information about the file etc.
         let status_bar = StatusBar::with(StatusBarProperties {
-            current_line_index: content
-                .char_to_line(self.properties.cursor.inner().range().start.0),
+            current_line_index: content.char_to_line(self.properties.cursor.inner().range().start),
             column_offset: self.properties.cursor.inner().column_offset(&content),
             file_path: self.properties.file_path.clone(),
             focused: self.properties.focused,
@@ -314,27 +318,62 @@ impl Component for Buffer {
         //
         // Up
         bindings
-            .command("move-up", Self::move_up)
+            .command("move-backward-line", Self::move_up)
             .with([Ctrl('p')])
             .with([Up]);
 
         // Down
         bindings
-            .command("move-down", Self::move_down)
+            .command("move-forward-line", Self::move_down)
             .with([Ctrl('n')])
             .with([Down]);
 
         // Left
         bindings
-            .command("move-left", Self::move_left)
+            .command("move-backward", Self::move_left)
             .with([Ctrl('b')])
             .with([Left]);
 
         // Right
         bindings
-            .command("move-right", Self::move_right)
+            .command("move-forward", Self::move_right)
             .with([Ctrl('f')])
             .with([Right]);
+
+        // Move by word
+        //
+        // TODO: Add Alt + Left / Right / Up / Down alternative key bindings
+        //       For this to be possible, zi should support Alt + a key, not just char
+        bindings
+            .command("move-backward-word", |this: &Self| {
+                this.properties
+                    .cursor
+                    .send_cursor(CursorMessage::MoveWord(Direction::Backward, 1))
+            })
+            .with([Alt('b')]);
+        bindings
+            .command("move-forward-word", |this: &Self| {
+                this.properties
+                    .cursor
+                    .send_cursor(CursorMessage::MoveWord(Direction::Forward, 1))
+            })
+            .with([Alt('f')]);
+
+        // Move by paragraph
+        bindings
+            .command("move-backward-paragraph", |this: &Self| {
+                this.properties
+                    .cursor
+                    .send_cursor(CursorMessage::MoveParagraph(Direction::Backward, 1))
+            })
+            .with([Alt('p')]);
+        bindings
+            .command("move-forward-paragraph", |this: &Self| {
+                this.properties
+                    .cursor
+                    .send_cursor(CursorMessage::MoveParagraph(Direction::Forward, 1))
+            })
+            .with([Alt('n')]);
 
         // Page down
         bindings
@@ -382,6 +421,9 @@ impl Component for Buffer {
 
         // Insert new line
         bindings.add("insert-new-line", [Char('\n')], Self::insert_new_line);
+        bindings.add("insert-new-line-after", [Ctrl('o')], |this: &Self| {
+            this.properties.cursor.insert_char('\n', false)
+        });
 
         // Insert tab
         bindings.add("insert-tab", [Char('\t')], |this: &Self| {
@@ -396,7 +438,7 @@ impl Component for Buffer {
             AnyCharacter,
             |this: &Self, keys: &[Key]| match keys {
                 &[Char(character)] if character != '\n' => {
-                    this.properties.cursor.insert_char(character)
+                    this.properties.cursor.insert_char(character, true)
                 }
                 _ => {}
             },

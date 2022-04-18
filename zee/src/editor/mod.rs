@@ -103,8 +103,8 @@ impl std::ops::Deref for ContextHandle {
 }
 
 impl Context {
-    pub fn log(&self, message: String) {
-        self.link.send(Message::Log(Some(message)));
+    pub fn log(&self, message: impl Into<String>) {
+        self.link.send(Message::Log(Some(message.into())));
     }
 }
 
@@ -150,7 +150,7 @@ impl Editor {
                 .map(|_| false)
                 .or_else(|error| match error.kind() {
                     io::ErrorKind::NotFound => {
-                        self.context.log("[New file]".into());
+                        self.context.log("[New file]");
                         Ok(true)
                     }
                     io::ErrorKind::PermissionDenied => {
@@ -246,7 +246,7 @@ impl Component for Editor {
             Message::Cancel => {
                 self.prompt_action = PromptAction::None;
                 self.prompt_height = self.prompt_action.initial_height();
-                self.context.log("Cancel".into());
+                self.context.log("Cancel");
             }
             Message::ChangeTheme => {
                 self.theme_index = (self.theme_index + 1) % self.themes.len();

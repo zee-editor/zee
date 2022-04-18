@@ -22,10 +22,10 @@ use super::{
     Theme, PROMPT_MAX_HEIGHT,
 };
 use crate::{
-    edit::ensure_trailing_newline_with_content,
     editor::ContextHandle,
     error::{Context as _Context, Result},
     task::TaskId,
+    utils::ensure_trailing_newline_with_content,
 };
 
 #[derive(Debug)]

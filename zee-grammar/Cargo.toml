@@ -3,13 +3,13 @@ name = "zee-grammar"
 version = "0.3.0"
 authors = ["Marius Cobzarenco <marius@reinfer.io>"]
 description = "Wrappers for tree sitter grammars used by zee"
-homepage = "https://github.com/mcobzarenco/zee/tree/master/grammar"
-license = "Apache-2.0"
+homepage = "https://github.com/zee-editor/zee"
+license = "MIT OR Apache-2.0"
 edition = "2021"
 rust-version = "1.59"
 
 [dependencies]
-anyhow = "1.0.56"
+anyhow = "1.0.57"
 cc = { version = "1.0.73", features = ["parallel"] }
 colored = "2.0.0"
 dirs = "4.0.0"

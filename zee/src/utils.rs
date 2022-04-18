@@ -1,3 +1,5 @@
+use ropey::Rope;
+
 #[derive(Copy)]
 pub struct StaticRefEq<T: 'static>(&'static T);
 
@@ -24,5 +26,11 @@ impl<T> std::ops::Deref for StaticRefEq<T> {
 impl<T> From<&'static T> for StaticRefEq<T> {
     fn from(other: &'static T) -> Self {
         Self(other)
+    }
+}
+
+pub fn ensure_trailing_newline_with_content(text: &mut Rope) {
+    if text.len_chars() == 0 || text.char(text.len_chars() - 1) != '\n' {
+        text.insert_char(text.len_chars(), '\n');
     }
 }

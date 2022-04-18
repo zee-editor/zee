@@ -2,7 +2,6 @@
 
 mod clipboard;
 mod components;
-mod edit;
 mod editor;
 mod error;
 mod logging;

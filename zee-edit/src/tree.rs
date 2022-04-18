@@ -3,8 +3,7 @@ use ropey::Rope;
 use smallvec::SmallVec;
 use std::ops::{Deref, DerefMut};
 
-use super::{ensure_trailing_newline_with_content, Cursor};
-use crate::syntax::OpaqueDiff;
+use crate::{movement, Cursor, OpaqueDiff};
 
 #[derive(Debug, Clone)]
 pub struct Revision {
@@ -18,7 +17,7 @@ pub struct Revision {
 impl Revision {
     fn root(text: Rope) -> Self {
         let mut cursor = Cursor::new();
-        cursor.move_to_start_of_buffer(&text);
+        movement::move_to_start_of_buffer(&text, &mut cursor);
         Self {
             text,
             cursor,
@@ -44,8 +43,7 @@ pub struct EditTree {
 }
 
 impl EditTree {
-    pub fn new(mut text: Rope) -> Self {
-        ensure_trailing_newline_with_content(&mut text);
+    pub fn new(text: Rope) -> Self {
         Self {
             revisions: vec![Revision::root(text.clone())],
             head_index: 0,
@@ -221,14 +219,14 @@ mod tests {
         tree.insert(0, "The flowers are...");
         tree.create_revision(OpaqueDiff::empty(), Cursor::end_of_buffer(&tree));
 
-        let position = tree.len_chars() - 1; // Before the newline automatically inserted
+        let position = tree.len_chars();
         tree.insert(position, " so...\n");
         tree.create_revision(OpaqueDiff::empty(), Cursor::end_of_buffer(&tree));
 
-        let position = tree.len_chars() - 1;
+        let position = tree.len_chars();
         tree.insert(position, "dunno.");
 
-        assert_eq!("The flowers are... so...\ndunno.\n", &tree.to_string());
+        assert_eq!("The flowers are... so...\ndunno.", &tree.to_string());
     }
 
     #[test]
@@ -245,19 +243,19 @@ mod tests {
         tree.insert(0, "The flowers are...");
         tree.create_revision(OpaqueDiff::empty(), Cursor::end_of_buffer(&tree));
 
-        let position = tree.len_chars() - 1; // Before the newline automatically inserted
+        let position = tree.len_chars();
         tree.insert(position, " so...\n");
-        let position = tree.len_chars() - 1;
+        let position = tree.len_chars();
         tree.insert(position, "dunno.");
         tree.create_revision(OpaqueDiff::empty(), Cursor::end_of_buffer(&tree));
 
-        assert_eq!("The flowers are... so...\ndunno.\n", &tree.to_string());
+        assert_eq!("The flowers are... so...\ndunno.", &tree.to_string());
         tree.undo();
-        assert_eq!("The flowers are...\n", &tree.to_string());
+        assert_eq!("The flowers are...", &tree.to_string());
 
-        let position = tree.len_chars() - 1;
+        let position = tree.len_chars();
         tree.insert(position, " violet.");
-        assert_eq!("The flowers are... violet.\n", &tree.to_string());
+        assert_eq!("The flowers are... violet.", &tree.to_string());
     }
 
     #[test]
@@ -266,21 +264,21 @@ mod tests {
         tree.insert(0, "The flowers are...");
         tree.create_revision(OpaqueDiff::empty(), Cursor::end_of_buffer(&tree));
 
-        let position = tree.len_chars() - 1; // Before the newline automatically inserted
+        let position = tree.len_chars();
         tree.insert(position, " so...\n");
-        let position = tree.len_chars() - 1;
+        let position = tree.len_chars();
         tree.insert(position, "dunno.");
         tree.create_revision(OpaqueDiff::empty(), Cursor::end_of_buffer(&tree));
 
-        assert_eq!("The flowers are... so...\ndunno.\n", &tree.to_string());
+        assert_eq!("The flowers are... so...\ndunno.", &tree.to_string());
         tree.undo();
-        assert_eq!("The flowers are...\n", &tree.to_string());
+        assert_eq!("The flowers are...", &tree.to_string());
         tree.redo();
-        assert_eq!("The flowers are... so...\ndunno.\n", &tree.to_string());
+        assert_eq!("The flowers are... so...\ndunno.", &tree.to_string());
         tree.undo();
-        assert_eq!("The flowers are...\n", &tree.to_string());
+        assert_eq!("The flowers are...", &tree.to_string());
         tree.undo();
-        assert_eq!("\n", &tree.to_string());
+        assert_eq!("", &tree.to_string());
     }
 
     #[test]
