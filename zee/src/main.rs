@@ -7,6 +7,7 @@ mod editor;
 mod error;
 mod logging;
 mod mode;
+mod panicking;
 mod settings;
 mod syntax;
 mod task;
@@ -103,8 +104,10 @@ fn start_editor() -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    start_editor().map_err(|error| {
-        log::error!("Zee exited with: {}", error);
-        error
+    panicking::print_panic_after_unwind(|| {
+        start_editor().map_err(|error| {
+            log::error!("Zee exited with: {}", error);
+            error
+        })
     })
 }
