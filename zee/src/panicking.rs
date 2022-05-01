@@ -24,15 +24,20 @@ pub fn print_panic_after_unwind<F: FnOnce() -> R + UnwindSafe, R>(function: F) -
     }
 }
 
+// Unfortunately, the machinery that formats panics in std is not fully reusable
+// by end users. `save_panic_backtrace_hook` and `PanicDescription` below
+// attempt to format the panic trace similar to std.
+
 fn save_panic_backtrace_hook(info: &PanicInfo) {
-    // The current implementation always returns `Some`.
+    // Ok to unwrap, the current implementation always returns `Some`
+    // https://doc.rust-lang.org/std/panic/struct.PanicInfo.html#method.location
     let location = info.location().unwrap();
 
     let message = match info.payload().downcast_ref::<&'static str>() {
-        Some(s) => *s,
+        Some(payload) => *payload,
         None => match info.payload().downcast_ref::<String>() {
             Some(s) => &s[..],
-            None => "Box<dyn Any>",
+            None => "<unknown payload>",
         },
     };
     let thread = std::thread::current();

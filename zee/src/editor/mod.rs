@@ -11,14 +11,15 @@ use std::{
     fmt::Display,
     fs::File,
     io::{self, BufReader},
-    path::PathBuf,
-    rc::Rc,
+    path::{Path, PathBuf},
     sync::Arc,
 };
 use zi::{
     Bindings, Callback, Component, ComponentExt, ComponentLink, FlexBasis, FlexDirection, Item,
     Key, Layout, NamedBindingQuery, Rect, ShouldRender,
 };
+
+use zee_grammar::Mode;
 
 use crate::{
     clipboard::Clipboard,
@@ -31,8 +32,8 @@ use crate::{
         splash::{Properties as SplashProperties, Splash},
         theme::{Theme, THEMES},
     },
+    config::{EditorConfig, PLAIN_TEXT_MODE},
     error::Result,
-    settings::Settings,
     task::TaskPool,
 };
 
@@ -77,7 +78,7 @@ impl From<BuffersMessage> for Message {
 pub struct Properties {
     pub args_files: Vec<PathBuf>,
     pub current_working_dir: PathBuf,
-    pub settings: Settings,
+    pub config: EditorConfig,
     pub task_pool: TaskPool,
     pub clipboard: Arc<dyn Clipboard>,
 }
@@ -85,20 +86,30 @@ pub struct Properties {
 pub struct Context {
     pub args_files: Vec<PathBuf>,
     pub current_working_dir: PathBuf,
-    pub settings: Settings,
+    pub config: EditorConfig,
+    pub modes: Vec<Mode>,
     pub task_pool: TaskPool,
     pub clipboard: Arc<dyn Clipboard>,
     pub link: ComponentLink<Editor>,
 }
 
+impl Context {
+    pub fn mode_by_filename(&self, filename: impl AsRef<Path>) -> &Mode {
+        self.modes
+            .iter()
+            .find(|&mode| mode.matches_by_filename(filename.as_ref()))
+            .unwrap_or(&PLAIN_TEXT_MODE)
+    }
+}
+
 #[derive(Clone)]
-pub struct ContextHandle(Rc<Context>);
+pub struct ContextHandle(pub &'static Context);
 
 impl std::ops::Deref for ContextHandle {
     type Target = Context;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        self.0
     }
 }
 
@@ -218,22 +229,34 @@ impl Component for Editor {
             }
         }
 
-        let theme_index = THEMES
-            .iter()
-            .position(|(_, name)| *name == properties.settings.theme_name)
-            .unwrap_or(0);
-
-        let context = ContextHandle(
+        let theme_name = properties.config.theme.clone();
+        let context = ContextHandle(Box::leak(
             Context {
                 args_files: properties.args_files,
                 current_working_dir: properties.current_working_dir,
-                settings: properties.settings,
+                modes: properties
+                    .config
+                    .modes
+                    .iter()
+                    .cloned()
+                    .map(Mode::new)
+                    .collect(),
+                config: properties.config,
                 task_pool: properties.task_pool,
                 clipboard: properties.clipboard,
                 link,
             }
             .into(),
-        );
+        ));
+
+        let theme_index = {
+            let theme = THEMES.iter().position(|(_, name)| *name == theme_name);
+            if theme.is_none() {
+                context.log(format!("Unknown theme `{}`", theme_name));
+            }
+            theme
+        }
+        .unwrap_or(0);
 
         Self {
             themes: &THEMES,
@@ -247,7 +270,6 @@ impl Component for Editor {
     }
 
     fn update(&mut self, message: Self::Message) -> ShouldRender {
-        log::info!("{:?}", message);
         match message {
             Message::Cancel => {
                 self.prompt_action = PromptAction::None;
@@ -260,7 +282,7 @@ impl Component for Editor {
                     self.context.log(format!(
                         "Theme changed to {}",
                         self.themes[self.theme_index].1
-                    ))
+                    ));
                 }
             }
             Message::OpenFilePicker(source) if !self.prompt_action.is_interactive() => {
@@ -421,29 +443,35 @@ impl Component for Editor {
     }
 
     fn notify_binding_queries(&self, queries: &[Option<NamedBindingQuery>], keys: &[Key]) {
-        let merged = queries
+        let merge_queries = |lhs, rhs| match (lhs, rhs) {
+            (some_match @ Some(NamedBindingQuery::Match(_)), _)
+            | (_, some_match @ Some(NamedBindingQuery::Match(_))) => some_match,
+            (
+                Some(NamedBindingQuery::PrefixOf(mut lhs)),
+                Some(NamedBindingQuery::PrefixOf(rhs)),
+            ) => {
+                lhs.extend(rhs.into_iter());
+                Some(NamedBindingQuery::PrefixOf(lhs))
+            }
+            (some @ Some(_), None) | (None, some @ Some(_)) => some,
+            (None, None) => None,
+        };
+        let merged_without_self = queries
             .iter()
+            .skip(1)
             .cloned()
-            .reduce(|lhs, rhs| match (lhs, rhs) {
-                (some_match @ Some(NamedBindingQuery::Match(_)), _)
-                | (_, some_match @ Some(NamedBindingQuery::Match(_))) => some_match,
-                (
-                    Some(NamedBindingQuery::PrefixOf(mut lhs)),
-                    Some(NamedBindingQuery::PrefixOf(rhs)),
-                ) => {
-                    lhs.extend(rhs.into_iter());
-                    Some(NamedBindingQuery::PrefixOf(lhs))
-                }
-                (some @ Some(_), None) | (None, some @ Some(_)) => some,
-                (None, None) => None,
-            })
+            .reduce(merge_queries)
             .flatten();
-        match merged {
-            Some(NamedBindingQuery::Match(_command)) => {
-                if self.prompt_action.is_log() {
+        let merged_all = queries.iter().cloned().reduce(merge_queries).flatten();
+
+        match merged_all {
+            Some(NamedBindingQuery::Match(_command)) => match merged_without_self {
+                Some(NamedBindingQuery::Match(_command)) if self.prompt_action.is_log() => {
+                    // Clear log message
                     self.context.link.send(Message::Log(None));
                 }
-            }
+                _ => {}
+            },
             Some(NamedBindingQuery::PrefixOf(prefix_of)) => {
                 self.context.log(format!(
                     "{} ({} commands)",

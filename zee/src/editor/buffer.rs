@@ -7,16 +7,18 @@ use std::{
     path::{Path, PathBuf},
     rc::Rc,
 };
+use zi::ComponentLink;
+
 use zee_edit::{
     graphemes::strip_trailing_whitespace, movement, tree::EditTree, Cursor, Direction, OpaqueDiff,
     TAB_WIDTH,
 };
-use zi::ComponentLink;
+use zee_grammar::Mode;
 
 use super::{ContextHandle, Editor};
 use crate::{
+    config::PLAIN_TEXT_MODE,
     error::Result,
-    mode::{self, Mode, PLAIN_TEXT_MODE},
     syntax::parse::{ParseTree, ParserPool, ParserStatus},
     versioned::{Versioned, WeakHandle},
 };
@@ -173,10 +175,13 @@ impl Buffer {
     ) -> Self {
         let mode = file_path
             .as_ref()
-            .map(|path| mode::find_by_filename(&path))
+            .map(|path| context.0.mode_by_filename(path))
             .unwrap_or(&PLAIN_TEXT_MODE);
 
-        let mut parser = mode.language().map(ParserPool::new);
+        let mut parser = mode
+            .language()
+            .and_then(|result| result.ok())
+            .map(ParserPool::new);
         if let Some(parser) = parser.as_mut() {
             let link = context.link.clone();
             parser.ensure_tree(
@@ -514,21 +519,16 @@ impl Buffer {
             let file_path = file_path.clone();
             let link = self.context.link.clone();
             self.context.task_pool.spawn(move |_| {
-                link.send(
-                    BuffersMessage::new(
-                        buffer_id,
-                        BufferMessage::SaveBufferEnd(
-                            File::create(&file_path)
-                                .map(BufWriter::new)
-                                .and_then(|writer| {
-                                    let text = strip_trailing_whitespace(text);
-                                    text.write_to(writer)?;
-                                    Ok(text)
-                                }),
-                        ),
-                    )
-                    .into(),
-                )
+                let buffer_message = BufferMessage::SaveBufferEnd(
+                    File::create(&file_path)
+                        .map(BufWriter::new)
+                        .and_then(|writer| {
+                            let text = strip_trailing_whitespace(text);
+                            text.write_to(writer)?;
+                            Ok(text)
+                        }),
+                );
+                link.send(BuffersMessage::new(buffer_id, buffer_message).into())
             });
         }
     }

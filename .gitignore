@@ -3,6 +3,6 @@
 **/*.rs.bk
 
 # Zee specific
-/runtime
+/config
 zee.log
 local-test-data

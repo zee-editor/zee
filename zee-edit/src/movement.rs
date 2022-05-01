@@ -67,10 +67,10 @@ pub fn move_vertically(text: &Rope, cursor: &mut Cursor, direction: Direction, c
     let mut char_offset = text.line_to_char(new_line_index);
     for grapheme in &mut graphemes {
         let width = crate::graphemes::width(&grapheme);
-        if new_visual_x + width > *current_visual_x || grapheme == "\n" {
+        if new_visual_x + width > *current_visual_x || grapheme.slice == "\n" {
             break;
         }
-        char_offset += grapheme.len_chars();
+        char_offset += grapheme.slice.len_chars();
         new_visual_x += width;
     }
 
