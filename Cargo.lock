@@ -568,6 +568,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "include_dir"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "482a2e29200b7eed25d7fdbd14423326760b7f6658d21a4cf12d55a50713c69f"
+dependencies = [
+ "include_dir_macros",
+]
+
+[[package]]
+name = "include_dir_macros"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e074c19deab2501407c91ba1860fa3d6820bfde307db6d8cb851b55a10be89b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+]
+
+[[package]]
 name = "indexmap"
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1530,15 +1549,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "toml"
-version = "0.5.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d82e1a7758622a465f8cee077614c73484dac5b836c02ff6a40d5d1010324d7"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "tree-sitter"
 version = "0.20.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1736,7 +1746,7 @@ dependencies = [
 
 [[package]]
 name = "zee"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "backtrace",
@@ -1750,6 +1760,7 @@ dependencies = [
  "fuzzy-matcher",
  "git2",
  "ignore",
+ "include_dir",
  "log",
  "maplit",
  "once_cell",
@@ -1765,18 +1776,16 @@ dependencies = [
  "smallstr",
  "smallvec",
  "thiserror",
- "toml",
  "tree-sitter",
  "zee-edit",
  "zee-grammar",
- "zee-highlight",
  "zi",
  "zi-term",
 ]
 
 [[package]]
 name = "zee-edit"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "euclid",
  "ropey",
@@ -1787,12 +1796,13 @@ dependencies = [
 
 [[package]]
 name = "zee-grammar"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "cc",
  "colored",
  "dirs",
+ "include_dir",
  "libloading",
  "log",
  "once_cell",

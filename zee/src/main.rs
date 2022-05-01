@@ -2,12 +2,11 @@
 
 mod clipboard;
 mod components;
+mod config;
 mod editor;
 mod error;
 mod logging;
-mod mode;
 mod panicking;
-mod settings;
 mod syntax;
 mod task;
 mod utils;
@@ -27,16 +26,20 @@ use crate::{
 #[clap(about, version)]
 struct Args {
     #[clap(name = "file", parse(from_os_str))]
-    /// Open file to edit
+    /// Open these files to edit after starting zee
     files: Vec<PathBuf>,
 
-    #[clap(long = "settings-path", parse(from_os_str))]
-    /// Path to the configuration file. It's usually ~/.config/zee on Linux.
-    settings_path: Option<PathBuf>,
+    #[clap(long = "config-dir", parse(from_os_str))]
+    /// Path to the zee configuration directory. Usually ~/.config/zee on
+    /// Linux and `%AppData%/zee` on Windows by default.
+    config_dir: Option<PathBuf>,
 
-    #[clap(long = "create-settings")]
-    /// Writes the default configuration to file, if the file doesn't exist
-    create_settings: bool,
+    #[clap(long = "init")]
+    /// Initialises the default configuration directory, if missing. Usually
+    /// ~/.config/zee on Linux and %AppData%/zee on Windows by default. This
+    /// command will create a default configuration file `config.ron` with
+    /// comments that you should edit further to customise zee.
+    initialise: bool,
 
     #[clap(long = "log")]
     /// Enable debug logging to `zee.log` file
@@ -51,50 +54,53 @@ struct Args {
     verbose: bool,
 }
 
-fn fetch_and_build_tree_sitter_parsers() -> Result<()> {
-    let mode_configs: Vec<zee_grammar::mode::Mode> =
-        ron::de::from_str(crate::mode::MODES_CONFIG_STR)
-            .expect("mode configuration file is well formed");
-    zee_grammar::builder::fetch_and_build_tree_sitter_parsers(&mode_configs)
-}
-
 fn start_editor() -> Result<()> {
     let args = Args::parse();
-    let current_dir = env::current_dir()?;
-    if args.build {
-        logging::configure_for_cli(args.verbose)?;
-        return fetch_and_build_tree_sitter_parsers();
-    }
 
-    if args.enable_logging {
+    if args.initialise || args.build {
+        logging::configure_for_cli(args.verbose)?;
+    } else if args.enable_logging {
         logging::configure_for_editor()?;
     }
 
-    // Read the current settings. If we cannot for any reason, we'll use the
-    // default ones to ensure the editor opens in any environment.
-    let settings = args
-        .settings_path
-        .or_else(|| settings::settings_path().map(Some).unwrap_or(None))
-        .map_or_else(Default::default, settings::read_settings);
-
-    // Create a default settings file if requested by the user
-    if args.create_settings {
-        let settings_path = settings::settings_path()?;
-        if !settings_path.exists() {
-            settings::create_default_file(&settings_path)?;
+    // Create a default configuration file if requested by the user
+    if args.initialise {
+        let config_path = zee_grammar::config::config_dir()?.join("config.ron");
+        if !config_path.exists() {
+            config::create_default_config_file(&config_path)?;
+            log::info!(
+                "A default configuration file was created at `{}`",
+                config_path.display()
+            );
         } else {
             log::warn!(
                 "Default settings file won't be created; a file already exists `{}`",
-                settings_path.display()
+                config_path.display()
             );
         }
+    }
+
+    // Finds the editor configuration. If we cannot for any reason, we'll use the
+    // default ones to ensure the editor opens in any environment.
+    let editor_config = config::find_editor_config(args.config_dir);
+
+    // Download and build tree sitter parsers if requested
+    if args.build {
+        zee_grammar::builder::fetch_and_build_tree_sitter_parsers(
+            &editor_config.modes,
+            &crate::config::DEFAULT_CONFIG_DIR,
+        )?;
+    }
+
+    if args.build || args.initialise {
+        return Ok(());
     }
 
     // Instantiate the editor, open any files specified as arguments and start the UI loop
     zi_term::incremental()?.run_event_loop(Editor::with(EditorProperties {
         args_files: args.files,
-        current_working_dir: current_dir,
-        settings,
+        current_working_dir: env::current_dir()?,
+        config: editor_config,
         task_pool: TaskPool::new()?,
         clipboard: clipboard::create()?,
     }))?;

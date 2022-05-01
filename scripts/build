@@ -3,3 +3,4 @@
 set -ex
 
 cargo build --all-targets --all-features
+cargo run -- --init --build

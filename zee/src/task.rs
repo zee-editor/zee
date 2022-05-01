@@ -30,7 +30,7 @@ impl TaskPool {
                 MAX_NUMBER_OF_THREADS,
             ),
         );
-        log::info!("Creating a compute task pool with {} threads", num_threads);
+        log::debug!("Creating a compute task pool with {} threads", num_threads);
         Ok(Self {
             thread_pool: ThreadPoolBuilder::new().num_threads(num_threads).build()?,
             next_task_id: AtomicUsize::new(0),

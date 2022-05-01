@@ -1,6 +1,7 @@
 use std::cmp;
-use zee_edit::tree::{self, EditTree};
 use zi::{Canvas, Component, ComponentLink, Layout, Rect, ShouldRender, Style};
+
+use zee_edit::tree::{self, EditTree};
 
 use crate::versioned::WeakHandle;
 

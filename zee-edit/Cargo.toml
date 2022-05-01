@@ -1,6 +1,6 @@
 [package]
 name = "zee-edit"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Marius Cobzarenco <marius@reinfer.io>"]
 description = "Core text editing functionality for zee"
 homepage = "https://github.com/zee-editor/zee"
