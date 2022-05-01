@@ -1,6 +1,6 @@
 [package]
 name = "zee-grammar"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Marius Cobzarenco <marius@reinfer.io>"]
 description = "Wrappers for tree sitter grammars used by zee"
 homepage = "https://github.com/zee-editor/zee"
@@ -13,9 +13,10 @@ anyhow = "1.0.57"
 cc = { version = "1.0.73", features = ["parallel"] }
 colored = "2.0.0"
 dirs = "4.0.0"
+include_dir = "0.7.2"
 libloading = "0.7.3"
 log = "0.4.16"
-once_cell = "1.10.0"
+once_cell = { version = "1.10.0", features = ["parking_lot"] }
 rayon = "1.5.2"
 serde = "1.0.136"
 serde_derive = "1.0.136"

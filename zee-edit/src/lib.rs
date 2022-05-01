@@ -9,7 +9,7 @@ use std::{cmp, ops::Range};
 
 pub use self::{
     diff::{DeleteOperation, OpaqueDiff},
-    graphemes::{CharIndex, RopeExt, RopeGraphemes},
+    graphemes::{ByteIndex, CharIndex, LineIndex, RopeExt, RopeGraphemes},
     movement::Direction,
 };
 

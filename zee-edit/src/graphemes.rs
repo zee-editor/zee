@@ -4,7 +4,9 @@ use unicode_width::UnicodeWidthStr;
 
 use super::TAB_WIDTH;
 
+pub type ByteIndex = usize;
 pub type CharIndex = usize;
+pub type LineIndex = usize;
 
 pub fn width(slice: &RopeSlice) -> usize {
     rope_slice_as_str(slice, |text| {
@@ -23,6 +25,20 @@ pub fn rope_slice_as_str<T>(slice: &RopeSlice, closure: impl FnOnce(&str) -> T) 
     } else {
         let text = slice.chars().collect::<String>();
         closure(text.as_str())
+    }
+}
+
+pub struct RopeGrapheme<'a> {
+    pub slice: RopeSlice<'a>,
+    pub byte_start: usize,
+    pub byte_end: usize,
+}
+
+impl<'a> std::ops::Deref for RopeGrapheme<'a> {
+    type Target = RopeSlice<'a>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.slice
     }
 }
 
@@ -54,9 +70,9 @@ impl<'a> RopeGraphemes<'a> {
 }
 
 impl<'a> Iterator for RopeGraphemes<'a> {
-    type Item = RopeSlice<'a>;
+    type Item = RopeGrapheme<'a>;
 
-    fn next(&mut self) -> Option<RopeSlice<'a>> {
+    fn next(&mut self) -> Option<RopeGrapheme<'a>> {
         let byte_start = self.cursor.cur_cursor();
         let byte_end;
         loop {
@@ -88,17 +104,20 @@ impl<'a> Iterator for RopeGraphemes<'a> {
             }
         }
 
-        if byte_start < self.chunk_byte_start {
+        let slice = if byte_start < self.chunk_byte_start {
             let char_start = self.text.byte_to_char(byte_start);
             let char_end = self.text.byte_to_char(byte_end);
-
-            Some(self.text.slice(char_start..char_end))
+            self.text.slice(char_start..char_end)
         } else {
             let chunk_byte_start = byte_start - self.chunk_byte_start;
             let chunk_byte_end = byte_end - self.chunk_byte_start;
-
-            Some((&self.chunk[chunk_byte_start..chunk_byte_end]).into())
-        }
+            self.chunk[chunk_byte_start..chunk_byte_end].into()
+        };
+        Some(RopeGrapheme {
+            slice,
+            byte_start,
+            byte_end,
+        })
     }
 }
 

@@ -3,11 +3,13 @@ pub mod status_bar;
 pub mod textarea;
 
 use std::{borrow::Cow, iter, path::PathBuf};
-use zee_edit::{tree::EditTree, Direction};
 use zi::{
     components::text::{Text, TextAlign, TextProperties},
     prelude::*,
 };
+
+use zee_edit::{tree::EditTree, Direction};
+use zee_grammar::Mode;
 
 use self::{
     line_info::{LineInfo, Properties as LineInfoProperties},
@@ -22,7 +24,6 @@ use crate::{
         buffer::{BufferCursor, CursorMessage, ModifiedStatus, RepositoryRc},
         ContextHandle,
     },
-    mode::Mode,
     syntax::{highlight::Theme as SyntaxTheme, parse::ParseTree},
     versioned::WeakHandle,
 };
