@@ -1,8 +1,6 @@
 use anyhow::{Context, Result};
-use colored::{ColoredString, Colorize};
-use flexi_logger::{DeferredNow, FileSpec, Level, Logger, Record};
-use once_cell::sync::Lazy;
-use std::{io::Write, ops::Deref};
+use flexi_logger::{DeferredNow, FileSpec, Logger, Record};
+use std::io::Write;
 
 pub fn configure_for_editor() -> Result<()> {
     Logger::try_with_env_or_str("info")?
@@ -31,17 +29,5 @@ fn cli_format(
     _now: &mut DeferredNow,
     record: &Record<'_>,
 ) -> std::io::Result<()> {
-    let level = match record.level() {
-        Level::Debug => "",
-        Level::Info => "",
-        Level::Warn => LOG_PREFIX_WARN.deref(),
-        Level::Error => LOG_PREFIX_ERROR.deref(),
-        Level::Trace => LOG_PREFIX_TRACE.deref(),
-    };
-
-    write!(writer, "{}{}", level, record.args())
+    write!(writer, "{}", record.args())
 }
-
-pub static LOG_PREFIX_WARN: Lazy<ColoredString> = Lazy::new(|| "W ".yellow().bold());
-pub static LOG_PREFIX_ERROR: Lazy<ColoredString> = Lazy::new(|| "E ".red().bold());
-pub static LOG_PREFIX_TRACE: Lazy<ColoredString> = Lazy::new(|| "T ".normal());

@@ -4,24 +4,25 @@ use zee_edit::{CharIndex, Cursor};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Theme {
-    pub text: Style,
-    pub text_current_line: Style,
     pub cursor_focused: Style,
     pub cursor_unfocused: Style,
     pub selection_background: Background,
-    pub code_invalid: Style,
-    pub code_constant: Style,
-    pub code_keyword: Style,
-    pub code_keyword_light: Style,
-    pub code_string: Style,
+    pub text: Style,
+    pub text_current_line: Style,
     pub code_char: Style,
-    pub code_operator: Style,
-    pub code_macro_call: Style,
-    pub code_function_call: Style,
     pub code_comment: Style,
     pub code_comment_doc: Style,
+    pub code_constant: Style,
+    pub code_function_call: Style,
+    pub code_invalid: Style,
+    pub code_keyword: Style,
+    pub code_keyword_light: Style,
     pub code_link: Style,
+    pub code_macro_call: Style,
+    pub code_operator: Style,
+    pub code_string: Style,
     pub code_type: Style,
+    pub code_variant: Style,
 }
 
 #[inline]
@@ -34,63 +35,49 @@ pub fn text_style_at_char(
     scope: &str,
     is_error: bool,
 ) -> Style {
-    let style = if is_error {
-        theme.code_invalid
-    } else if scope.starts_with("constant") {
-        theme.code_constant
-    } else if scope.starts_with("string.quoted.double.dictionary.key.json")
-        || scope.starts_with("support.property-name")
-    {
-        theme.code_keyword_light
-    } else if scope.starts_with("string.quoted.double") {
-        theme.code_string
-    } else if scope.starts_with("string.quoted.single") {
-        theme.code_char
-    } else if scope.starts_with("string") {
-        theme.code_string
-    } else if scope.starts_with("keyword.operator") {
-        theme.code_operator
-    } else if scope.starts_with("storage")
-        || scope.starts_with("keyword")
-        || scope.starts_with("tag_name")
-        || scope.ends_with("variable.self")
-    {
-        theme.code_keyword
-    } else if scope.starts_with("variable.parameter.function")
-        || scope.starts_with("identifier")
-        || scope.starts_with("field_identifier")
-    {
-        theme.code_keyword_light
-    } else if scope.starts_with("entity.name.enum")
-        || scope.starts_with("support")
-        || scope.starts_with("primitive_type")
-    {
-        theme.code_type
-    } else if scope.starts_with("entity.attribute.name.punctuation") {
-        theme.code_comment
-    } else if scope.starts_with("entity.name.macro.call")
-        || scope.starts_with("entity.attribute.name")
-        || scope.starts_with("entity.name.lifetime")
-    {
-        theme.code_macro_call
-    } else if scope.starts_with("entity.name.function") {
-        theme.code_function_call
-    } else if scope.starts_with("comment.block.line.docstr") {
-        theme.code_comment_doc
-    } else if scope.starts_with("comment") {
-        theme.code_comment
-    } else if ["<", ">", "/>", "</", "misc.other"]
-        .iter()
-        .any(|tag| scope.starts_with(tag))
-    {
-        theme.code_operator
-    } else if scope.starts_with("markup.underline.link") {
-        theme.code_link
-    } else {
-        theme.text
+    let starts = |pattern| scope.starts_with(pattern);
+
+    let style = match () {
+        _ if is_error => theme.code_invalid,
+        _ if scope.is_empty() => theme.text,
+        _ if starts("error") => theme.code_invalid,
+        _ if starts("attribute") => theme.code_macro_call,
+        _ if starts("comment") => theme.code_comment,
+        _ if starts("constructor") => theme.code_variant,
+        // Constants
+        _ if starts("constant.character") => theme.code_char,
+        _ if starts("constant.numeric") => theme.code_string,
+        _ if starts("constant") => theme.code_constant,
+        _ if starts("string") => theme.code_string,
+        // Functions
+        _ if starts("function.macro") => theme.code_macro_call,
+        _ if starts("function") => theme.code_function_call,
+        _ if starts("keyword.control.import") => theme.code_keyword,
+        _ if starts("keyword") => theme.code_keyword,
+        _ if starts("operator") => theme.code_operator,
+        _ if starts("property") => theme.code_function_call,
+        _ if starts("punctuation.bracket") => theme.code_operator,
+        _ if starts("punctuation.delimiter") => theme.code_operator,
+        _ if starts("punctuation.special") => theme.code_operator,
+        _ if starts("punctuation") => theme.text,
+        _ if starts("special") => theme.code_operator,
+        _ if starts("table.name") => theme.code_keyword_light,
+        // Types
+        _ if starts("type.variant") => theme.code_variant,
+        _ if starts("type") => theme.code_type,
+        // Text
+        _ if starts("tag") => theme.code_function_call,
+        _ if starts("text.title") => theme.code_keyword,
+        _ if starts("text.emphasis") => theme.code_keyword_light,
+        _ if starts("text.strong") => theme.code_keyword,
+        _ if starts("text.literal") => theme.code_string,
+        _ if starts("text.uri") => theme.code_operator,
+
+        _ => theme.text,
     };
 
     if char_index == cursor.range().start || cursor.range().contains(&char_index) {
+        log::info!("scope: {}", scope);
         let cursor_style = if focused {
             theme.cursor_focused
         } else {

@@ -7,16 +7,18 @@ use std::{
     path::{Path, PathBuf},
     rc::Rc,
 };
+use zi::ComponentLink;
+
 use zee_edit::{
     graphemes::strip_trailing_whitespace, movement, tree::EditTree, Cursor, Direction, OpaqueDiff,
     TAB_WIDTH,
 };
-use zi::ComponentLink;
+use zee_grammar::Mode;
 
 use super::{ContextHandle, Editor};
 use crate::{
+    config::PLAIN_TEXT_MODE,
     error::Result,
-    mode::{self, Mode, PLAIN_TEXT_MODE},
     syntax::parse::{ParseTree, ParserPool, ParserStatus},
     versioned::{Versioned, WeakHandle},
 };
@@ -173,7 +175,7 @@ impl Buffer {
     ) -> Self {
         let mode = file_path
             .as_ref()
-            .map(|path| mode::find_by_filename(&path))
+            .map(|path| context.0.mode_by_filename(path))
             .unwrap_or(&PLAIN_TEXT_MODE);
 
         let mut parser = mode.language().map(ParserPool::new);
@@ -290,6 +292,10 @@ impl Buffer {
                 let parsed = status.unwrap();
                 if let Some(parser) = self.parser.as_mut() {
                     parser.handle_parse_syntax_done(version, parsed);
+
+                    // parser.tree.as_ref().map(|tree| {
+                    //     log::info!("{}", tree.walk().node().to_sexp());
+                    // });
                 }
             }
             BufferMessage::CursorMessage { cursor_id, message } => {

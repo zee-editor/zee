@@ -1,17 +1,14 @@
 use ropey::Rope;
-use smallstr::SmallString;
-use smallvec::SmallVec;
 use std::{
     fmt,
-    ops::{Deref, DerefMut, Range},
+    ops::{Deref, DerefMut},
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
     },
 };
 use tree_sitter::{
-    InputEdit as TreeSitterInputEdit, Language, Node, Parser, Point as TreeSitterPoint, Tree,
-    TreeCursor,
+    InputEdit as TreeSitterInputEdit, Language, Parser, Point as TreeSitterPoint, Tree,
 };
 use zee_edit::OpaqueDiff;
 
@@ -45,16 +42,6 @@ pub struct ParsedSyntax {
 pub struct ParseTree {
     pub version: usize,
     pub tree: Tree,
-}
-
-impl ParseTree {
-    pub fn cursor(&self) -> SyntaxCursor {
-        let root_node = self.tree.root_node();
-        SyntaxCursor {
-            cursor: root_node.walk(),
-            root: root_node,
-        }
-    }
 }
 
 impl Deref for ParseTree {
@@ -194,76 +181,6 @@ impl ParserPool {
             }
             _ => {}
         }
-    }
-}
-
-pub struct NodeTrace<T> {
-    pub path: Vec<SmallString<[u8; 8]>>,
-    pub nth_children: SmallVec<[u16; 32]>,
-    pub trace: SmallVec<[T; 32]>,
-    pub is_error: bool,
-    pub byte_range: Range<usize>,
-}
-
-impl<T> NodeTrace<T> {
-    pub fn new() -> Self {
-        Self {
-            path: Vec::new(),
-            nth_children: SmallVec::new(),
-            trace: SmallVec::new(),
-            is_error: false,
-            byte_range: 0..0,
-        }
-    }
-
-    pub fn clear(&mut self) {
-        self.path.clear();
-        self.nth_children.clear();
-        self.trace.clear();
-        self.is_error = false;
-        self.byte_range = 0..0;
-    }
-}
-
-pub struct SyntaxCursor<'a> {
-    root: Node<'a>,
-    cursor: TreeCursor<'a>,
-}
-
-impl<'a> SyntaxCursor<'a> {
-    #[inline]
-    pub fn trace_at<T>(
-        &mut self,
-        trace: &mut NodeTrace<T>,
-        byte_index: usize,
-        map_node: impl Fn(&Node<'a>) -> T,
-    ) {
-        // if trace.byte_range.contains(&byte_index) {
-        //     return;
-        // }
-
-        self.cursor.reset(self.root);
-        trace.clear();
-
-        trace.is_error = trace.is_error || self.cursor.node().is_error();
-        trace.path.push(self.cursor.node().kind().into());
-        trace.trace.push(map_node(&self.cursor.node()));
-        trace.nth_children.push(0);
-
-        // Add 1 to `byte_index` as `goto_first_child_for_byte` finds the first
-        // child node whose end byte is greater than or equal to the given byte
-        // offset.
-        while let Some(nth_child) = self.cursor.goto_first_child_for_byte(byte_index + 1) {
-            trace.is_error = trace.is_error || self.cursor.node().is_error();
-            trace.path.push(self.cursor.node().kind().into());
-            trace.trace.push(map_node(&self.cursor.node()));
-            trace.nth_children.push(nth_child as u16);
-        }
-        trace.trace.reverse();
-        trace.nth_children.reverse();
-
-        let node = self.cursor.node();
-        trace.byte_range = node.start_byte()..node.end_byte();
     }
 }
 

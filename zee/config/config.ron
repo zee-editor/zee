@@ -1,0 +1,396 @@
+(
+    theme_index: 0,
+
+    // Modes and tree sitter parsers
+    modes: [
+        // C
+        Mode(
+            name: "C",
+            scope: "source.c",
+            injection_regex: "c",
+            patterns: [Suffix(".c"), Suffix(".h")],
+            comment: Some(Comment(token: "// ")),
+            indentation: Indentation(
+                width: 4,
+                unit: Space,
+            ),
+            grammar: Some(
+                Grammar(
+                    id: "c",
+                    source: Git(
+                        git: "https://github.com/tree-sitter/tree-sitter-c",
+                        rev: "f05e279aedde06a25801c3f2b2cc8ac17fac52ae",
+                    ),
+                )
+            ),
+        ),
+        // C++
+        Mode(
+            name: "C++",
+            scope: "source.cpp",
+            injection_regex: "cpp",
+            patterns: [
+                Suffix(".cpp"),
+                Suffix(".cc"),
+                Suffix(".cp"),
+                Suffix(".cxx"),
+                Suffix(".c++"),
+                Suffix(".C"),
+                Suffix(".h"),
+                Suffix(".hh"),
+                Suffix(".hpp"),
+                Suffix(".hxx"),
+                Suffix(".h++"),
+                Suffix(".inl"),
+                Suffix(".ipp"),
+            ],
+            comment: Some(Comment(token: "// ")),
+            indentation: Indentation(
+                width: 4,
+                unit: Space,
+            ),
+            grammar: Some(
+                Grammar(
+                    id: "cpp",
+                    source: Git(
+                        git: "https://github.com/tree-sitter/tree-sitter-cpp",
+                        rev: "c61212414a3e95b5f7507f98e83de1d638044adc",
+                    ),
+                )
+            ),
+        ),
+        // CSS
+        Mode(
+            name: "CSS",
+            scope: "source.css",
+            injection_regex: "css",
+            patterns: [Suffix(".css")],
+            indentation: Indentation(
+                width: 4,
+                unit: Space,
+            ),
+            grammar: Some(
+                Grammar(
+                    id: "css",
+                    source: Git(
+                        git: "https://github.com/tree-sitter/tree-sitter-css",
+                        rev: "94e10230939e702b4fa3fa2cb5c3bc7173b95d07",
+                    ),
+                )
+            ),
+        ),
+        // Dockerfiles
+        Mode(
+            name: "Dockerfile",
+            scope: "source.dockerfile",
+            injection_regex: "docker|dockerfile",
+            patterns: [
+                Name("Dockerfile"),
+                Name("dockerfile"),
+            ],
+            comment: Some(Comment(token: "# ")),
+            indentation: Indentation(
+                width: 4,
+                unit: Space,
+            ),
+            grammar: None,
+        ),
+        // HTML
+        Mode(
+            name: "HTML",
+            scope: "text.html.basic",
+            injection_regex: "html",
+            patterns: [
+                Suffix(".html"),
+                Suffix(".htm"),
+                Suffix(".xhtml"),
+                Suffix(".shtml"),
+            ],
+            comment: None,
+            indentation: Indentation(
+                width: 2,
+                unit: Space,
+            ),
+            grammar: Some(
+                Grammar(
+                    id: "html",
+                    source: Git(
+                        git: "https://github.com/tree-sitter/tree-sitter-html",
+                        rev: "d93af487cc75120c89257195e6be46c999c6ba18",
+                    ),
+                )
+            ),
+        ),
+        // Javascript
+        Mode(
+            name: "Javascript",
+            scope: "source.js",
+            injection_regex: "^(js|javascript)$",
+            patterns: [
+                Suffix(".js"),
+            ],
+            comment: Some(Comment(token: "// ")),
+            indentation: Indentation(
+                width: 4,
+                unit: Space,
+            ),
+            grammar: Some(
+                Grammar(
+                    id: "javascript",
+                    source: Git(
+                        git: "https://github.com/tree-sitter/tree-sitter-javascript",
+                        rev: "a263a8f53266f8f0e47e21598e488f0ef365a085",
+                    ),
+                )
+            ),
+        ),
+        // JSON
+        Mode(
+            name: "JSON",
+            scope: "source.json",
+            injection_regex: "json",
+            patterns: [
+                Suffix(".json"),
+                Suffix(".jsonl"),
+            ],
+            comment: None,
+            indentation: Indentation(
+                width: 4,
+                unit: Space,
+            ),
+            grammar: Some(
+                Grammar(
+                    id: "json",
+                    source: Git(
+                        git: "https://github.com/tree-sitter/tree-sitter-json",
+                        rev: "137e1ce6a02698fc246cdb9c6b886ed1de9a1ed8",
+                    ),
+                )
+            ),
+        ),
+        // Markdown
+        Mode(
+            name: "Markdown",
+            scope: "source.md",
+            injection_regex: "md|markdown",
+            patterns: [
+                Suffix(".md"),
+            ],
+            comment: None,
+            indentation: Indentation(
+                width: 2,
+                unit: Space,
+            ),
+            grammar: Some(
+                Grammar(
+                    id: "markdown",
+                    source: Git(
+                        git: "https://github.com/MDeiml/tree-sitter-markdown",
+                        rev: "d24196f9b3e5af6fcb2ec2a0b6cbc5c06f58b85e",
+                    ),
+                )
+            ),
+        ),
+        // Python
+        Mode(
+            name: "Python",
+            scope: "source.python",
+            injection_regex: "python",
+            patterns: [
+                Suffix(".py"),
+                Suffix(".py3"),
+                Suffix(".py2"),
+                Suffix(".pyi"),
+                Suffix(".pyx"),
+                Suffix(".pyx.in"),
+                Suffix(".pxd"),
+                Suffix(".pxd.in"),
+                Suffix(".pxi"),
+                Suffix(".pxi.in"),
+                Suffix(".rpy"),
+                Suffix(".cpy"),
+            ],
+            comment: Some(Comment(token: "# ")),
+            indentation: Indentation(
+                width: 4,
+                unit: Space,
+            ),
+            grammar: Some(
+                Grammar(
+                    id: "python",
+                    source: Git(
+                        git: "https://github.com/tree-sitter/tree-sitter-python",
+                        rev: "d6210ceab11e8d812d4ab59c07c81458ec6e5184",
+                    ),
+                )
+            ),
+        ),
+        // Rust
+        Mode(
+            name: "Rust",
+            scope: "source.rust",
+            injection_regex: "rust",
+            patterns: [Suffix(".rs")],
+            comment: Some(Comment(token: "// ")),
+            indentation: Indentation(
+                width: 4,
+                unit: Space,
+            ),
+            grammar: Some(
+                Grammar(
+                    id: "rust",
+                    source: Git(
+                        git: "https://github.com/tree-sitter/tree-sitter-rust",
+                        rev: "0509e440ae042db6483984b3a56b3c5f24b5d9b9",
+                    ),
+                )
+            ),
+        ),
+        // TOML
+        Mode(
+            name: "Toml",
+            scope: "source.toml",
+            injection_regex: "toml",
+            patterns: [Suffix(".toml")],
+            comment: Some(Comment(token: "# ")),
+            indentation: Indentation(
+                width: 2,
+                unit: Space,
+            ),
+            grammar: Some(
+                Grammar(
+                    id: "toml",
+                    source: Git(
+                        git: "https://github.com/ikatyang/tree-sitter-toml.git",
+                        rev: "8bd2056818b21860e3d756b5a58c4f6e05fb744e",
+                    ),
+                )
+            ),
+        ),
+        // Tree sitter queries
+        Mode(
+            name: "tsq",
+            scope: "source.tsq",
+            injection_regex: "tsq",
+            patterns: [Suffix(".scm")],
+            comment: Some(Comment(token: "; ")),
+            indentation: Indentation(
+                width: 2,
+                unit: Space,
+            ),
+            grammar: Some(
+                Grammar(
+                    id: "tsq",
+                    source: Git(
+                        git: "https://github.com/tree-sitter/tree-sitter-tsq",
+                        rev: "b665659d3238e6036e22ed0e24935e60efb39415",
+                    ),
+                )
+            ),
+        ),
+        // Typescript
+        Mode(
+            name: "Typescript",
+            scope: "source.ts",
+            injection_regex: "^(ts|typescript)$",
+            patterns: [
+                Suffix(".ts"),
+            ],
+            comment: Some(Comment(token: "// ")),
+            indentation: Indentation(
+                width: 4,
+                unit: Space,
+            ),
+            grammar: Some(
+                Grammar(
+                    id: "typescript",
+                    source: Git(
+                        git: "https://github.com/tree-sitter/tree-sitter-typescript",
+                        rev: "4c20b54771e4b390ee058af2930feb2cd55f2bf8",
+                        path: Some("typescript"),
+                    ),
+                )
+            ),
+        ),
+        // Typescript with JSX tags, i.e. TSX
+        Mode(
+            name: "Typescript TSX",
+            scope: "source.tsx",
+            injection_regex: "tsx",
+            patterns: [
+                Suffix(".tsx"),
+            ],
+            comment: Some(Comment(token: "// ")),
+            indentation: Indentation(
+                width: 4,
+                unit: Space,
+            ),
+            grammar: Some(
+                Grammar(
+                    id: "tsx",
+                    source: Git(
+                        git: "https://github.com/tree-sitter/tree-sitter-typescript",
+                        rev: "4c20b54771e4b390ee058af2930feb2cd55f2bf8",
+                        path: Some("tsx"),
+                    ),
+                )
+            ),
+        ),
+        // Shell scripts
+        Mode(
+            name: "Shell Script",
+            scope: "source.bash",
+            injection_regex: "bash",
+            patterns: [
+                Suffix(".sh"),
+                Suffix(".bash"),
+                Suffix(".zsh"),
+                Name(".bash_login"),
+                Name(".bash_logout"),
+                Name(".bash_profile"),
+                Name(".bashrc"),
+                Name(".profile"),
+                Name(".zshenv"),
+                Name(".zlogin"),
+                Name(".zlogout"),
+                Name(".zprofile"),
+                Name(".zshrc"),
+            ],
+            comment: Some(Comment(token: "# ")),
+            indentation: Indentation(
+                width: 2,
+                unit: Space,
+            ),
+            grammar: Some(
+                Grammar(
+                    id: "bash",
+                    source: Git(
+                        git: "https://github.com/tree-sitter/tree-sitter-bash",
+                        rev: "a8eb5cb57c66f74c63ab950de081207cccf52017",
+                    ),
+                )
+            ),
+        ),
+        // WebGPU shading language
+        Mode(
+            name: "wgsl",
+            scope: "source.wgsl",
+            injection_regex: "wgsl",
+            patterns: [Suffix(".wgsl")],
+            comment: Some(Comment(token: "// ")),
+            indentation: Indentation(
+                width: 4,
+                unit: Space,
+            ),
+            grammar: Some(
+                Grammar(
+                    id: "wgsl",
+                    source: Git(
+                        git: "https://github.com/szebniok/tree-sitter-wgsl.git",
+                        rev: "5ca98b174f7dddf69fb7a80c54d49badd1f1f8c4",
+                    ),
+                )
+            ),
+        ),
+    ]
+)
