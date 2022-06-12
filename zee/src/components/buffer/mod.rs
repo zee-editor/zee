@@ -19,7 +19,7 @@ use super::edit_tree_viewer::{
 };
 use crate::{
     editor::{
-        buffer::{BufferCursor, CursorMessage, ModifiedStatus, RepositoryRc, DISABLE_TABS},
+        buffer::{BufferCursor, CursorMessage, ModifiedStatus, RepositoryRc},
         ContextHandle,
     },
     mode::Mode,
