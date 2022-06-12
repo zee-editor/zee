@@ -427,9 +427,7 @@ impl Component for Buffer {
 
         // Insert tab
         bindings.add("insert-tab", [Char('\t')], |this: &Self| {
-            if DISABLE_TABS {
-                this.properties.cursor.insert_tab()
-            }
+            this.properties.cursor.insert_tab()
         });
 
         // Insert character
