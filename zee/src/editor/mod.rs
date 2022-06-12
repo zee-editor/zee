@@ -218,7 +218,13 @@ impl Component for Editor {
             }
         }
 
-        let theme_index = properties.settings.theme_index;
+        let mut theme_index = 0;
+        for (i, (_, name)) in THEMES.iter().enumerate() {
+            if *name == properties.settings.theme_name {
+                theme_index = i;
+                break;
+            }
+        }
 
         let context = ContextHandle(
             Context {
