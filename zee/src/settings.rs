@@ -10,7 +10,7 @@ use crate::error::{Context, Result};
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Settings {
-    pub theme_index: usize,
+    pub theme_name: String,
 }
 
 pub fn settings_path() -> Result<PathBuf> {
