@@ -217,6 +217,9 @@ impl Component for Editor {
                 link.send(Message::SplitWindow(FlexDirection::Row));
             }
         }
+
+        let theme_index = properties.settings.theme_index;
+
         let context = ContextHandle(
             Context {
                 args_files: properties.args_files,
@@ -231,7 +234,7 @@ impl Component for Editor {
 
         Self {
             themes: &THEMES,
-            theme_index: 0,
+            theme_index,
             prompt_action: PromptAction::None,
             prompt_height: PROMPT_INACTIVE_HEIGHT,
             buffers: Buffers::new(context.clone()),
