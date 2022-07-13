@@ -19,7 +19,7 @@ use super::edit_tree_viewer::{
 };
 use crate::{
     editor::{
-        buffer::{BufferCursor, CursorMessage, ModifiedStatus, RepositoryRc, DISABLE_TABS},
+        buffer::{BufferCursor, CursorMessage, ModifiedStatus, RepositoryRc},
         ContextHandle,
     },
     mode::Mode,
@@ -427,9 +427,7 @@ impl Component for Buffer {
 
         // Insert tab
         bindings.add("insert-tab", [Char('\t')], |this: &Self| {
-            if DISABLE_TABS {
-                this.properties.cursor.insert_tab()
-            }
+            this.properties.cursor.insert_tab()
         });
 
         // Insert character
