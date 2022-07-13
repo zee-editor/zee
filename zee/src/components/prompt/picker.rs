@@ -144,24 +144,27 @@ impl Component for FilePicker {
     fn update(&mut self, message: Message) -> ShouldRender {
         let initial_height = self.height();
         let input_changed = match message {
-            Message::OpenFile => {
-                if let Some(path) = self.listing.selected(self.selected_index) {
-                    if path.is_dir() {
-                        self.input = path.to_string_lossy().into();
-                        ensure_trailing_newline_with_content(&mut self.input);
-                        self.cursor.move_to_end_of_line(&self.input);
-                        self.cursor.insert_char(&mut self.input, '/');
-                        self.cursor.move_right(&self.input);
-                        self.selected_index = 0;
-                        true
-                    } else {
-                        self.properties.on_open.emit(path.to_path_buf());
-                        false
-                    }
-                } else {
+            Message::OpenFile => match self.listing.selected(self.selected_index) {
+                Some(path) if path.is_dir() => {
+                    self.input = path.to_string_lossy().into();
+                    ensure_trailing_newline_with_content(&mut self.input);
+                    self.cursor.move_to_end_of_line(&self.input);
+                    self.cursor.insert_char(&mut self.input, '/');
+                    self.cursor.move_right(&self.input);
+                    self.selected_index = 0;
+                    true
+                }
+                Some(path) => {
+                    self.properties.on_open.emit(path.to_path_buf());
                     false
                 }
-            }
+                None => {
+                    let path_str: Cow<str> = self.input.slice(..).into();
+                    let path = PathBuf::from(path_str.trim());
+                    self.properties.on_open.emit(path);
+                    false
+                }
+            },
             Message::SelectParentDirectory => {
                 let path_str: String = self.input.slice(..).into();
                 self.input = Path::new(&path_str.trim())
