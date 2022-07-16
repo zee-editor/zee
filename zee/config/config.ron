@@ -192,6 +192,27 @@
                 )
             ),
         ),
+        // Protobuf
+        Mode(
+            name: "Protobuf",
+            scope: "source.proto",
+            injection_regex: "protobuf",
+            patterns: [Suffix(".proto")],
+            comment: Some(Comment(token: "// ")),
+            indentation: Indentation(
+                width: 2,
+                unit: Space,
+            ),
+            grammar: Some(
+                Grammar(
+                    id: "protobuf",
+                    source: Git(
+                        git: "https://github.com/yusdacra/tree-sitter-protobuf",
+                        rev: "5aef38d655f76a6b0d172340eed3766c93b3124c",
+                    ),
+                )
+            ),
+        ),
         // Python
         Mode(
             name: "Python",
@@ -227,6 +248,48 @@
                 )
             ),
         ),
+        // Regex
+        Mode(
+            name: "Regex",
+            scope: "source.regex",
+            injection_regex: "regex",
+            patterns: [Suffix(".regex")],
+            comment: None,
+            indentation: Indentation(
+                width: 4,
+                unit: Space,
+            ),
+            grammar: Some(
+                Grammar(
+                    id: "regex",
+                    source: Git(
+                        git: "https://github.com/tree-sitter/tree-sitter-regex",
+                        rev: "e1cfca3c79896ff79842f057ea13e529b66af636",
+                    ),
+                )
+            ),
+        ),
+        // Rusty Object Notation (RON)
+        Mode(
+            name: "RON",
+            scope: "source.ron",
+            injection_regex: "ron",
+            patterns: [Suffix(".ron")],
+            comment: Some(Comment(token: "// ")),
+            indentation: Indentation(
+                width: 4,
+                unit: Space,
+            ),
+            grammar: Some(
+                Grammar(
+                    id: "ron",
+                    source: Git(
+                        git: "https://github.com/zee-editor/tree-sitter-ron",
+                        rev: "7762d709a0f7c1f9e269d0125a2e8a7a69006146",
+                    ),
+                )
+            ),
+        ),
         // Rust
         Mode(
             name: "Rust",
@@ -242,8 +305,8 @@
                 Grammar(
                     id: "rust",
                     source: Git(
-                        git: "https://github.com/tree-sitter/tree-sitter-rust",
-                        rev: "0509e440ae042db6483984b3a56b3c5f24b5d9b9",
+                        git: "https://github.com/zee-editor/tree-sitter-rust",
+                        rev: "6bddb3e54b186593f417e2b14f6602d55e0329b8",
                     ),
                 )
             ),

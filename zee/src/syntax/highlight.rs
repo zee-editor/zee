@@ -42,11 +42,12 @@ pub fn text_style_at_char(
         _ if scope.is_empty() => theme.text,
         _ if starts("error") => theme.code_invalid,
         _ if starts("attribute") => theme.code_macro_call,
+        _ if starts("comment.block") => theme.code_comment_doc,
         _ if starts("comment") => theme.code_comment,
         _ if starts("constructor") => theme.code_variant,
         // Constants
         _ if starts("constant.character") => theme.code_char,
-        _ if starts("constant.numeric") => theme.code_string,
+        _ if starts("constant.numeric") => theme.code_function_call,
         _ if starts("constant") => theme.code_constant,
         _ if starts("string") => theme.code_string,
         // Functions

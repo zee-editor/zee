@@ -233,6 +233,12 @@ impl Component for Editor {
                 link.send(Message::SplitWindow(FlexDirection::Row));
             }
         }
+
+        let theme_index = THEMES
+            .iter()
+            .position(|(_, name)| *name == properties.config.theme_name)
+            .unwrap_or(0);
+
         let context = ContextHandle(Box::leak(
             Context {
                 args_files: properties.args_files,
@@ -254,7 +260,7 @@ impl Component for Editor {
 
         Self {
             themes: &THEMES,
-            theme_index: 0,
+            theme_index,
             prompt_action: PromptAction::None,
             prompt_height: PROMPT_INACTIVE_HEIGHT,
             buffers: Buffers::new(context.clone()),
@@ -264,7 +270,6 @@ impl Component for Editor {
     }
 
     fn update(&mut self, message: Self::Message) -> ShouldRender {
-        log::info!("{:?}", message);
         match message {
             Message::Cancel => {
                 self.prompt_action = PromptAction::None;

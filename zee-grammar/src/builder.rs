@@ -102,11 +102,17 @@ pub fn fetch_and_build_tree_sitter_parsers(
 ) -> Result<()> {
     mode_configs.into_par_iter().try_for_each(|config| {
         if let Some(ref grammar) = config.grammar {
-            fetch_grammar(grammar)?;
-            build_grammar(grammar, defaults)?;
+            let fetched = fetch_grammar(grammar)?;
+            let built = build_grammar(grammar, defaults)?;
             log::info!(
                 "{:>12} {} grammar {}",
-                "Up to date".bold().bright_green(),
+                if fetched || built {
+                    "Installed"
+                } else {
+                    "Up to date"
+                }
+                .bold()
+                .bright_green(),
                 grammar.grammar_id.bold().bright_blue(),
                 "✅".green().dimmed(),
             );
@@ -125,10 +131,7 @@ fn fetch_grammar(grammar: &GrammarConfig) -> Result<bool> {
         _ => return Ok(false),
     };
 
-    let grammar_dir = config::config_dir()?
-        .join(BUILD_DIR)
-        .join(&grammar.grammar_id);
-
+    let grammar_dir = tree_sitter_source_dir(&grammar.grammar_id)?;
     std::fs::create_dir_all(&grammar_dir).context(format!(
         "Could not create grammar directory {:?}",
         grammar_dir
@@ -174,9 +177,7 @@ fn build_grammar(grammar: &GrammarConfig, defaults: &Dir) -> Result<bool> {
         GrammarSource::Git {
             path: ref subpath, ..
         } => (
-            config::config_dir()?
-                .join(BUILD_DIR)
-                .join(&grammar.grammar_id),
+            tree_sitter_source_dir(&grammar.grammar_id)?,
             subpath.clone(),
         ),
     };
@@ -346,6 +347,12 @@ impl TreeSitterPaths {
         }
         Ok(false)
     }
+}
+
+fn tree_sitter_source_dir(grammar_id: &str) -> Result<PathBuf> {
+    Ok(config::config_dir()?
+        .join(BUILD_DIR)
+        .join(&format!("tree-sitter-{}", grammar_id)))
 }
 
 fn tree_sitter_query_dir(grammar_id: &str) -> Result<PathBuf> {

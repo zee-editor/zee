@@ -9,7 +9,7 @@ use crate::error::{Context, Result};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct EditorConfig {
-    pub theme_index: usize,
+    pub theme_name: String,
     pub modes: Vec<ModeConfig>,
 }
 

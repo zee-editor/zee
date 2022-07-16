@@ -42,6 +42,7 @@ impl Mode {
             .and_then(|captures| self.shebangs.contains(&captures[1].into()).then(|| 0))
             .is_some()
     }
+
 }
 
 impl Default for Mode {

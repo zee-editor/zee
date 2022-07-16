@@ -10,6 +10,7 @@ use std::{
 use tree_sitter::{
     InputEdit as TreeSitterInputEdit, Language, Parser, Point as TreeSitterPoint, Tree,
 };
+
 use zee_edit::OpaqueDiff;
 
 use crate::{
@@ -212,7 +213,7 @@ impl CancelableParser {
         // Parser. The call here is safe as Rust guarantees that struct fields
         // are dropped in the same order as they are declared.
         //
-        // N.B. the parser cannot be running at the time when the struct is
+        // SAFETY: The parser cannot be running at the time when the struct is
         // destroyed, so it can't be polling the flag. It still holds a pointer
         // to the flag and it'd technically be UB if the flag was dropped first.
         let flag = CancelFlag(Arc::new(AtomicUsize::new(CANCEL_FLAG_UNSET)));

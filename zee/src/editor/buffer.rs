@@ -380,14 +380,18 @@ impl Buffer {
                 CursorMessage::CopySelection => self.copy_selection_to_clipboard(cursor_id),
                 CursorMessage::CutSelection => self.cut_selection_to_clipboard(cursor_id),
                 CursorMessage::InsertTab => {
-                    let tab = if DISABLE_TABS { ' ' } else { '\t' };
+                    let (tab, char_count) = if DISABLE_TABS {
+                        (' ', TAB_WIDTH)
+                    } else {
+                        ('\t', 1)
+                    };
                     let diff = self.cursors[cursor_id.0]
-                        .insert_chars(&mut self.content, std::iter::repeat(tab).take(TAB_WIDTH));
+                        .insert_chars(&mut self.content, std::iter::repeat(tab).take(char_count));
                     movement::move_horizontally(
                         &self.content,
                         &mut self.cursors[cursor_id.0],
                         Direction::Forward,
-                        TAB_WIDTH,
+                        char_count,
                     );
                     diff
                 }

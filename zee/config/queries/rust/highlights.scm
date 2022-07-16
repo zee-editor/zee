@@ -25,10 +25,13 @@
   (string_literal)
   (raw_string_literal)
 ] @string
+
 [
-  (line_comment)
-  (block_comment)
-] @comment
+ (block_comment)
+] @comment.block
+[
+ (line_comment)
+] @comment.line
 
 ; ---
 ; Extraneous
@@ -88,8 +91,8 @@
     ((tuple_pattern
       (identifier) @variable))
   ])
-  
-; It needs to be anonymous to not conflict with `call_expression` further below. 
+
+; It needs to be anonymous to not conflict with `call_expression` further below.
 (_
  value: (field_expression
   value: (identifier)? @variable
@@ -201,7 +204,7 @@
 (tuple_struct_pattern
     type: [
       ((identifier) @constructor)
-      (scoped_identifier  
+      (scoped_identifier
         name: (identifier) @constructor)
       ])
 (struct_pattern
