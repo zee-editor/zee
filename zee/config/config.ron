@@ -129,6 +129,7 @@
             patterns: [
                 Suffix(".js"),
             ],
+            shebangs: ["node"],
             comment: Some(Comment(token: "// ")),
             indentation: Indentation(
                 width: 4,
@@ -210,6 +211,7 @@
                 Suffix(".rpy"),
                 Suffix(".cpy"),
             ],
+            shebangs: ["python"],
             comment: Some(Comment(token: "# ")),
             indentation: Indentation(
                 width: 4,
@@ -356,6 +358,7 @@
                 Name(".zprofile"),
                 Name(".zshrc"),
             ],
+            shebangs: ["sh", "bash", "dash"],
             comment: Some(Comment(token: "# ")),
             indentation: Indentation(
                 width: 2,

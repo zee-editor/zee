@@ -3,10 +3,15 @@ pub mod config;
 
 mod git;
 
+use once_cell::sync::Lazy;
+use regex::Regex;
 use std::path::Path;
 use tree_sitter::{Language, Query};
 
 use self::config::{CommentConfig, FilenamePattern, IndentationConfig};
+
+static SHEBANG_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^#!\s*(?:\S*[/\\](?:env\s+(?:\-\S+\s+)*)?)?([^\s\.\d]+)").unwrap());
 
 #[derive(Debug)]
 pub struct Mode {
@@ -14,6 +19,7 @@ pub struct Mode {
     pub scope: String,
     pub injection_regex: String,
     pub patterns: Vec<FilenamePattern>,
+    pub shebangs: Vec<String>,
     pub comment: Option<CommentConfig>,
     pub indentation: IndentationConfig,
     pub grammar: Option<Grammar>,
@@ -29,6 +35,13 @@ impl Mode {
             .iter()
             .any(|pattern| pattern.matches(filename.as_ref()))
     }
+
+    pub fn matches_by_shebang(&self, shebang: &str) -> bool {
+        SHEBANG_REGEX
+            .captures(shebang)
+            .and_then(|captures| self.shebangs.contains(&captures[1].into()).then(|| 0))
+            .is_some()
+    }
 }
 
 impl Default for Mode {
@@ -38,6 +51,7 @@ impl Default for Mode {
             scope: "plaintext".into(),
             injection_regex: "".into(),
             patterns: vec![],
+            shebangs: vec![],
             comment: None,
             indentation: Default::default(),
             grammar: None,

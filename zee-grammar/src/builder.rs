@@ -29,6 +29,7 @@ pub fn load_mode(config: ModeConfig) -> Result<Mode> {
         comment,
         indentation,
         grammar: grammar_config,
+        shebangs,
     } = config;
 
     let grammar = grammar_config.and_then(|grammar_config| {
@@ -41,6 +42,7 @@ pub fn load_mode(config: ModeConfig) -> Result<Mode> {
         scope,
         injection_regex,
         patterns,
+        shebangs,
         comment,
         indentation,
         grammar,

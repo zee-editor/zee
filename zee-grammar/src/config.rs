@@ -14,6 +14,8 @@ pub struct ModeConfig {
     pub injection_regex: String,
     pub patterns: Vec<FilenamePattern>,
     #[serde(default)]
+    pub shebangs: Vec<String>,
+    #[serde(default)]
     pub comment: Option<CommentConfig>,
     pub indentation: IndentationConfig,
     pub grammar: Option<GrammarConfig>,

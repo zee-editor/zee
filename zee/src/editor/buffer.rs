@@ -173,9 +173,15 @@ impl Buffer {
         file_path: Option<PathBuf>,
         repo: Option<RepositoryRc>,
     ) -> Self {
-        let mode = file_path
-            .as_ref()
-            .map(|path| context.0.mode_by_filename(path))
+        let mode = text
+            .line(0)
+            .as_str()
+            .and_then(|shebang| context.0.mode_by_shebang(shebang))
+            .or_else(|| {
+                file_path
+                    .as_ref()
+                    .and_then(|path| context.0.mode_by_filename(path))
+            })
             .unwrap_or(&PLAIN_TEXT_MODE);
 
         let mut parser = mode.language().map(ParserPool::new);
