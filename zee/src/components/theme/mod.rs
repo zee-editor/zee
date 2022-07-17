@@ -11,7 +11,7 @@ use super::{
 };
 use crate::syntax::highlight::Theme as SyntaxTheme;
 
-pub const THEMES: [(Theme, &str); 30] = [
+pub const THEMES: [(Theme, &str); 31] = [
     (Theme::gruvbox(), "zee-gruvbox"),
     (
         Theme::from_base16(&base16::SOLARIZED_DARK),
@@ -81,6 +81,10 @@ pub const THEMES: [(Theme, &str); 30] = [
     (Theme::from_base16(&base16::WOODLAND), "base16-woodland"),
     (Theme::from_base16(&base16::ZENBURN), "base16-zenburn"),
     (Theme::from_base16(&base16::XCODE_DUSK), "base16-xcode-dusk"),
+    (
+        Theme::from_base16(&base16::VSCODE_DARK),
+        "base16-vscode-dark",
+    ),
 ];
 
 #[derive(Clone, Debug)]
