@@ -5,9 +5,10 @@ use zi::{
     Size, Style,
 };
 
+use zee_grammar::Mode;
+
 use crate::{
     editor::buffer::{ModifiedStatus, RepositoryRc},
-    mode::Mode,
     utils::StaticRefEq,
 };
 

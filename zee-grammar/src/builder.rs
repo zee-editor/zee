@@ -1,5 +1,6 @@
 use anyhow::{bail, Context, Result};
 use colored::Colorize;
+use include_dir::Dir;
 use libloading::{Library, Symbol};
 use log;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -7,20 +8,49 @@ use std::{
     path::{Path, PathBuf},
     time::SystemTime,
 };
-use tree_sitter::Language;
+use tree_sitter::{Language, Query};
 
 use crate::{
-    config::{self, Grammar, GrammarSource},
-    git,
-    mode::Mode,
+    config::{self, GrammarConfig, GrammarSource, ModeConfig},
+    git, Grammar,
 };
 
+const BUILD_DIR: &str = "build";
 const GRAMMAR_DIR: &str = "grammars";
 const LIBRARY_DIR: &str = "lib";
-const SOURCE_DIR: &str = "src";
 const QUERY_DIR: &str = "queries";
 
-pub fn load_language(grammar_id: &str) -> Result<Language> {
+pub(crate) fn load_grammar(grammar_id: String) -> Result<Grammar> {
+    let language = load_language(&grammar_id)?;
+    let make_query = |name| log_on_error(&grammar_id, load_query(language, &grammar_id, name));
+    let [highlights, indents, injections, locals] =
+        ["highlights", "indents", "injections", "locals"].map(make_query);
+
+    Ok(Grammar {
+        id: grammar_id,
+        language,
+        highlights,
+        indents,
+        injections,
+        locals,
+    })
+}
+
+fn load_query(language: Language, grammar_id: &str, name: &str) -> Result<Query> {
+    let query_path = tree_sitter_query_dir(grammar_id)
+        .map(|path| path.join(&format!("{}.scm", name)))
+        .with_context(|| {
+            format!(
+                "Failed to build path to query grammar_id={} name={}",
+                grammar_id, name
+            )
+        })?;
+    let query_src = std::fs::read_to_string(&query_path)
+        .with_context(|| format!("Failed to read query at {}", query_path.display()))?;
+    Ok(Query::new(language, &query_src)?)
+}
+
+fn load_language(grammar_id: &str) -> Result<Language> {
     let library_path = tree_sitter_library_path(grammar_id)?;
     let library = unsafe { Library::new(&library_path) }
         .with_context(|| format!("Error opening dynamic library {library_path:?}"))?;
@@ -37,14 +67,23 @@ pub fn load_language(grammar_id: &str) -> Result<Language> {
     Ok(language)
 }
 
-pub fn fetch_and_build_tree_sitter_parsers(mode_configs: &[Mode]) -> Result<()> {
+pub fn fetch_and_build_tree_sitter_parsers(
+    mode_configs: &[ModeConfig],
+    defaults: &Dir,
+) -> Result<()> {
     mode_configs.into_par_iter().try_for_each(|config| {
         if let Some(ref grammar) = config.grammar {
-            fetch_grammar(grammar)?;
-            build_grammar(grammar)?;
+            let fetched = fetch_grammar(grammar)?;
+            let built = build_grammar(grammar, defaults)?;
             log::info!(
                 "{:>12} {} grammar {}",
-                "Up to date".bold().bright_green(),
+                if fetched || built {
+                    "Installed"
+                } else {
+                    "Up to date"
+                }
+                .bold()
+                .bright_green(),
                 grammar.grammar_id.bold().bright_blue(),
                 "✅".green().dimmed(),
             );
@@ -53,7 +92,7 @@ pub fn fetch_and_build_tree_sitter_parsers(mode_configs: &[Mode]) -> Result<()> 
     })
 }
 
-pub fn fetch_grammar(grammar: &Grammar) -> Result<bool> {
+fn fetch_grammar(grammar: &GrammarConfig) -> Result<bool> {
     let (remote, revision) = match grammar.source {
         GrammarSource::Git {
             ref remote,
@@ -63,11 +102,7 @@ pub fn fetch_grammar(grammar: &Grammar) -> Result<bool> {
         _ => return Ok(false),
     };
 
-    let grammar_dir = config::runtime_dir()?
-        .join(GRAMMAR_DIR)
-        .join(SOURCE_DIR)
-        .join(&grammar.grammar_id);
-
+    let grammar_dir = tree_sitter_source_dir(&grammar.grammar_id)?;
     std::fs::create_dir_all(&grammar_dir).context(format!(
         "Could not create grammar directory {:?}",
         grammar_dir
@@ -107,16 +142,13 @@ pub fn fetch_grammar(grammar: &Grammar) -> Result<bool> {
     Ok(revision_changed)
 }
 
-pub fn build_grammar(grammar: &Grammar) -> Result<bool> {
+fn build_grammar(grammar: &GrammarConfig, defaults: &Dir) -> Result<bool> {
     let (grammar_dir, subpath) = match grammar.source {
         GrammarSource::Local { ref path } => (path.clone(), None),
         GrammarSource::Git {
             path: ref subpath, ..
         } => (
-            config::runtime_dir()?
-                .join(GRAMMAR_DIR)
-                .join(SOURCE_DIR)
-                .join(&grammar.grammar_id),
+            tree_sitter_source_dir(&grammar.grammar_id)?,
             subpath.clone(),
         ),
     };
@@ -137,7 +169,7 @@ pub fn build_grammar(grammar: &Grammar) -> Result<bool> {
         bail!("Directory {grammar_dir:?} is empty.",);
     };
 
-    copy_tree_sitter_queries(&grammar.grammar_id, &grammar_dir)?;
+    copy_tree_sitter_queries(&grammar.grammar_id, &grammar_dir, defaults)?;
 
     // Build the tree sitter library
     let paths = TreeSitterPaths::new(grammar_dir.clone(), subpath);
@@ -203,7 +235,11 @@ fn build_tree_sitter_library(grammar_id: &str, paths: &TreeSitterPaths) -> Resul
 
     // Compile the tree sitter library
     let command_str = format!("{command:?}");
-    log::debug!("{:>12} {command_str}", "Running".bold().dimmed());
+    log::debug!(
+        "{:>12} {} {command_str}",
+        "Running".bold().dimmed(),
+        grammar_id.bold().bright_blue(),
+    );
     let output = command
         .output()
         .with_context(|| format!("Failed to run C compiler. Command: {command_str}"))?;
@@ -284,12 +320,21 @@ impl TreeSitterPaths {
     }
 }
 
-fn tree_sitter_query_dir() -> Result<PathBuf> {
-    Ok(config::runtime_dir()?.join(GRAMMAR_DIR).join(QUERY_DIR))
+fn tree_sitter_source_dir(grammar_id: &str) -> Result<PathBuf> {
+    Ok(config::config_dir()?
+        .join(BUILD_DIR)
+        .join(&format!("tree-sitter-{}", grammar_id)))
+}
+
+fn tree_sitter_query_dir(grammar_id: &str) -> Result<PathBuf> {
+    Ok(config::config_dir()?
+        .join(GRAMMAR_DIR)
+        .join(QUERY_DIR)
+        .join(grammar_id))
 }
 
 fn tree_sitter_library_dir() -> Result<PathBuf> {
-    Ok(config::runtime_dir()?.join(GRAMMAR_DIR).join(LIBRARY_DIR))
+    Ok(config::config_dir()?.join(GRAMMAR_DIR).join(LIBRARY_DIR))
 }
 
 fn tree_sitter_library_name(grammar_id: &str) -> String {
@@ -302,34 +347,105 @@ fn tree_sitter_library_path(grammar_id: &str) -> Result<PathBuf> {
     Ok(library_path)
 }
 
-fn copy_tree_sitter_queries(grammar_id: &str, path: &Path) -> Result<()> {
-    let query_dir = tree_sitter_query_dir()?;
-    std::fs::create_dir_all(&query_dir)
-        .with_context(|| format!("Could not create grammar queries directory {query_dir:?}",))?;
+fn copy_tree_sitter_queries(grammar_id: &str, source: &Path, defaults: &Dir) -> Result<()> {
+    let query_dir_dest = tree_sitter_query_dir(grammar_id)?;
+    std::fs::create_dir_all(&query_dir_dest).with_context(|| {
+        format!(
+            "Could not create grammar queries directory {}",
+            query_dir_dest.display()
+        )
+    })?;
 
-    let query_src = path.join("queries").join("highlights.scm");
-    let query_dest = query_dir.join(&format!("{grammar_id}.scm"));
-    std::fs::copy(&query_src, &query_dest)
-        .with_context(|| format!("Could not copy {query_src:?} -> {query_dest:?}"))?;
+    for query_name in ["highlights", "indents", "locals", "injections"] {
+        let query_filename = PathBuf::from(format!("{}.scm", query_name));
+
+        // Query destination path
+        let query_dest = query_dir_dest.join(&query_filename);
+
+        // If query file already exists at destination, don't overwrite it
+        if query_dest.exists() {
+            log::debug!(
+                "{:>12} {} {} query; already exists {}",
+                "Skip".bold().dimmed(),
+                grammar_id.bold().bright_blue(),
+                query_name,
+                format!("{}", query_dest.display()).dimmed(),
+            );
+            continue;
+        }
+
+        // If the packaged default overrides contain the query, use it
+        let query_override = defaults
+            .get_file(
+                &PathBuf::from(QUERY_DIR)
+                    .join(grammar_id)
+                    .join(&query_filename),
+            )
+            .map(|file| file.contents());
+        if let Some(query_source) = query_override {
+            log::debug!(
+                "{:>12} {} query {}; using packaged override for {}",
+                "Copying".bold().dimmed(),
+                grammar_id.bold().bright_blue(),
+                query_name,
+                query_dest.display(),
+            );
+            // log::info!("Using packaged query override for {}", query_dest.display());
+            log_on_error(grammar_id, std::fs::write(query_dest, query_source));
+            continue;
+        }
+
+        // Otherwise, copy it from the git repo, if available
+        let query_src = source.join(QUERY_DIR).join(query_filename);
+        if query_src.exists() {
+            log_on_error(
+                grammar_id,
+                std::fs::copy(&query_src, &query_dest).with_context(|| {
+                    format!(
+                        "Could not copy {} -> {}",
+                        query_src.display(),
+                        query_dest.display()
+                    )
+                }),
+            );
+        } else {
+            log::debug!(
+                "{:>12} {} {} query {}",
+                "Missing".bold().dimmed(),
+                grammar_id.bold().bright_blue(),
+                query_name,
+                format!("{}", query_src.display()).dimmed(),
+            );
+        }
+    }
 
     Ok(())
+}
+
+fn log_on_error<T, E: std::fmt::Display>(
+    grammar_id: &str,
+    result: std::result::Result<T, E>,
+) -> Option<T> {
+    match result {
+        Err(error) => {
+            log::error!(
+                "{:>12} {} {}",
+                "Error".bold().bright_red(),
+                grammar_id.bold().bright_blue(),
+                error
+            );
+            None
+        }
+        Ok(value) => Some(value),
+    }
 }
 
 fn mtime(path: &Path) -> Result<SystemTime> {
     Ok(std::fs::metadata(path)?.modified()?)
 }
 
-/// Gives the contents of a file from a language's `runtime/queries/<lang>`
-/// directory
-pub fn load_runtime_file(language: &str, filename: &str) -> Result<String> {
-    let path = config::runtime_dir()?
-        .join("queries")
-        .join(language)
-        .join(filename);
-    Ok(std::fs::read_to_string(&path)?)
-}
-
 const BUILD_TARGET: &str = env!("BUILD_TARGET");
+
 #[cfg(unix)]
 const LIBRARY_EXTENSION: &str = "so";
 #[cfg(windows)]
