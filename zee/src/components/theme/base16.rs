@@ -3,29 +3,91 @@ use zi::Colour;
 /// Represents a base16 theme.
 ///
 /// Colours base00 to base07 are typically variations of a shade and run from
-/// darkest to lightest. These colours are used for foreground and background,
-/// status bars, line highlighting and such. Colours base08 to base0F are
+/// darkest to lightest.  These colours are used for foreground and background,
+/// status bars, line highlighting and such.  Colours base08 to base0f are
 /// typically individual colours used for types, operators, names and variables.
+///
 /// In order to create a dark theme, colours base00 to base07 should span from
-/// dark to light. For a light theme, these colours should span from light to
+/// dark to light.  For a light theme, these colours should span from light to
 /// dark.
 pub struct Base16Theme {
-    pub base00: Colour, // Default Background
-    pub base01: Colour, // Lighter Background (Used for status bars)
-    pub base02: Colour, // Selection Background
-    pub base03: Colour, // Comments, Invisibles, Line Highlighting
-    pub base04: Colour, // Dark Foreground (Used for status bars)
-    pub base05: Colour, // Default Foreground, Caret, Delimiters, Operators
-    pub base06: Colour, // Light Foreground (Not often used)
-    pub base07: Colour, // Light Background (Not often used)
-    pub base08: Colour, // Variables, XML Tags, Markup Link Text, Markup Lists, Diff Deleted
-    pub base09: Colour, // Integers, Boolean, Constants, XML Attributes, Markup Link Url
-    pub base0a: Colour, // Classes, Markup Bold, Search Text Background
-    pub base0b: Colour, // Strings, Inherited Class, Markup Code, Diff Inserted
-    pub base0c: Colour, // Support, Regular Expressions, Escape Characters, Markup Quotes
-    pub base0d: Colour, // Functions, Methods, Attribute IDs, Headings
-    pub base0e: Colour, // Keywords, Storage, Selector, Markup Italic, Diff Changed
-    pub base0f: Colour, // Deprecated, Opening/Closing Embedded Language Tags, e.g. <?php ?>
+    /// The background colour.
+    pub base00: Colour,
+
+    /// The status bar's and current line's colour.
+    ///
+    /// The colour specified by this field will be applied to the status bar and
+    /// will be used to highlight the current line.
+    pub base01: Colour,
+
+    /// The highlight colour when selecting text.
+    pub base02: Colour,
+
+    /// The comment colour.
+    ///
+    /// This colour is not only applied to comments but will also indicate the
+    /// inactive subwindows, if any.  Furthermore, this colour will be applied
+    /// on the indicator telling that the current file was not modified located
+    /// next to the respective subwindow's index, typically formed by a `-`.
+    pub base03: Colour,
+
+    /// The status bar's default text.
+    ///
+    /// Any text to be displayed in the status bar which is not coloured by
+    /// applying the respective configured values from one of the fields will be
+    /// displayed using this colour.
+    ///
+    /// Furthermore, when identifying a syntactical issue, the corresponding
+    /// section will be underlined and highlighted using this colour.
+    pub base04: Colour,
+
+    /// The variables' colour.
+    ///
+    /// Each variable, operator and delimiter will be displayed using this
+    /// colour.  Furthermore, plain text will be coloured by this field's value.
+    pub base05: Colour,
+
+    /// The cursor's colour.
+    pub base06: Colour,
+
+    /// Currently unused.
+    pub base07: Colour,
+
+    /// Keywords of the coding language.
+    pub base08: Colour,
+
+    /// The indication that a file was modified.
+    ///
+    /// In the status bar at the bottom, next to the current subwindow's index,
+    /// there is a single character which changes to `+` whenever a file was
+    /// edited.  The colour specified by this field will be applied on this `+`.
+    pub base09: Colour,
+
+    /// Classes and scope elements.
+    pub base0a: Colour,
+
+    /// The colour of concrete values like numerals and strings.
+    ///
+    /// This colour is not only applied on constants like numbers and strings
+    /// but will also be used to indicate the file name in the status bar.
+    /// Furthermore, also symbols treated as constants are coloured by this
+    /// field's value.
+    pub base0b: Colour,
+
+    /// The colour of single character literals.
+    pub base0c: Colour,
+
+    /// The colour setting for functions.
+    ///
+    /// This colour will furthermore be used to highlight the index of the
+    /// currently focused file.
+    pub base0d: Colour,
+
+    /// Currently unused.
+    pub base0e: Colour,
+
+    /// The colour for Rust tags and Markdown headings.
+    pub base0f: Colour,
 }
 
 pub const GRUVBOX_DARK_HARD: Base16Theme = Base16Theme {
@@ -577,4 +639,29 @@ pub const ZENBURN: Base16Theme = Base16Theme {
     base0d: Colour::rgb(124, 184, 187),
     base0e: Colour::rgb(220, 140, 195),
     base0f: Colour::rgb(147, 224, 227),
+};
+
+pub const VSCODE_DARK: Base16Theme = Base16Theme {
+    base00: Colour::rgb(0x1E, 0x1E, 0x1E),
+    base01: Colour::rgb(0x3A, 0x3D, 0x41),
+    base02: Colour::rgb(0x26, 0x4F, 0x78),
+    base03: Colour::rgb(0x6A, 0x99, 0x55),
+    base04: Colour::rgb(0x00, 0x7A, 0xCC),
+    base05: Colour::rgb(0x9C, 0xDC, 0xFE),
+    base06: Colour::rgb(0xFF, 0xFF, 0xFF),
+
+    // Currently unused.
+    base07: Colour::rgb(0x00, 0x00, 0x00),
+
+    base08: Colour::rgb(0x56, 0x9C, 0xD6),
+    base09: Colour::rgb(0xD2, 0x1A, 0x25),
+    base0a: Colour::rgb(0x4E, 0xC9, 0xB0),
+    base0b: Colour::rgb(0xB5, 0xCE, 0xA8),
+    base0c: Colour::rgb(0xCE, 0x91, 0x78),
+    base0d: Colour::rgb(0xDC, 0xDC, 0xAA),
+
+    // Currently unused.
+    base0e: Colour::rgb(0x00, 0x00, 0x00),
+
+    base0f: Colour::rgb(0xFF, 0xFF, 0xFF),
 };
