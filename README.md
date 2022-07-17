@@ -53,6 +53,19 @@ To build with clipboard support, you'll additionally need x11 bindings on Linux.
 sudo apt install xorg-dev libxcb-shape0-dev libxcb-xfixes0-dev
 ```
 
+#### nightly version
+
+To install the latest version directly from the official repository, just run
+the following command:
+
+```
+cargo install --git https://github.com/zee-editor/zee
+```
+
+**Important:**  please note that the code base state fetched by this instruction
+could contain work-in-progress features which might need some further
+maintenance before being included in the release of the next stable version.
+
 ### configuration
 
 Zee is customised using a [`config.ron`](zee/config/config.ron) file inside the configuration directory.
