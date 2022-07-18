@@ -373,7 +373,7 @@ impl Buffer {
                 CursorMessage::CopySelection => self.copy_selection_to_clipboard(cursor_id),
                 CursorMessage::CutSelection => self.cut_selection_to_clipboard(cursor_id),
                 CursorMessage::InsertTab => {
-                    let (tab, char_count) = if DISABLE_TABS {
+                    let (tab, char_count) = if self.context.config.disable_tabs {
                         (' ', TAB_WIDTH)
                     } else {
                         ('\t', 1)
@@ -789,5 +789,3 @@ impl std::ops::Deref for RepositoryRc {
         &self.0
     }
 }
-
-pub const DISABLE_TABS: bool = false;

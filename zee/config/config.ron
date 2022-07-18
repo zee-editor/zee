@@ -2,6 +2,9 @@
     // Which theme to use
     theme: "zee-gruvbox",
 
+    // Whether to use spaces instead of tabs
+    disable_tabs: false,
+
     // Modes and tree sitter parsers
     //
     // This section defines what modes are available.

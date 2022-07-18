@@ -12,6 +12,7 @@ use crate::error::{Context, Result};
 pub struct EditorConfig {
     #[serde(default)]
     pub theme: String,
+    pub disable_tabs: bool,
     pub modes: Vec<ModeConfig>,
 }
 

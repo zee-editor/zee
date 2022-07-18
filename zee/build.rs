@@ -11,6 +11,7 @@ static DEFAULT_CONFIG_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/config");
 pub struct EditorConfig {
     #[serde(default)]
     pub theme: String,
+    pub disable_tabs: bool,
     pub modes: Vec<ModeConfig>,
 }
 
