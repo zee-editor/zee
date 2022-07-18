@@ -2,18 +2,16 @@ use ropey::{iter::Chunks, str_utils, Rope, RopeSlice};
 use unicode_segmentation::{GraphemeCursor, GraphemeIncomplete};
 use unicode_width::UnicodeWidthStr;
 
-use super::TAB_WIDTH;
-
 pub type ByteIndex = usize;
 pub type CharIndex = usize;
 pub type LineIndex = usize;
 
-pub fn width(slice: &RopeSlice) -> usize {
+pub fn width(tab_width: usize, slice: &RopeSlice) -> usize {
     rope_slice_as_str(slice, |text| {
         if text == "\t" {
-            TAB_WIDTH
+            tab_width
         } else {
-            text.chars().filter(|character| *character == '\t').count() * TAB_WIDTH
+            text.chars().filter(|character| *character == '\t').count() * tab_width
                 + UnicodeWidthStr::width(text)
         }
     })

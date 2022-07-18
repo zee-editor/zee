@@ -13,8 +13,6 @@ pub use self::{
     movement::Direction,
 };
 
-pub const TAB_WIDTH: usize = 4;
-
 trait RopeCursorExt {
     fn cursor_to_line(&self, cursor: &Cursor) -> usize;
 
@@ -98,9 +96,9 @@ impl Cursor {
         }
     }
 
-    pub fn column_offset(&self, text: &Rope) -> usize {
+    pub fn column_offset(&self, tab_width: usize, text: &Rope) -> usize {
         let char_line_start = text.line_to_char(text.cursor_to_line(self));
-        graphemes::width(&text.slice(char_line_start..self.range.start))
+        graphemes::width(tab_width, &text.slice(char_line_start..self.range.start))
     }
 
     pub fn reconcile(&mut self, new_text: &Rope, diff: &OpaqueDiff) {
