@@ -179,7 +179,8 @@ impl TextArea {
                 scope,
                 is_error,
             );
-            let grapheme_width = zee_edit::graphemes::width(&grapheme);
+            let grapheme_width =
+                zee_edit::graphemes::width(self.properties.mode.indentation.tab_width(), &grapheme);
             let horizontal_bounds_inclusive = frame.min_x()..=frame.max_x();
             if !horizontal_bounds_inclusive.contains(&(visual_x + grapheme_width)) {
                 break;

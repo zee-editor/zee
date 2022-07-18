@@ -261,7 +261,11 @@ impl Component for Buffer {
         // The "status bar" which shows information about the file etc.
         let status_bar = StatusBar::with(StatusBarProperties {
             current_line_index: content.char_to_line(self.properties.cursor.inner().range().start),
-            column_offset: self.properties.cursor.inner().column_offset(&content),
+            column_offset: self
+                .properties
+                .cursor
+                .inner()
+                .column_offset(self.properties.mode.indentation.tab_width(), &content),
             file_path: self.properties.file_path.clone(),
             focused: self.properties.focused,
             frame_id: self.properties.frame_id,
