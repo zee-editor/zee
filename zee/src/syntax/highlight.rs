@@ -78,7 +78,6 @@ pub fn text_style_at_char(
     };
 
     if char_index == cursor.range().start || cursor.range().contains(&char_index) {
-        log::info!("scope: {}", scope);
         let cursor_style = if focused {
             theme.cursor_focused
         } else {
