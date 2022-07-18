@@ -32,7 +32,7 @@ use crate::{
         splash::{Properties as SplashProperties, Splash},
         theme::{Theme, THEMES},
     },
-    config::{EditorConfig, PLAIN_TEXT_MODE},
+    config::EditorConfig,
     error::Result,
     task::TaskPool,
 };
@@ -94,11 +94,16 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn mode_by_filename(&self, filename: impl AsRef<Path>) -> &Mode {
+    pub fn mode_by_filename(&self, filename: impl AsRef<Path>) -> Option<&Mode> {
         self.modes
             .iter()
             .find(|&mode| mode.matches_by_filename(filename.as_ref()))
-            .unwrap_or(&PLAIN_TEXT_MODE)
+    }
+
+    pub fn mode_by_shebang(&self, shebang: &str) -> Option<&Mode> {
+        self.modes
+            .iter()
+            .find(|&mode| mode.matches_by_shebang(shebang))
     }
 }
 

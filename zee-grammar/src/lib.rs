@@ -5,10 +5,14 @@ mod git;
 
 use anyhow::Result;
 use once_cell::sync::Lazy;
+use regex::Regex;
 use std::path::Path;
 use tree_sitter::{Language, Query};
 
 use self::config::{CommentConfig, FilenamePattern, IndentationConfig, ModeConfig};
+
+static SHEBANG_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^#!\s*(?:\S*[/\\](?:env\s+(?:\-\S+\s+)*)?)?([^\s\.\d]+)").unwrap());
 
 #[derive(Debug)]
 pub struct Mode {
@@ -19,6 +23,7 @@ pub struct Mode {
     pub comment: Option<CommentConfig>,
     pub indentation: IndentationConfig,
     grammar: LazyGrammar,
+    pub shebangs: Vec<String>,
 }
 
 impl Mode {
@@ -31,6 +36,7 @@ impl Mode {
             comment,
             indentation,
             grammar: grammar_config,
+            shebangs,
         } = config;
         Self {
             name,
@@ -44,6 +50,7 @@ impl Mode {
                     .map(|grammar_config| grammar_config.grammar_id)
                     .map(builder::load_grammar)
             })),
+            shebangs,
         }
     }
 
@@ -51,6 +58,13 @@ impl Mode {
         self.patterns
             .iter()
             .any(|pattern| pattern.matches(filename.as_ref()))
+    }
+
+    pub fn matches_by_shebang(&self, shebang: &str) -> bool {
+        SHEBANG_REGEX
+            .captures(shebang)
+            .and_then(|captures| self.shebangs.contains(&captures[1].into()).then(|| 0))
+            .is_some()
     }
 
     pub fn language(&self) -> Option<Result<Language, &anyhow::Error>> {
@@ -74,6 +88,7 @@ impl Default for Mode {
             comment: None,
             indentation: Default::default(),
             grammar: Lazy::new(Box::new(|| None)),
+            shebangs: vec![],
         }
     }
 }
