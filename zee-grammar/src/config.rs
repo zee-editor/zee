@@ -32,6 +32,26 @@ pub struct IndentationConfig {
     pub unit: IndentationUnit,
 }
 
+impl IndentationConfig {
+    pub fn to_char(&self) -> char {
+        self.unit.to_char()
+    }
+
+    pub fn char_count(&self) -> usize {
+        match self.unit {
+            IndentationUnit::Space => self.width,
+            IndentationUnit::Tab => 1,
+        }
+    }
+
+    pub fn tab_width(&self) -> usize {
+        match self.unit {
+            IndentationUnit::Space => 1,
+            IndentationUnit::Tab => self.width,
+        }
+    }
+}
+
 impl Default for IndentationConfig {
     fn default() -> Self {
         Self {
@@ -45,6 +65,15 @@ impl Default for IndentationConfig {
 pub enum IndentationUnit {
     Space,
     Tab,
+}
+
+impl IndentationUnit {
+    pub fn to_char(&self) -> char {
+        match self {
+            Self::Space => ' ',
+            Self::Tab => '\t',
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

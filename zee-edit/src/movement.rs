@@ -26,7 +26,13 @@ pub fn move_horizontally(text: &Rope, cursor: &mut Cursor, direction: Direction,
 
 /// Move the cursor vertically in the specified direction by `count` lines
 #[inline]
-pub fn move_vertically(text: &Rope, cursor: &mut Cursor, direction: Direction, count: usize) {
+pub fn move_vertically(
+    text: &Rope,
+    cursor: &mut Cursor,
+    tab_width: usize,
+    direction: Direction,
+    count: usize,
+) {
     // The maximum possible line index in the text
     let max_line_index = text.len_lines().saturating_sub(1);
 
@@ -58,7 +64,7 @@ pub fn move_vertically(text: &Rope, cursor: &mut Cursor, direction: Direction, c
     let current_visual_x = cursor.visual_horizontal_offset.get_or_insert_with(|| {
         let current_line_start = text.line_to_char(current_line_index);
         let line_to_cursor = text.slice(current_line_start..cursor.range.start);
-        crate::graphemes::width(&line_to_cursor)
+        crate::graphemes::width(tab_width, &line_to_cursor)
     });
 
     let new_line = text.line(new_line_index);
@@ -66,7 +72,7 @@ pub fn move_vertically(text: &Rope, cursor: &mut Cursor, direction: Direction, c
     let mut new_visual_x = 0;
     let mut char_offset = text.line_to_char(new_line_index);
     for grapheme in &mut graphemes {
-        let width = crate::graphemes::width(&grapheme);
+        let width = crate::graphemes::width(tab_width, &grapheme);
         if new_visual_x + width > *current_visual_x || grapheme.slice == "\n" {
             break;
         }

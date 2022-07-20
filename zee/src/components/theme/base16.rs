@@ -15,9 +15,6 @@ pub struct Base16Theme {
     pub base00: Colour,
 
     /// The status bar's and current line's colour.
-    ///
-    /// The colour specified by this field will be applied to the status bar and
-    /// will be used to highlight the current line.
     pub base01: Colour,
 
     /// The highlight colour when selecting text.
@@ -83,7 +80,7 @@ pub struct Base16Theme {
     /// currently focused file.
     pub base0d: Colour,
 
-    /// Currently unused.
+    /// The directories' colour in the file selection dialogue.
     pub base0e: Colour,
 
     /// The colour for Rust tags and Markdown headings.
@@ -659,9 +656,6 @@ pub const VSCODE_DARK: Base16Theme = Base16Theme {
     base0b: Colour::rgb(0xB5, 0xCE, 0xA8),
     base0c: Colour::rgb(0xCE, 0x91, 0x78),
     base0d: Colour::rgb(0xDC, 0xDC, 0xAA),
-
-    // Currently unused.
-    base0e: Colour::rgb(0x00, 0x00, 0x00),
-
+    base0e: Colour::rgb(0x4F, 0xC1, 0xFF),
     base0f: Colour::rgb(0xFF, 0xFF, 0xFF),
 };

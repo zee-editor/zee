@@ -11,7 +11,6 @@ use zi::ComponentLink;
 
 use zee_edit::{
     graphemes::strip_trailing_whitespace, movement, tree::EditTree, Cursor, Direction, OpaqueDiff,
-    TAB_WIDTH,
 };
 use zee_grammar::Mode;
 
@@ -312,12 +311,20 @@ impl Buffer {
             let cursor = &mut self.cursors[cursor_id.0];
             // Stateless
             match message {
-                CursorMessage::Up(n) => {
-                    movement::move_vertically(content, cursor, Direction::Backward, n)
-                }
-                CursorMessage::Down(n) => {
-                    movement::move_vertically(content, cursor, Direction::Forward, n)
-                }
+                CursorMessage::Up(n) => movement::move_vertically(
+                    content,
+                    cursor,
+                    self.mode.indentation.tab_width(),
+                    Direction::Backward,
+                    n,
+                ),
+                CursorMessage::Down(n) => movement::move_vertically(
+                    content,
+                    cursor,
+                    self.mode.indentation.tab_width(),
+                    Direction::Forward,
+                    n,
+                ),
                 CursorMessage::Left => {
                     movement::move_horizontally(content, cursor, Direction::Backward, 1)
                 }
@@ -373,25 +380,32 @@ impl Buffer {
                 CursorMessage::CopySelection => self.copy_selection_to_clipboard(cursor_id),
                 CursorMessage::CutSelection => self.cut_selection_to_clipboard(cursor_id),
                 CursorMessage::InsertTab => {
-                    let (tab, char_count) = if self.context.config.disable_tabs {
-                        (' ', TAB_WIDTH)
-                    } else {
-                        ('\t', 1)
-                    };
-                    let diff = self.cursors[cursor_id.0]
-                        .insert_chars(&mut self.content, std::iter::repeat(tab).take(char_count));
+                    let (indentation_unit, indentation_count) = (
+                        self.mode.indentation.to_char(),
+                        self.mode.indentation.char_count(),
+                    );
+                    let diff = self.cursors[cursor_id.0].insert_chars(
+                        &mut self.content,
+                        std::iter::repeat(indentation_unit).take(indentation_count),
+                    );
                     movement::move_horizontally(
                         &self.content,
                         &mut self.cursors[cursor_id.0],
                         Direction::Forward,
-                        char_count,
+                        indentation_count,
                     );
                     diff
                 }
                 CursorMessage::InsertNewLine => {
                     let diff = self.cursors[cursor_id.0].insert_char(&mut self.content, '\n');
                     let cursor = &mut self.cursors[cursor_id.0];
-                    movement::move_vertically(&self.content, cursor, Direction::Forward, 1);
+                    movement::move_vertically(
+                        &self.content,
+                        cursor,
+                        self.mode.indentation.tab_width(),
+                        Direction::Forward,
+                        1,
+                    );
                     movement::move_to_start_of_line(&self.content, cursor);
                     diff
                 }
