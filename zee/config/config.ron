@@ -2,8 +2,8 @@
     // Which theme to use
     theme: "zee-gruvbox",
 
-    // Whether to use spaces instead of tabs
-    disable_tabs: false,
+    // The global indentation override setting
+    indentation_override: None,
 
     // Modes and tree sitter parsers
     //

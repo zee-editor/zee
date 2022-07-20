@@ -380,10 +380,20 @@ impl Buffer {
                 CursorMessage::CopySelection => self.copy_selection_to_clipboard(cursor_id),
                 CursorMessage::CutSelection => self.cut_selection_to_clipboard(cursor_id),
                 CursorMessage::InsertTab => {
-                    let (indentation_unit, indentation_count) = (
-                        self.mode.indentation.to_char(),
-                        self.mode.indentation.char_count(),
-                    );
+                    let (indentation_unit, indentation_count) =
+                        match &self.context.config.indentation_override {
+                            Some(setting) => (
+                                setting.unit.to_char(),
+                                match &setting.unit {
+                                    zee_grammar::config::IndentationUnit::Space => setting.width,
+                                    zee_grammar::config::IndentationUnit::Tab => 1,
+                                },
+                            ),
+                            None => (
+                                self.mode.indentation.to_char(),
+                                self.mode.indentation.char_count(),
+                            ),
+                        };
                     let diff = self.cursors[cursor_id.0].insert_chars(
                         &mut self.content,
                         std::iter::repeat(indentation_unit).take(indentation_count),

@@ -12,7 +12,7 @@ use crate::error::{Context, Result};
 pub struct EditorConfig {
     #[serde(default)]
     pub theme: String,
-    pub disable_tabs: bool,
+    pub indentation_override: Option<zee_grammar::config::IndentationConfig>,
     pub modes: Vec<ModeConfig>,
 }
 

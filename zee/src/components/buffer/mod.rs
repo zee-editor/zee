@@ -237,6 +237,7 @@ impl Component for Buffer {
 
         // The textarea components that displays text
         let textarea = TextArea::with(TextAreaProperties {
+            context: self.properties.context.clone(),
             theme: self.properties.theme.syntax.clone(),
             focused: self.properties.focused,
             text: content.staged().clone(),
