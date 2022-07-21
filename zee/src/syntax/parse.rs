@@ -36,6 +36,8 @@ impl fmt::Debug for ParserStatus {
 
 pub struct ParsedSyntax {
     tree: Tree,
+    
+    #[allow(dead_code)]
     text: Rope,
 }
 
@@ -159,8 +161,8 @@ impl ParserPool {
         self.current_parse_task = None;
 
         // If the parser task hasn't been cancelled, store the new syntax tree
-        if let Some(ParsedSyntax { tree, text }) = parsed {
-            assert!(tree.root_node().end_byte() <= text.len_bytes());
+        if let Some(ParsedSyntax { tree, text: _ }) = parsed {
+            // assert!(tree.root_node().end_byte() <= text.len_bytes());
             self.tree = Some(ParseTree { version, tree });
         }
     }
