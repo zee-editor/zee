@@ -176,9 +176,11 @@ impl Buffer {
     ) -> Self {
         let shebang_range = 0..std::cmp::min(text.len_chars(), MAX_SHEBANG_LENGTH);
 
-        let mut parser = context
+        let mode = context
             .0
-            .mode_by_file(file_path.as_ref(), &text.slice(shebang_range))
+            .mode_by_file(file_path.as_ref(), &text.slice(shebang_range));
+
+        let mut parser = mode
             .language()
             .and_then(|result| result.ok())
             .map(ParserPool::new);
