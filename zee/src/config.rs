@@ -13,6 +13,10 @@ pub struct EditorConfig {
     #[serde(default)]
     pub theme: String,
     pub modes: Vec<ModeConfig>,
+    /// Remove whitespace from the end of lines when saving. On large files this could negatively
+    /// impact performance. Default: `true`.
+    #[serde(default)]
+    pub trim_trailing_whitespace_on_save: bool,
 }
 
 impl Default for EditorConfig {
