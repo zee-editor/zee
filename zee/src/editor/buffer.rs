@@ -518,12 +518,17 @@ impl Buffer {
             let text = self.content.staged().clone();
             let file_path = file_path.clone();
             let link = self.context.link.clone();
+            let trim_trailing_whitespace = self.context.config.trim_trailing_whitespace_on_save;
             self.context.task_pool.spawn(move |_| {
+                let text = match trim_trailing_whitespace {
+                    true => strip_trailing_whitespace(text),
+                    false => text,
+                };
+
                 let buffer_message = BufferMessage::SaveBufferEnd(
                     File::create(&file_path)
                         .map(BufWriter::new)
                         .and_then(|writer| {
-                            let text = strip_trailing_whitespace(text);
                             text.write_to(writer)?;
                             Ok(text)
                         }),

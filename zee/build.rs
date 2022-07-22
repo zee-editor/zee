@@ -12,6 +12,8 @@ pub struct EditorConfig {
     #[serde(default)]
     pub theme: String,
     pub modes: Vec<ModeConfig>,
+    #[serde(default)]
+    pub trim_trailing_whitespace_on_save: bool,
 }
 
 fn main() -> Result<()> {
