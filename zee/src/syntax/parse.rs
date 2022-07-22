@@ -36,7 +36,7 @@ impl fmt::Debug for ParserStatus {
 
 pub struct ParsedSyntax {
     tree: Tree,
-    
+
     #[allow(dead_code)]
     text: Rope,
 }
