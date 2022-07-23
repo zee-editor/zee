@@ -526,30 +526,32 @@ impl Buffer {
     }
 
     fn spawn_save_file(&mut self) {
-        self.modified_status = ModifiedStatus::Saving;
-        if let Some(ref file_path) = self.file_path {
-            let buffer_id = self.id;
-            let text = self.content.staged().clone();
-            let file_path = file_path.clone();
-            let link = self.context.link.clone();
-            let trim_trailing_whitespace = self.context.config.trim_trailing_whitespace_on_save;
-            self.context.task_pool.spawn(move |_| {
-                let text = match trim_trailing_whitespace {
-                    true => strip_trailing_whitespace(text),
-                    false => text,
-                };
+        let file_path = match self.file_path.clone() {
+            Some(file_path) => file_path,
+            None => return,
+        };
 
-                let buffer_message = BufferMessage::SaveBufferEnd(
-                    File::create(&file_path)
-                        .map(BufWriter::new)
-                        .and_then(|writer| {
-                            text.write_to(writer)?;
-                            Ok(text)
-                        }),
-                );
-                link.send(BuffersMessage::new(buffer_id, buffer_message).into())
-            });
-        }
+        self.modified_status = ModifiedStatus::Saving;
+        let buffer_id = self.id;
+        let text = self.content.staged().clone();
+        let link = self.context.link.clone();
+        let trim_trailing_whitespace = self.context.config.trim_trailing_whitespace_on_save;
+        self.context.task_pool.spawn(move |_| {
+            let text = match trim_trailing_whitespace {
+                true => strip_trailing_whitespace(text),
+                false => text,
+            };
+
+            let buffer_message = BufferMessage::SaveBufferEnd(
+                File::create(&file_path)
+                    .map(BufWriter::new)
+                    .and_then(|writer| {
+                        text.write_to(writer)?;
+                        Ok(text)
+                    }),
+            );
+            link.send(BuffersMessage::new(buffer_id, buffer_message).into())
+        });
     }
 }
 
