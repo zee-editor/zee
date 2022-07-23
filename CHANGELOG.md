@@ -19,6 +19,8 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   configuration file [#33](https://github.com/zee-editor/zee/pull/33)
 - Added a changelog to be updated timely as PRs are merged
   [#49](https://github.com/zee-editor/zee/pull/49)
+- Add [Haskell](https://github.com/tree-sitter/tree-sitter-haskell) syntax
+  highlighting [#62](https://github.com/zee-editor/zee/pull/62)
 
 ### Fixed
 
@@ -29,7 +31,7 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Fix tree sitter spans not being aligned with text after saving
   [#65](https://github.com/zee-editor/zee/pull/65)
 
-## v0.3.2 - 2022-04-23
+## 0.3.2 - 2022-04-23
 
 TODO: write changelog entries for all released versions of zee
 
