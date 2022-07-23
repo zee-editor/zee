@@ -26,6 +26,8 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   [#32](https://github.com/zee-editor/zee/pull/32)
 - Re-enable tab entry and ensure the cursor is moved the correct width
   [#31](https://github.com/zee-editor/zee/pull/31)
+- Fix tree sitter spans not being aligned with text after saving
+  [#65](https://github.com/zee-editor/zee/pull/65)
 
 ## v0.3.2 - 2022-04-23
 

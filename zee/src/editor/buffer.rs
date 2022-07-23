@@ -277,13 +277,24 @@ impl Buffer {
             }
             // Saved the buffer successfully
             BufferMessage::SaveBufferEnd(Ok(new_content)) => {
+                self.modified_status = ModifiedStatus::Unchanged;
+
+                // For now, we just assume the content may have changed
+                //
+                // Sync the cursors
                 for cursor in self.cursors.iter_mut() {
                     cursor.sync(&self.content, &new_content);
                 }
+
+                // Create a new revision, update the content.
                 self.content
                     .create_revision(OpaqueDiff::empty(), self.cursors[0].clone());
                 *self.content.staged_mut() = new_content;
-                self.modified_status = ModifiedStatus::Unchanged;
+
+                // We don't know the diff, so we just use OpaqueDiff::Empty.
+                // This is ok as we pass in fresh=true, so the previous parser
+                // tree won't be used.
+                self.update_parse_tree(&OpaqueDiff::empty(), true);
             }
             // Failed to save the buffer
             BufferMessage::SaveBufferEnd(Err(error)) => {
@@ -510,6 +521,10 @@ impl Buffer {
 
     fn update_parse_tree(&mut self, diff: &OpaqueDiff, fresh: bool) {
         if let Some(parser) = self.parser.as_mut() {
+            if fresh {
+                parser.tree = None;
+            }
+
             let task_pool = &self.context.task_pool;
             let staged_text = self.content.staged().clone();
             let buffer_id = self.id;
