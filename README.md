@@ -62,7 +62,7 @@ the following command:
 cargo install --git https://github.com/zee-editor/zee
 ```
 
-**Important:**  please note that the code base state fetched by this instruction
+**Important:** please note that the code base state fetched by this instruction
 could contain work-in-progress features which might need some further
 maintenance before being included in the release of the next stable version.
 
@@ -82,15 +82,17 @@ The exact location of the configuration directory is system specific, e.g. `~/.c
 and `%AppData%/zee` on Windows. The location of the configuration directory can be overwritten by setting the environment variable `ZEE_CONFIG_DIR`.
 
 ```
-ZEE_RUNTIME_DIR=/home/user/.zee zee --init --build
+ZEE_CONFIG_DIR=/home/user/.zee zee --init --build
 ```
 
 This command will initialise a configuration directory at `/home/user/.zee` and immediately download and build the configured tree sitter parsers. See below details on the `--build` command line argument.
 
 ### syntax highlighting
 
-Zee uses [Tree-sitter](https://tree-sitter.github.io/tree-sitter/) parsers for syntax highlighting
-and on the fly validation of source code. To download and build the parsers, simply run
+Zee uses [Tree-sitter](https://tree-sitter.github.io/tree-sitter/) parsers for
+syntax highlighting and on the fly validation of source code. Each tree sitter
+parser is compiled to a shared object which is linked dynamically. To download
+and build the parsers, simply run
 
 ```
 zee --build
@@ -100,7 +102,7 @@ The parsers are downloaded, compiled and placed in a `grammars` directory inside
 directory. The exact location is system specific, e.g. `~/.config/zee/grammars` on Linux or macOS
 and `%AppData%/zee/grammars` on Windows.
 
-The parsers are either the ones configuraed in the `config.ron` file or the
+The parsers are either the ones configured in the `config.ron` file or the
 default ones if no configuration file is found.
 
 If you change the parsers in the `config.ron` file, you'll have to re-run the build command.
@@ -115,9 +117,9 @@ git clone https://github.com/zee-editor/zee.git && cd zee
 cargo run -- zee/src/main.rs
 ```
 
-The editor also depends on tree sitter parsers, one for each supported language.
-For now, those are configured statically using the `zee/modes.ron` file. Each
-tree sitter parser is compiled to a shared object which is linked dynamically.
+The editor also depends on tree sitter parsers, one for each supported language,
+see [configuration](#configuration). Each tree sitter parser is compiled to a
+shared object which is linked dynamically.
 
 Running `cargo build` downloads and builds this parsers just to ensure
 everything works correctly. You can skip this step by setting
