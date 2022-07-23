@@ -5,13 +5,13 @@ mod windows;
 pub use self::buffer::{BufferId, ModifiedStatus};
 
 use git2::Repository;
-use ropey::Rope;
+use ropey::{Rope, RopeSlice};
 use std::{
     borrow::Cow,
     fmt::Display,
     fs::File,
     io::{self, BufReader},
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::Arc,
 };
 use zi::{
@@ -94,11 +94,20 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn mode_by_filename(&self, filename: impl AsRef<Path>) -> &Mode {
-        self.modes
-            .iter()
-            .find(|&mode| mode.matches_by_filename(filename.as_ref()))
-            .unwrap_or(&PLAIN_TEXT_MODE)
+    pub fn mode_by_file(&self, path: Option<&PathBuf>, content: &RopeSlice) -> &Mode {
+        path.and_then(|path| {
+            self.modes
+                .iter()
+                .find(|&mode| mode.matches_by_filename(path))
+        })
+        .or_else(|| {
+            content.as_str().and_then(|shebang| {
+                self.modes
+                    .iter()
+                    .find(|&mode| mode.matches_by_shebang(shebang))
+            })
+        })
+        .unwrap_or(&PLAIN_TEXT_MODE)
     }
 }
 

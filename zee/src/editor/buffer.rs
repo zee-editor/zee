@@ -16,11 +16,12 @@ use zee_grammar::Mode;
 
 use super::{ContextHandle, Editor};
 use crate::{
-    config::PLAIN_TEXT_MODE,
     error::Result,
     syntax::parse::{ParseTree, ParserPool, ParserStatus},
     versioned::{Versioned, WeakHandle},
 };
+
+const MAX_SHEBANG_LENGTH: usize = 256;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct BufferId(usize);
@@ -172,10 +173,11 @@ impl Buffer {
         file_path: Option<PathBuf>,
         repo: Option<RepositoryRc>,
     ) -> Self {
-        let mode = file_path
-            .as_ref()
-            .map(|path| context.0.mode_by_filename(path))
-            .unwrap_or(&PLAIN_TEXT_MODE);
+        let shebang_range = 0..std::cmp::min(text.len_chars(), MAX_SHEBANG_LENGTH);
+
+        let mode = context
+            .0
+            .mode_by_file(file_path.as_ref(), &text.slice(shebang_range));
 
         let mut parser = mode
             .language()

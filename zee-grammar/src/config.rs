@@ -17,6 +17,8 @@ pub struct ModeConfig {
     pub comment: Option<CommentConfig>,
     pub indentation: IndentationConfig,
     pub grammar: Option<GrammarConfig>,
+    #[serde(default)]
+    pub shebangs: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

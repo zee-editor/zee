@@ -1810,6 +1810,7 @@ dependencies = [
  "log",
  "once_cell",
  "rayon",
+ "regex",
  "serde",
  "serde_derive",
  "tree-sitter",

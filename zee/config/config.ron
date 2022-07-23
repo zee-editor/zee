@@ -149,6 +149,7 @@
                 width: 4,
                 unit: Space,
             ),
+            shebangs: ["node"],
             grammar: Some(
                 Grammar(
                     id: "javascript",
@@ -251,6 +252,7 @@
                 width: 4,
                 unit: Space,
             ),
+            shebangs: ["python"],
             grammar: Some(
                 Grammar(
                     id: "python",
@@ -467,6 +469,7 @@
                 width: 2,
                 unit: Space,
             ),
+            shebangs: ["sh", "bash", "dash", "zsh"],
             grammar: Some(
                 Grammar(
                     id: "bash",
