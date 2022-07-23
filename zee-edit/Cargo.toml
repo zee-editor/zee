@@ -10,7 +10,7 @@ rust-version = "1.59"
 
 [dependencies]
 euclid = "0.22.7"
-ropey = "1.4.1"
-smallvec = "1.8.0"
+ropey = "1.5.0"
+smallvec = "1.9.0"
 unicode-segmentation = "1.9.0"
 unicode-width = "0.1.9"

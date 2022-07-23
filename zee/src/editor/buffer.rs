@@ -277,13 +277,24 @@ impl Buffer {
             }
             // Saved the buffer successfully
             BufferMessage::SaveBufferEnd(Ok(new_content)) => {
+                self.modified_status = ModifiedStatus::Unchanged;
+
+                // For now, we just assume the content may have changed
+                //
+                // Sync the cursors
                 for cursor in self.cursors.iter_mut() {
                     cursor.sync(&self.content, &new_content);
                 }
+
+                // Create a new revision, update the content.
                 self.content
                     .create_revision(OpaqueDiff::empty(), self.cursors[0].clone());
                 *self.content.staged_mut() = new_content;
-                self.modified_status = ModifiedStatus::Unchanged;
+
+                // We don't know the diff, so we just use OpaqueDiff::Empty.
+                // This is ok as we pass in fresh=true, so the previous parser
+                // tree won't be used.
+                self.update_parse_tree(&OpaqueDiff::empty(), true);
             }
             // Failed to save the buffer
             BufferMessage::SaveBufferEnd(Err(error)) => {
@@ -510,6 +521,10 @@ impl Buffer {
 
     fn update_parse_tree(&mut self, diff: &OpaqueDiff, fresh: bool) {
         if let Some(parser) = self.parser.as_mut() {
+            if fresh {
+                parser.tree = None;
+            }
+
             let task_pool = &self.context.task_pool;
             let staged_text = self.content.staged().clone();
             let buffer_id = self.id;
@@ -526,25 +541,32 @@ impl Buffer {
     }
 
     fn spawn_save_file(&mut self) {
+        let file_path = match self.file_path.clone() {
+            Some(file_path) => file_path,
+            None => return,
+        };
+
         self.modified_status = ModifiedStatus::Saving;
-        if let Some(ref file_path) = self.file_path {
-            let buffer_id = self.id;
-            let text = self.content.staged().clone();
-            let file_path = file_path.clone();
-            let link = self.context.link.clone();
-            self.context.task_pool.spawn(move |_| {
-                let buffer_message = BufferMessage::SaveBufferEnd(
-                    File::create(&file_path)
-                        .map(BufWriter::new)
-                        .and_then(|writer| {
-                            let text = strip_trailing_whitespace(text);
-                            text.write_to(writer)?;
-                            Ok(text)
-                        }),
-                );
-                link.send(BuffersMessage::new(buffer_id, buffer_message).into())
-            });
-        }
+        let buffer_id = self.id;
+        let text = self.content.staged().clone();
+        let link = self.context.link.clone();
+        let trim_trailing_whitespace = self.context.config.trim_trailing_whitespace_on_save;
+        self.context.task_pool.spawn(move |_| {
+            let text = match trim_trailing_whitespace {
+                true => strip_trailing_whitespace(text),
+                false => text,
+            };
+
+            let buffer_message = BufferMessage::SaveBufferEnd(
+                File::create(&file_path)
+                    .map(BufWriter::new)
+                    .and_then(|writer| {
+                        text.write_to(writer)?;
+                        Ok(text)
+                    }),
+            );
+            link.send(BuffersMessage::new(buffer_id, buffer_message).into())
+        });
     }
 }
 

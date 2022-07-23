@@ -160,7 +160,7 @@ impl ParserPool {
 
         // If the parser task hasn't been cancelled, store the new syntax tree
         if let Some(ParsedSyntax { tree, text }) = parsed {
-            assert!(tree.root_node().end_byte() <= text.len_bytes());
+            assert!(tree.root_node().end_byte() == text.len_bytes());
             self.tree = Some(ParseTree { version, tree });
         }
     }
