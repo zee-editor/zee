@@ -6,6 +6,9 @@
 
     // Which colour theme to use.
     theme: "zee-gruvbox",
+    // Remove trailing whitespace on all lines when saving.
+    // Allowed values: `true` or `false`. Default: `true`
+    trim_trailing_whitespace_on_save: true,
 
     // Remove trailing whitespace on all lines when saving.
     // Allowed values:  `true` or `false`.  Default: `true`.
