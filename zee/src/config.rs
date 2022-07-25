@@ -1,11 +1,17 @@
 use include_dir::{include_dir, Dir};
 use once_cell::sync::Lazy;
 use serde_derive::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::{
+    fs::File,
+    path::{Path, PathBuf},
+};
 
 use zee_grammar::{config::ModeConfig, Mode};
 
-use crate::error::{Context, Result};
+use crate::{
+    error::{Context, Result},
+    utils,
+};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields, rename = "Zee")]
@@ -24,10 +30,26 @@ impl Default for EditorConfig {
 /// Finds the editor configuration. If we cannot for any reason, we'll use the
 /// default configuration to ensure the editor opens in any environment.
 pub fn find_editor_config(config_dir: Option<PathBuf>) -> EditorConfig {
-    config_dir
+    let config_dir = config_dir
         .or_else(|| zee_grammar::config::config_dir().ok())
+        .ok_or_else(|| anyhow::Error::msg("Unable to determine configuration directory"))
+        .ok();
+
+    // First construct the `EditorConfig` from the configuration file
+    let mut editor_config = config_dir
+        .as_ref()
         .map(|config_dir| config_dir.join("config.ron"))
-        .map_or_else(Default::default, |path| read_config_file(&path))
+        .map_or_else(Default::default, |path| read_config_file(&path));
+
+    // Second, load modes from the modes directory (if available)
+    if let Some(config_dir) = config_dir {
+        let modes_dir = config_dir.join("modes");
+        if let Ok(mut additional_modes) = load_modes_from_dir(&modes_dir) {
+            editor_config.modes.append(&mut additional_modes);
+        }
+    }
+
+    editor_config
 }
 
 fn read_config_file(path: &Path) -> EditorConfig {
@@ -45,6 +67,38 @@ fn read_config_file(path: &Path) -> EditorConfig {
     } else {
         Default::default()
     }
+}
+
+fn load_modes_from_dir(dir: &PathBuf) -> Result<Vec<ModeConfig>> {
+    if !dir.exists() {
+        if let Err(e) = std::fs::create_dir(dir) {
+            log::warn!(
+                "Unable to create modes configuration directory `{}`. {}",
+                dir.display(),
+                e
+            );
+        }
+    }
+
+    let mut modes = vec![];
+    for mode_file in utils::files_with_extension(dir, "ron")? {
+        match File::open(&mode_file) {
+            Ok(handle) => match ron::de::from_reader(handle) {
+                Ok(mode_cfg) => modes.push(mode_cfg),
+                Err(e) => log::warn!(
+                    "Unable to parse configuration file `{}`: {}",
+                    mode_file.display(),
+                    e
+                ),
+            },
+            Err(e) => log::warn!(
+                "Unable to open configuration file `{}`: {}",
+                &mode_file.display(),
+                e
+            ),
+        };
+    }
+    Ok(modes)
 }
 
 pub fn create_default_config_file(path: &Path) -> Result<()> {
