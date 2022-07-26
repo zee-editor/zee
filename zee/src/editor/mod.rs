@@ -62,6 +62,7 @@ pub enum Message {
     ChangePromptHeight(usize),
     Buffer(BuffersMessage),
     Log(Option<String>),
+    PostInteractionQuit(bool),
 
     // Global
     ChangeTheme,
@@ -373,8 +374,33 @@ impl Component for Editor {
                     .unwrap_or(PromptAction::None);
                 self.prompt_height = self.prompt_action.initial_height();
             }
+
+            // Quit zee but prompt to save changed buffers first
             Message::Quit => {
-                self.context.link.exit();
+                if self
+                    .buffers
+                    .iter()
+                    .any(|buffer| buffer.modified_status() != ModifiedStatus::Unchanged)
+                {
+                    let message = "One or more buffers have changed. Exit anyway?";
+                    self.prompt_action = PromptAction::InteractiveMessage {
+                        on_input: self.context.link.callback(Message::PostInteractionQuit),
+                        message: Cow::from(message),
+                    };
+                    self.prompt_height = self.prompt_action.initial_height();
+                } else {
+                    self.context.link.exit();
+                }
+            }
+
+            // Quit regardless of the buffer modify status
+            Message::PostInteractionQuit(quit_anyway) => {
+                if quit_anyway {
+                    self.context.link.exit();
+                } else {
+                    self.prompt_action = PromptAction::None;
+                    self.prompt_height = self.prompt_action.initial_height();
+                }
             }
             Message::Buffer(message) => self.buffers.handle_message(message),
             _ => {}
