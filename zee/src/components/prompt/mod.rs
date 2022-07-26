@@ -4,6 +4,8 @@ pub mod picker;
 mod matcher;
 mod status;
 
+mod interactive;
+
 use std::{borrow::Cow, path::PathBuf};
 use zi::{
     components::text::{Text, TextProperties},
@@ -15,6 +17,7 @@ use crate::editor::{BufferId, ContextHandle};
 
 use self::{
     buffers::{BufferEntry, BufferPicker, Properties as BufferPickerProperties},
+    interactive::{InteractiveMessage, Properties as InteractiveMessageProperties},
     picker::{FilePicker, FileSource, Properties as FilePickerProperties},
 };
 
@@ -47,6 +50,10 @@ pub enum Action {
         source: FileSource,
         on_open: Callback<PathBuf>,
         on_change_height: Callback<usize>,
+    },
+    InteractiveMessage {
+        message: Cow<'static, str>,
+        on_input: Callback<bool>,
     },
 }
 
@@ -141,6 +148,13 @@ impl Component for Prompt {
                 on_open: on_open.clone(),
                 on_change_height: on_change_height.clone(),
             }),
+            Action::InteractiveMessage { on_input, message } => {
+                InteractiveMessage::with(InteractiveMessageProperties {
+                    theme: self.properties.theme.clone(),
+                    on_input: on_input.clone(),
+                    message: message.to_string(),
+                })
+            }
         }
     }
 }
