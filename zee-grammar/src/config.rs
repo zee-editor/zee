@@ -45,10 +45,7 @@ impl IndentationConfig {
     }
 
     pub fn tab_width(&self) -> usize {
-        match self.unit {
-            IndentationUnit::Space => 1,
-            IndentationUnit::Tab => self.width,
-        }
+        self.width
     }
 }
 
