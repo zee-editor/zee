@@ -61,3 +61,16 @@ impl<T> WeakHandle<T> {
         self.version
     }
 }
+
+impl<T> PartialEq for WeakHandle<T> {
+    fn eq(&self, other: &Self) -> bool {
+        // `WeakHandle`s use case is for sharing expensive-to-copy fields with
+        // children components. Typically, `eq` would be used as part of testing
+        // whether the `Properties` of a component have changed.
+        //
+        // Hence, `PartialEq` tests for referential equality -- i.e. it's the
+        // same Rc<T> and the same version. Otherwise, they're deemed not equal
+        // even if `<T as PartialEq>::eq` is true.
+        std::ptr::eq(self.value.as_ptr(), other.value.as_ptr()) && self.version == other.version
+    }
+}

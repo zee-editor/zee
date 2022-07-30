@@ -130,7 +130,7 @@ impl Component for Prompt {
 
                 BufferPicker::with(BufferPickerProperties {
                     message: message.clone(),
-                    context: self.properties.context.clone(),
+                    context: self.properties.context,
                     theme: self.properties.theme.clone(),
                     entries: entries.clone(),
                     on_select: on_select.clone(),
@@ -142,7 +142,7 @@ impl Component for Prompt {
                 on_change_height,
                 on_open,
             } => FilePicker::with(FilePickerProperties {
-                context: self.properties.context.clone(),
+                context: self.properties.context,
                 theme: self.properties.theme.clone(),
                 source: *source,
                 on_open: on_open.clone(),
