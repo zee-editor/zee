@@ -17,6 +17,7 @@ use crate::syntax::{
 
 #[derive(Clone)]
 pub struct Properties {
+    pub context: crate::editor::ContextHandle,
     pub theme: SyntaxTheme,
     pub focused: bool,
     pub text: Rope,
@@ -179,8 +180,13 @@ impl TextArea {
                 scope,
                 is_error,
             );
-            let grapheme_width =
-                zee_edit::graphemes::width(self.properties.mode.indentation.tab_width(), &grapheme);
+            let grapheme_width = zee_edit::graphemes::width(
+                match &self.properties.context.config.indentation_override {
+                    Some(setting) => setting.width,
+                    None => self.properties.mode.indentation.tab_width(),
+                },
+                &grapheme,
+            );
             let horizontal_bounds_inclusive = frame.min_x()..=frame.max_x();
             if !horizontal_bounds_inclusive.contains(&(visual_x + grapheme_width)) {
                 break;

@@ -7,6 +7,9 @@
     // Which colour theme to use.
     theme: "zee-gruvbox",
 
+    // The global indentation override setting
+    indentation_override: None,
+
     // Remove trailing whitespace on all lines when saving.
     // Allowed values: `true` or `false`
     trim_trailing_whitespace_on_save: true,
