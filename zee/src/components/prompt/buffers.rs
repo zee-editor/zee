@@ -3,15 +3,15 @@ use size_format::SizeFormatterBinary;
 use std::{borrow::Cow, convert::TryInto, path::PathBuf};
 use zi::{
     components::{
-        input::{Cursor, Input, InputChange, InputProperties, InputStyle},
         select::{Select, SelectProperties},
         text::{Text, TextAlign, TextProperties},
     },
     unicode_width::UnicodeWidthStr,
-    Bindings, Callback, Colour, Component, ComponentExt, ComponentLink, Container, FlexBasis,
+    Bindings, Callback, Component, ComponentExt, ComponentLink, Container, FlexBasis,
     FlexDirection, Item, Key, Layout, Rect, ShouldRender, Style,
 };
 
+use zee_edit::Cursor;
 use zee_grammar::Mode;
 
 use super::{
@@ -20,6 +20,7 @@ use super::{
     Theme,
 };
 use crate::{
+    components::input::{Input, InputChange, InputProperties, InputStyle},
     editor::{BufferId, ContextHandle},
     task::TaskId,
 };
@@ -99,7 +100,7 @@ impl Component for BufferPicker {
         Self {
             properties,
             link,
-            input: "\n".into(),
+            input: Rope::new(),
             cursor: Cursor::new(),
             selected_index: 0,
             current_task_id: None,
@@ -159,6 +160,7 @@ impl Component for BufferPicker {
 
     fn view(&self) -> Layout {
         let input = Input::with(InputProperties {
+            context: self.properties.context,
             style: InputStyle {
                 content: self.properties.theme.input,
                 cursor: self.properties.theme.cursor,
@@ -234,8 +236,7 @@ impl Component for BufferPicker {
                         })
                         .style(Style::normal(
                             self.properties.theme.item_unfocused_background,
-                            Colour::rgb(251, 73, 52),
-                            // self.properties.theme.action.background,
+                            self.properties.theme.action.background,
                         )),
                 )
             } else {
@@ -274,7 +275,7 @@ impl Component for BufferPicker {
                     "num-results",
                     TextProperties::new()
                         .content(format!(
-                            "{} of {} ",
+                            "{} of {}",
                             self.matcher.num_ranked(),
                             self.properties.entries.len()
                         ))

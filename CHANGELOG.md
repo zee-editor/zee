@@ -21,6 +21,15 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   [#49](https://github.com/zee-editor/zee/pull/49)
 - Add [Haskell](https://github.com/tree-sitter/tree-sitter-haskell) syntax
   highlighting [#62](https://github.com/zee-editor/zee/pull/62)
+- Add a custom input component, rather than relying on zi's input. This change
+  enables reusing zee's text editing functions and makes the editing prompt
+  input behave similar to text editing in a buffer.
+  [#76](https://github.com/zee-editor/zee/pull/76)
+- Refactor file pickers to use the newly added custom input component. New text
+  editing bindings were introduced to match buffers. A number of edge cases and
+  bugs were fixed, e.g. when editing an empty path. The picker now shows file
+  size and the humanized last modified timestamp.
+  [#76](https://github.com/zee-editor/zee/pull/76)
 
 ### Fixed
 
@@ -30,6 +39,8 @@ format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   [#31](https://github.com/zee-editor/zee/pull/31)
 - Fix tree sitter spans not being aligned with text after saving
   [#65](https://github.com/zee-editor/zee/pull/65)
+- Fix erroneous insert of `/` when path is `/` in the file picker.
+  [#76](https://github.com/zee-editor/zee/pull/76)
 
 ## 0.3.2 - 2022-04-23
 
