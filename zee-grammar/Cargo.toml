@@ -9,15 +9,15 @@ edition = "2021"
 rust-version = "1.59"
 
 [dependencies]
-anyhow = "1.0.57"
+anyhow = "1.0.58"
 cc = { version = "1.0.73", features = ["parallel"] }
 colored = "2.0.0"
 dirs = "4.0.0"
 include_dir = "0.7.2"
 libloading = "0.7.3"
-log = "0.4.16"
-once_cell = { version = "1.10.0", features = ["parking_lot"] }
-rayon = "1.5.2"
-serde = "1.0.136"
-serde_derive = "1.0.136"
-tree-sitter = "0.20.6"
+log = "0.4.17"
+once_cell = { version = "1.13.0", features = ["parking_lot"] }
+rayon = "1.5.3"
+serde = "1.0.140"
+serde_derive = "1.0.140"
+tree-sitter = "0.20.8"

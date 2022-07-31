@@ -13,6 +13,8 @@ pub struct EditorConfig {
     pub theme: String,
     pub indentation_override: Option<zee_grammar::config::IndentationConfig>,
     pub modes: Vec<ModeConfig>,
+    #[serde(default)]
+    pub trim_trailing_whitespace_on_save: bool,
 }
 
 fn main() -> Result<()> {

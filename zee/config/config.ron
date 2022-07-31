@@ -1,14 +1,28 @@
 (
-    // Which theme to use
+    //
+    // GENERAL SETTINGS
+    // ================
+    //
+
+    // Which colour theme to use.
     theme: "zee-gruvbox",
 
     // The global indentation override setting
     indentation_override: None,
 
-    // Modes and tree sitter parsers
+    // Remove trailing whitespace on all lines when saving.
+    // Allowed values: `true` or `false`
+    trim_trailing_whitespace_on_save: true,
+
+    //
+    // MODES AND TREE-SITTER PARSERS
+    // =============================
     //
     // This section defines what modes are available.
-    // You have re-run `zee --build` for any changes to take effect.
+    //
+    // You have to re-run `zee --build` for any changes to take effect.
+    //
+
     modes: [
         // C
         Mode(
@@ -31,6 +45,7 @@
                 )
             ),
         ),
+
         // C++
         Mode(
             name: "C++",
@@ -66,6 +81,7 @@
                 )
             ),
         ),
+
         // CSS
         Mode(
             name: "CSS",
@@ -86,6 +102,7 @@
                 )
             ),
         ),
+
         // Dockerfile
         Mode(
             name: "Dockerfile",
@@ -110,6 +127,31 @@
                 )
             ),
         ),
+
+        // Haskell
+        Mode(
+            name: "Haskell",
+            scope: "source.haskell",
+            injection_regex: "haskell",
+            patterns: [
+                Suffix(".hs"),
+            ],
+            comment: Some(Comment(token: "-- ")),
+            indentation: Indentation(
+                width: 8,
+                unit: Space,
+            ),
+            grammar: Some(
+                Grammar(
+                    id: "haskell",
+                    source: Git(
+                        git: "https://github.com/tree-sitter/tree-sitter-haskell",
+                        rev: "cf394604ae2ec2a5e65b1afbc7dea21258ede403",
+                    ),
+                )
+            ),
+        ),
+
         // HTML
         Mode(
             name: "HTML",
@@ -136,9 +178,10 @@
                 )
             ),
         ),
-        // Javascript
+
+        // JavaScript
         Mode(
-            name: "Javascript",
+            name: "JavaScript",
             scope: "source.js",
             injection_regex: "^(js|javascript)$",
             patterns: [
@@ -159,6 +202,7 @@
                 )
             ),
         ),
+
         // JSON
         Mode(
             name: "JSON",
@@ -183,6 +227,7 @@
                 )
             ),
         ),
+
         // Markdown
         Mode(
             name: "Markdown",
@@ -206,6 +251,7 @@
                 )
             ),
         ),
+
         // Protobuf
         Mode(
             name: "Protobuf",
@@ -227,6 +273,7 @@
                 )
             ),
         ),
+
         // Python
         Mode(
             name: "Python",
@@ -261,6 +308,7 @@
                 )
             ),
         ),
+
         // Regex
         Mode(
             name: "Regex",
@@ -282,7 +330,8 @@
                 )
             ),
         ),
-        // Rusty Object Notation (RON)
+
+        // RON (Rusty Object Notation)
         Mode(
             name: "RON",
             scope: "source.ron",
@@ -303,6 +352,7 @@
                 )
             ),
         ),
+
         // Ruby
         Mode(
             name: "Ruby",
@@ -331,6 +381,7 @@
                 )
             ),
         ),
+
         // Rust
         Mode(
             name: "Rust",
@@ -352,96 +403,7 @@
                 )
             ),
         ),
-        // TOML
-        Mode(
-            name: "Toml",
-            scope: "source.toml",
-            injection_regex: "toml",
-            patterns: [Suffix(".toml")],
-            comment: Some(Comment(token: "# ")),
-            indentation: Indentation(
-                width: 2,
-                unit: Space,
-            ),
-            grammar: Some(
-                Grammar(
-                    id: "toml",
-                    source: Git(
-                        git: "https://github.com/ikatyang/tree-sitter-toml.git",
-                        rev: "8bd2056818b21860e3d756b5a58c4f6e05fb744e",
-                    ),
-                )
-            ),
-        ),
-        // Tree sitter queries
-        Mode(
-            name: "tsq",
-            scope: "source.tsq",
-            injection_regex: "tsq",
-            patterns: [Suffix(".scm")],
-            comment: Some(Comment(token: "; ")),
-            indentation: Indentation(
-                width: 2,
-                unit: Space,
-            ),
-            grammar: Some(
-                Grammar(
-                    id: "tsq",
-                    source: Git(
-                        git: "https://github.com/tree-sitter/tree-sitter-tsq",
-                        rev: "b665659d3238e6036e22ed0e24935e60efb39415",
-                    ),
-                )
-            ),
-        ),
-        // Typescript
-        Mode(
-            name: "Typescript",
-            scope: "source.ts",
-            injection_regex: "^(ts|typescript)$",
-            patterns: [
-                Suffix(".ts"),
-            ],
-            comment: Some(Comment(token: "// ")),
-            indentation: Indentation(
-                width: 4,
-                unit: Space,
-            ),
-            grammar: Some(
-                Grammar(
-                    id: "typescript",
-                    source: Git(
-                        git: "https://github.com/tree-sitter/tree-sitter-typescript",
-                        rev: "4c20b54771e4b390ee058af2930feb2cd55f2bf8",
-                        path: Some("typescript"),
-                    ),
-                )
-            ),
-        ),
-        // Typescript with JSX tags, i.e. TSX
-        Mode(
-            name: "Typescript TSX",
-            scope: "source.tsx",
-            injection_regex: "tsx",
-            patterns: [
-                Suffix(".tsx"),
-            ],
-            comment: Some(Comment(token: "// ")),
-            indentation: Indentation(
-                width: 4,
-                unit: Space,
-            ),
-            grammar: Some(
-                Grammar(
-                    id: "tsx",
-                    source: Git(
-                        git: "https://github.com/tree-sitter/tree-sitter-typescript",
-                        rev: "4c20b54771e4b390ee058af2930feb2cd55f2bf8",
-                        path: Some("tsx"),
-                    ),
-                )
-            ),
-        ),
+
         // Shell scripts
         Mode(
             name: "Shell Script",
@@ -477,6 +439,101 @@
                 )
             ),
         ),
+
+        // TOML
+        Mode(
+            name: "Toml",
+            scope: "source.toml",
+            injection_regex: "toml",
+            patterns: [Suffix(".toml")],
+            comment: Some(Comment(token: "# ")),
+            indentation: Indentation(
+                width: 2,
+                unit: Space,
+            ),
+            grammar: Some(
+                Grammar(
+                    id: "toml",
+                    source: Git(
+                        git: "https://github.com/ikatyang/tree-sitter-toml.git",
+                        rev: "8bd2056818b21860e3d756b5a58c4f6e05fb744e",
+                    ),
+                )
+            ),
+        ),
+
+        // Tree sitter queries
+        Mode(
+            name: "tsq",
+            scope: "source.tsq",
+            injection_regex: "tsq",
+            patterns: [Suffix(".scm")],
+            comment: Some(Comment(token: "; ")),
+            indentation: Indentation(
+                width: 2,
+                unit: Space,
+            ),
+            grammar: Some(
+                Grammar(
+                    id: "tsq",
+                    source: Git(
+                        git: "https://github.com/tree-sitter/tree-sitter-tsq",
+                        rev: "b665659d3238e6036e22ed0e24935e60efb39415",
+                    ),
+                )
+            ),
+        ),
+
+        // Typescript
+        Mode(
+            name: "Typescript",
+            scope: "source.ts",
+            injection_regex: "^(ts|typescript)$",
+            patterns: [
+                Suffix(".ts"),
+            ],
+            comment: Some(Comment(token: "// ")),
+            indentation: Indentation(
+                width: 4,
+                unit: Space,
+            ),
+            grammar: Some(
+                Grammar(
+                    id: "typescript",
+                    source: Git(
+                        git: "https://github.com/tree-sitter/tree-sitter-typescript",
+                        rev: "4c20b54771e4b390ee058af2930feb2cd55f2bf8",
+                        path: Some("typescript"),
+                    ),
+                )
+            ),
+        ),
+
+        // Typescript with JSX tags, i.e. TSX
+        Mode(
+            name: "Typescript TSX",
+            scope: "source.tsx",
+            injection_regex: "tsx",
+            patterns: [
+                Suffix(".tsx"),
+            ],
+            comment: Some(Comment(token: "// ")),
+            indentation: Indentation(
+                width: 4,
+                unit: Space,
+            ),
+            grammar: Some(
+                Grammar(
+                    id: "tsx",
+                    source: Git(
+                        git: "https://github.com/tree-sitter/tree-sitter-typescript",
+                        rev: "4c20b54771e4b390ee058af2930feb2cd55f2bf8",
+                        path: Some("tsx"),
+                    ),
+                )
+            ),
+        ),
+
         // WebGPU shading language
         Mode(
             name: "wgsl",

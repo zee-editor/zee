@@ -14,6 +14,10 @@ pub struct EditorConfig {
     pub theme: String,
     pub indentation_override: Option<zee_grammar::config::IndentationConfig>,
     pub modes: Vec<ModeConfig>,
+    /// Remove whitespace from the end of lines when saving. On large files this could negatively
+    /// impact performance. Default: `true`.
+    #[serde(default)]
+    pub trim_trailing_whitespace_on_save: bool,
 }
 
 impl Default for EditorConfig {
