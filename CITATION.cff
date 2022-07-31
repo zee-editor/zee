@@ -1,0 +1,23 @@
+abstract: A modern text editor for the terminal written in Rust.
+authors:
+  - alias: mcobzarenco
+    family-names: Cobzarenco
+    given-names: Marius
+  - alias: iainh
+    given-names: Iain
+  - alias: kevinmatthes
+    family-names: Matthes
+    given-names: Kevin
+  - alias: KSXGitHub
+  - name: The Zee Community
+cff-version: 1.2.0
+date-released: 2022-04-23
+message: Please cite this software using these meta data.
+license:
+  - Apache-2.0
+  - MIT
+repository-artifact: https://crates.io/crates/zee
+repository-code: https://github.com/zee-editor/zee
+title: zee
+url: https://github.com/zee-editor/zee
+version: 0.3.2
