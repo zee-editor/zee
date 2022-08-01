@@ -196,7 +196,7 @@ impl Theme {
             // Light Foreground (Not often used)
             base06: light_foreground,
             // Light Background (Not often used)
-            base07: _light_background,
+            base07: light_background,
             // Variables, XML Tags, Markup Link Text, Markup Lists, Diff Deleted
             base08: variables,
             // Integers, Boolean, Constants, XML Attributes, Markup Link Url
@@ -254,7 +254,7 @@ impl Theme {
                     is_not_modified: normal(lighter_background, comments),
                     file_name: bold(lighter_background, strings),
                     file_size: normal(lighter_background, dark_foreground),
-                    position_in_file: normal(lighter_background, dark_foreground),
+                    position_in_file: normal(light_background, dark_foreground),
                     mode: normal(lighter_background, strings),
                 },
             },

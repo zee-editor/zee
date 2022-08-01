@@ -33,9 +33,6 @@ pub struct Base16Theme {
     /// Any text to be displayed in the status bar which is not coloured by
     /// applying the respective configured values from one of the fields will be
     /// displayed using this colour.
-    ///
-    /// Furthermore, when identifying a syntactical issue, the corresponding
-    /// section will be underlined and highlighted using this colour.
     pub base04: Colour,
 
     /// The variables' colour.
@@ -47,7 +44,7 @@ pub struct Base16Theme {
     /// The cursor's colour.
     pub base06: Colour,
 
-    /// Currently unused.
+    /// The background colour for important status bar fields.
     pub base07: Colour,
 
     /// Keywords of the coding language.
@@ -643,13 +640,10 @@ pub const VSCODE_DARK: Base16Theme = Base16Theme {
     base01: Colour::rgb(0x3A, 0x3D, 0x41),
     base02: Colour::rgb(0x26, 0x4F, 0x78),
     base03: Colour::rgb(0x6A, 0x99, 0x55),
-    base04: Colour::rgb(0x00, 0x7A, 0xCC),
+    base04: Colour::rgb(0xFF, 0xFF, 0xFF),
     base05: Colour::rgb(0x9C, 0xDC, 0xFE),
     base06: Colour::rgb(0xFF, 0xFF, 0xFF),
-
-    // Currently unused.
-    base07: Colour::rgb(0x00, 0x00, 0x00),
-
+    base07: Colour::rgb(0x00, 0x7A, 0xCC),
     base08: Colour::rgb(0x56, 0x9C, 0xD6),
     base09: Colour::rgb(0xD2, 0x1A, 0x25),
     base0a: Colour::rgb(0x4E, 0xC9, 0xB0),
