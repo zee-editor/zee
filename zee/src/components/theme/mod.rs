@@ -254,7 +254,7 @@ impl Theme {
                     is_not_modified: normal(lighter_background, comments),
                     file_name: bold(lighter_background, strings),
                     file_size: normal(lighter_background, dark_foreground),
-                    position_in_file: normal(lighter_background, dark_foreground),
+                    position_in_file: bold(lighter_background, dark_foreground),
                     mode: normal(lighter_background, strings),
                 },
             },
