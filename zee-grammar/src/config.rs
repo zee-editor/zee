@@ -94,7 +94,12 @@ impl FilenamePattern {
                 .as_ref()
                 .file_name()
                 .and_then(OsStr::to_str)
-                .map(|s| s.ends_with(suffix))
+                .map(|s| {
+                    s.ends_with(suffix)
+                        || s.ends_with(&(suffix.to_owned() + ".bak"))
+                        || s.ends_with(&(suffix.to_owned() + ".in"))
+                        || s.ends_with(&(suffix.to_owned() + ".out"))
+                })
                 .unwrap_or(false),
             Self::Name(ref expected_name) => filename
                 .as_ref()
