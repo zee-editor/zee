@@ -125,6 +125,8 @@ pub enum GrammarSource {
         remote: String,
         #[serde(rename = "rev")]
         revision: String,
+        #[serde(default, rename = "scm")]
+        scheme_dir: Option<String>,
         path: Option<PathBuf>,
     },
 }

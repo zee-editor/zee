@@ -225,6 +225,32 @@
             ),
         ),
 
+        // Just Build System
+        Mode(
+            name: "Just Build System",
+            scope: "source.justfile",
+            injection_regex: "just(file)?",
+            patterns: [
+                Name(".justfile"),
+                Name("justfile"),
+            ],
+            comment: Some(Comment(token: "# ")),
+            indentation: Indentation(
+                width: 4,
+                unit: Space,
+            ),
+            grammar: Some(
+                Grammar(
+                    id: "just",
+                    source: Git(
+                        git: "https://github.com/IndianBoy42/tree-sitter-just",
+                        rev: "8af0aab79854aaf25b620a52c39485849922f766",
+                        scm: Some("queries/just"),
+                    ),
+                )
+            ),
+        ),
+
         // Markdown
         Mode(
             name: "Markdown",

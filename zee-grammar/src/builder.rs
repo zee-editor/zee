@@ -74,7 +74,19 @@ pub fn fetch_and_build_tree_sitter_parsers(
     mode_configs.into_par_iter().try_for_each(|config| {
         if let Some(ref grammar) = config.grammar {
             let fetched = fetch_grammar(grammar)?;
-            let built = build_grammar(grammar, defaults)?;
+            let built = build_grammar(
+                grammar,
+                defaults,
+                match &config.grammar {
+                    Some(cfg) => match &cfg.source {
+                        GrammarSource::Git {
+                            scheme_dir: scm, ..
+                        } => scm,
+                        _ => &None,
+                    },
+                    None => &None,
+                },
+            )?;
             log::info!(
                 "{:>12} {} grammar {}",
                 if fetched || built {
@@ -142,7 +154,11 @@ fn fetch_grammar(grammar: &GrammarConfig) -> Result<bool> {
     Ok(revision_changed)
 }
 
-fn build_grammar(grammar: &GrammarConfig, defaults: &Dir) -> Result<bool> {
+fn build_grammar(
+    grammar: &GrammarConfig,
+    defaults: &Dir,
+    scheme_dir: &Option<String>,
+) -> Result<bool> {
     let (grammar_dir, subpath) = match grammar.source {
         GrammarSource::Local { ref path } => (path.clone(), None),
         GrammarSource::Git {
@@ -169,7 +185,7 @@ fn build_grammar(grammar: &GrammarConfig, defaults: &Dir) -> Result<bool> {
         bail!("Directory {grammar_dir:?} is empty.",);
     };
 
-    copy_tree_sitter_queries(&grammar.grammar_id, &grammar_dir, defaults)?;
+    copy_tree_sitter_queries(&grammar.grammar_id, &grammar_dir, defaults, scheme_dir)?;
 
     // Build the tree sitter library
     let paths = TreeSitterPaths::new(grammar_dir.clone(), subpath);
@@ -347,7 +363,12 @@ fn tree_sitter_library_path(grammar_id: &str) -> Result<PathBuf> {
     Ok(library_path)
 }
 
-fn copy_tree_sitter_queries(grammar_id: &str, source: &Path, defaults: &Dir) -> Result<()> {
+fn copy_tree_sitter_queries(
+    grammar_id: &str,
+    source: &Path,
+    defaults: &Dir,
+    scheme_dir: &Option<String>,
+) -> Result<()> {
     let query_dir_dest = tree_sitter_query_dir(grammar_id)?;
     std::fs::create_dir_all(&query_dir_dest).with_context(|| {
         format!(
@@ -396,7 +417,12 @@ fn copy_tree_sitter_queries(grammar_id: &str, source: &Path, defaults: &Dir) -> 
         }
 
         // Otherwise, copy it from the git repo, if available
-        let query_src = source.join(QUERY_DIR).join(query_filename);
+        let query_src = source
+            .join(match scheme_dir {
+                Some(dir) => dir,
+                None => QUERY_DIR,
+            })
+            .join(query_filename);
         if query_src.exists() {
             log_on_error(
                 grammar_id,
