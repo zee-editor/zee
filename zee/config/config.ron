@@ -229,7 +229,7 @@
         Mode(
             name: "Just Build System",
             scope: "source.justfile",
-            injection_regex: "justfile",
+            injection_regex: "just(file)?",
             patterns: [
                 Name(".justfile"),
                 Name("justfile"),
