@@ -459,9 +459,9 @@
             ),
         ),
 
-        // Tree sitter queries
+        // Tree-Sitter Queries
         Mode(
-            name: "tsq",
+            name: "Tree-Sitter Query",
             scope: "source.tsq",
             injection_regex: "tsq",
             patterns: [Suffix(".scm")],
