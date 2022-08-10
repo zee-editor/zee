@@ -101,9 +101,9 @@
 (arguments
   (identifier) @variable.parameter)
 (parameter
-	pattern: (identifier) @variable.parameter)
+  pattern: (identifier) @variable.parameter)
 (closure_parameters
-	(identifier) @variable.parameter)
+  (identifier) @variable.parameter)
 
 
 
