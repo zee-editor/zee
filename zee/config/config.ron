@@ -131,6 +131,8 @@
             scope: "source.haskell",
             injection_regex: "haskell",
             patterns: [
+                Name("cabal.project"),
+                Suffix(".cabal"),
                 Suffix(".hs"),
             ],
             comment: Some(Comment(token: "-- ")),
