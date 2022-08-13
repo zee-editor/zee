@@ -19,14 +19,14 @@ use crate::error::{Error, Result};
 // multiple node kind "ids" to the same node kind string. The highlighting rules
 // refer to strings. To apply rules and avoid string matching, we have to first
 // map the node kind ids of a grammar to a unique set.
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
 pub struct SelectorNodeId(pub(crate) u16);
 
 pub type NthChild = i16;
 
 const NTH_CHILD_ANY: NthChild = -1;
 
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Selector {
     node_kinds: SmallVec<[SelectorNodeId; 4]>,
     nth_children: SmallVec<[NthChild; 4]>,

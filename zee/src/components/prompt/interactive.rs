@@ -9,7 +9,7 @@ use zi::{
 use super::Theme;
 
 // Message type handled by the `InteractiveMessage` component
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Message {
     Accept,
     Decline,

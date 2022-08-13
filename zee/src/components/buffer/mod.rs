@@ -28,7 +28,7 @@ use crate::{
     versioned::WeakHandle,
 };
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Theme {
     pub border: Style,
     pub edit_tree_viewer: EditTreeViewerTheme,

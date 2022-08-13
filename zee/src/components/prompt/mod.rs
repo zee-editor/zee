@@ -21,7 +21,7 @@ use self::{
     picker::{FilePicker, FileSource, Properties as FilePickerProperties},
 };
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Theme {
     pub action: Style,
     pub input: Style,
