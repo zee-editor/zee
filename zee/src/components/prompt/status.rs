@@ -5,7 +5,7 @@ use zi::{
     prelude::*,
 };
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct StatusProperties {
     pub action_name: Cow<'static, str>,
     pub pending: bool,

@@ -12,7 +12,7 @@ use crate::{
     utils::StaticRefEq,
 };
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Theme {
     pub base: Style,
     pub frame_id_focused: Style,

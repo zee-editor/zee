@@ -1,6 +1,6 @@
 use ropey::Rope;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OpaqueDiff {
     pub byte_index: usize,
     pub old_byte_length: usize,

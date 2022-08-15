@@ -1,6 +1,6 @@
 use zi::{Canvas, Component, ComponentLink, Layout, Rect, ShouldRender, Style};
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Properties {
     pub style: Style,
     pub line_offset: usize,

@@ -33,7 +33,7 @@ impl RopeCursorExt for Rope {
 ///
 /// `Cursor`s consist of a location in a `Rope` and optionally a selection and
 /// desired visual offset.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Cursor {
     /// The cursor position represented as the index of the gap between two adjacent
     /// characters inside a `Rope`.

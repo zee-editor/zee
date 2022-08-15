@@ -145,7 +145,7 @@ impl Buffers {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ModifiedStatus {
     Changed,
     Unchanged,
