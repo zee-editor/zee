@@ -68,6 +68,7 @@ pub enum Message {
 
 #[derive(Clone)]
 pub struct Properties {
+    #[allow(dead_code)]
     pub context: ContextHandle,
     pub theme: Cow<'static, Theme>,
     pub message: Cow<'static, str>,

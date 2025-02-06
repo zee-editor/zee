@@ -16,6 +16,7 @@ pub use self::{
 trait RopeCursorExt {
     fn cursor_to_line(&self, cursor: &Cursor) -> usize;
 
+    #[allow(dead_code)]
     fn slice_cursor(&self, cursor: &Cursor) -> RopeSlice;
 }
 

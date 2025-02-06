@@ -37,6 +37,7 @@ pub struct Theme {
 }
 
 pub struct Properties {
+    #[allow(dead_code)]
     pub context: ContextHandle,
     pub theme: Cow<'static, Theme>,
     pub focused: bool,

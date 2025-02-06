@@ -85,6 +85,7 @@ pub struct Properties {
 }
 
 pub struct Context {
+    #[allow(dead_code)]
     pub args_files: Vec<PathBuf>,
     pub current_working_dir: PathBuf,
     pub config: EditorConfig,

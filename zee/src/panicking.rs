@@ -3,7 +3,7 @@ use once_cell::sync::Lazy;
 use std::{
     cell::RefCell,
     fmt::{Debug, Formatter},
-    panic::{PanicInfo, UnwindSafe},
+    panic::{PanicHookInfo, UnwindSafe},
 };
 
 pub fn print_panic_after_unwind<F: FnOnce() -> R + UnwindSafe, R>(function: F) -> R {
@@ -28,7 +28,7 @@ pub fn print_panic_after_unwind<F: FnOnce() -> R + UnwindSafe, R>(function: F) -
 // by end users. `save_panic_backtrace_hook` and `PanicDescription` below
 // attempt to format the panic trace similar to std.
 
-fn save_panic_backtrace_hook(info: &PanicInfo) {
+fn save_panic_backtrace_hook(info: &PanicHookInfo) {
     // Ok to unwrap, the current implementation always returns `Some`
     // https://doc.rust-lang.org/std/panic/struct.PanicInfo.html#method.location
     let location = info.location().unwrap();
