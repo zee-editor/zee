@@ -5,7 +5,7 @@ use zee_edit::tree::{self, EditTree};
 
 use crate::versioned::WeakHandle;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Theme {
     pub current_revision: Style,
     pub master_revision: Style,

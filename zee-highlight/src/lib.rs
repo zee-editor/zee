@@ -248,7 +248,7 @@ impl ScopePattern {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Scope(pub String);
 
 pub fn parse_rules_unwrap(language: Language, source: &str) -> HighlightRules {

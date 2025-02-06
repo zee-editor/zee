@@ -2,7 +2,7 @@ use zi::terminal::{Background, Style};
 
 use zee_edit::{CharIndex, Cursor};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Theme {
     pub cursor_focused: Style,
     pub cursor_unfocused: Style,

@@ -131,6 +131,8 @@
             scope: "source.haskell",
             injection_regex: "haskell",
             patterns: [
+                Name("cabal.project"),
+                Suffix(".cabal"),
                 Suffix(".hs"),
             ],
             comment: Some(Comment(token: "-- ")),
@@ -143,7 +145,7 @@
                     id: "haskell",
                     source: Git(
                         git: "https://github.com/tree-sitter/tree-sitter-haskell",
-                        rev: "cf394604ae2ec2a5e65b1afbc7dea21258ede403",
+                        rev: "972156b37ee6f4a8b51a6f67f76aecc6fa13714c",
                     ),
                 )
             ),
