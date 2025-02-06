@@ -43,7 +43,7 @@ zi = "0.3.2"
 zi-term = "0.3.2"
 
 # Local crates
-zee-edit = { version = "0.1.1", path = "../zee-edit" }
+zee-edit = { version = "0.1.2", path = "../zee-edit" }
 zee-grammar = { version = "0.4.0", path = "../zee-grammar" }
 
 # Optional dependencies
