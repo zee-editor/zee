@@ -79,13 +79,8 @@ impl Buffers {
         // Generate a new buffer id
         let buffer_id = BufferId(self.next_buffer_id);
         self.next_buffer_id += 1;
-        self.buffers.push(Buffer::new(
-            self.context.clone(),
-            buffer_id,
-            text,
-            file_path,
-            repo,
-        ));
+        self.buffers
+            .push(Buffer::new(self.context, buffer_id, text, file_path, repo));
         buffer_id
     }
 
@@ -353,11 +348,17 @@ impl Buffer {
                     movement::move_paragraph(content, cursor, direction, count)
                 }
 
-                CursorMessage::BeginSelection => cursor.begin_selection(),
+                CursorMessage::BeginSelection => {
+                    self.context.log("Begin selection");
+                    cursor.begin_selection();
+                }
                 CursorMessage::ClearSelection => {
                     cursor.clear_selection();
                 }
-                CursorMessage::SelectAll => cursor.select_all(content),
+                CursorMessage::SelectAll => {
+                    self.context.log("Select all");
+                    cursor.select_all(content);
+                }
 
                 _ => {}
             }

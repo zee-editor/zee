@@ -97,6 +97,10 @@ impl Cursor {
         }
     }
 
+    pub fn is_selecting(&self) -> bool {
+        self.selection.is_some()
+    }
+
     pub fn column_offset(&self, tab_width: usize, text: &Rope) -> usize {
         let char_line_start = text.line_to_char(text.cursor_to_line(self));
         graphemes::width(tab_width, &text.slice(char_line_start..self.range.start))

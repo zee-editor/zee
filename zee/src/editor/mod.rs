@@ -104,7 +104,7 @@ impl Context {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct ContextHandle(pub &'static Context);
 
 impl std::ops::Deref for ContextHandle {
@@ -112,6 +112,12 @@ impl std::ops::Deref for ContextHandle {
 
     fn deref(&self) -> &Self::Target {
         self.0
+    }
+}
+
+impl PartialEq for ContextHandle {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(self.0, other.0)
     }
 }
 
@@ -265,7 +271,7 @@ impl Component for Editor {
             theme_index,
             prompt_action: PromptAction::None,
             prompt_height: PROMPT_INACTIVE_HEIGHT,
-            buffers: Buffers::new(context.clone()),
+            buffers: Buffers::new(context),
             context,
             windows: WindowTree::new(),
         }
@@ -410,6 +416,7 @@ impl Component for Editor {
     }
 
     fn view(&self) -> Layout {
+        let context = self.context;
         let buffers = if self.windows.is_empty() {
             Splash::item_with_key(
                 FlexBasis::Auto,
@@ -424,7 +431,7 @@ impl Component for Editor {
                 BufferView::with_key(
                     format!("{}.{}", index, id).as_str(),
                     BufferViewProperties {
-                        context: self.context.clone(),
+                        context,
                         theme: Cow::Borrowed(&self.themes[self.theme_index].0.buffer),
                         focused: focused && !self.prompt_action.is_interactive(),
                         frame_id: index.one_based_index(),
@@ -455,7 +462,7 @@ impl Component for Editor {
                 }),
                 "prompt",
                 PromptProperties {
-                    context: self.context.clone(),
+                    context,
                     theme: Cow::Borrowed(&self.themes[self.theme_index].0.prompt),
                     action: self.prompt_action.clone(),
                 },
