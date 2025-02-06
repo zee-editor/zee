@@ -277,6 +277,7 @@
             scope: "source.python",
             injection_regex: "python",
             patterns: [
+                Name("SConstruct"),
                 Suffix(".py"),
                 Suffix(".py3"),
                 Suffix(".py2"),
